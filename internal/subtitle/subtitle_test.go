@@ -22,8 +22,8 @@ func TestCleanRemovesOnlyOverlappingDuplicates(t *testing.T) {
 }
 
 func TestRenderSRT(t *testing.T) {
-	got := RenderSRT([]Segment{{StartMS: 1234, EndMS: 3661001, Text: "A deliberately long subtitle line that should wrap cleanly"}}, 30, 2, "; generated-by=beaconsubs")
-	for _, want := range []string{"; generated-by=beaconsubs", "00:00:01,234 --> 01:01:01,001", "\n\n"} {
+	got := RenderSRT([]Segment{{StartMS: 1234, EndMS: 3661001, Text: "A deliberately long subtitle line that should wrap cleanly"}}, 30, 2, "; generated-by=javbeaconsubs")
+	for _, want := range []string{"; generated-by=javbeaconsubs", "00:00:01,234 --> 01:01:01,001", "\n\n"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %q in %q", want, got)
 		}

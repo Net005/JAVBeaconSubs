@@ -1,32 +1,33 @@
+name: javbeaconsubs
+
 services:
-  javbeacon-subs:
+  javbeaconsubs:
     build:
       context: .
       args:
         WHISPER_IMAGE: ghcr.io/ggml-org/whisper.cpp:main
-    image: javbeacon-subs:cpu-local
+    image: javbeaconsubs:cpu-local
     restart: unless-stopped
     ports:
-      - "${SUBTITLE_PORT:-8097}:8097"
+      - "${SUBTITLE_PORT:-8097}:${SUBTITLE_PORT:-8097}"
     environment:
-      BEACONSUBS_API_TOKEN: "${BEACONSUBS_API_TOKEN:-}"
-      BEACONSUBS_TRANSLATION_API_KEY: "${BEACONSUBS_TRANSLATION_API_KEY:-}"
-      BEACONSUBS_DOWNLOAD_MODELS: "${BEACONSUBS_DOWNLOAD_MODELS:-true}"
-      BEACONSUBS_USE_GPU: "false"
-      BEACONSUBS_GPU_PREFLIGHT: "false"
-      BEACONSUBS_GPU_AUTO_RESET: "false"
+      SUBTITLE_PORT: "${SUBTITLE_PORT:-8097}"
+      JAVBEACONSUBS_LISTEN: "0.0.0.0:${SUBTITLE_PORT:-8097}"
+      JAVBEACONSUBS_API_TOKEN: "${JAVBEACONSUBS_API_TOKEN:-}"
+      JAVBEACONSUBS_TRANSLATION_API_KEY: "${JAVBEACONSUBS_TRANSLATION_API_KEY:-}"
+      JAVBEACONSUBS_DOWNLOAD_MODELS: "${JAVBEACONSUBS_DOWNLOAD_MODELS:-true}"
+      JAVBEACONSUBS_USE_GPU: "false"
+      JAVBEACONSUBS_GPU_PREFLIGHT: "false"
+      JAVBEACONSUBS_GPU_AUTO_RESET: "false"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - javbeacon_subs_data:/data
-      - "./models:/models"
+      - "${JAVBEACONSUBS_DATA_PATH:-./data}:/data"
+      - "${JAVBEACONSUBS_MODELS_PATH:-./models}:/models"
       - "${MEDIA_PATH:-./media}:/media"
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --header \"Authorization: Bearer $${BEACONSUBS_API_TOKEN}\" http://127.0.0.1:8097/api/v1/health"]
+      test: ["CMD-SHELL", "curl --fail --header \"Authorization: Bearer $${JAVBEACONSUBS_API_TOKEN}\" http://127.0.0.1:$${SUBTITLE_PORT}/api/v1/health"]
       interval: 30s
       timeout: 5s
       retries: 5
       start_period: 15m
-
-volumes:
-  javbeacon_subs_data:

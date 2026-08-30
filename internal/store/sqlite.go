@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"beaconsubs/internal/jobs"
+	"javbeaconsubs/internal/jobs"
 	_ "modernc.org/sqlite"
 )
 

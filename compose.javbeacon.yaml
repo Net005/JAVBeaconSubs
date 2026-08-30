@@ -1,5 +1,5 @@
 services:
-  javbeacon-subs:
+  javbeaconsubs:
     networks:
       - default
       - javbeacon

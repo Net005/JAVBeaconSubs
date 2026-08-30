@@ -12,11 +12,11 @@ import (
 	"syscall"
 	"time"
 
-	"beaconsubs/internal/config"
-	"beaconsubs/internal/engine"
-	"beaconsubs/internal/jobs"
-	"beaconsubs/internal/server"
-	"beaconsubs/internal/store"
+	"javbeaconsubs/internal/config"
+	"javbeaconsubs/internal/engine"
+	"javbeaconsubs/internal/jobs"
+	"javbeaconsubs/internal/server"
+	"javbeaconsubs/internal/store"
 )
 
 func main() {

@@ -16,11 +16,11 @@ import (
 	"strings"
 	"time"
 
-	"beaconsubs/internal/config"
-	"beaconsubs/internal/subtitle"
+	"javbeaconsubs/internal/config"
+	"javbeaconsubs/internal/subtitle"
 )
 
-const marker = "; generated-by=beaconsubs-v1"
+const marker = "; generated-by=javbeaconsubs-v1"
 
 type ProgressFunc func(phase string, percent int, message string)
 
@@ -87,7 +87,7 @@ func (r *Runner) Process(ctx context.Context, input string, overwrite bool, prog
 		}
 	}
 
-	tmpDir, err := os.MkdirTemp("", "beaconsubs-*")
+	tmpDir, err := os.MkdirTemp("", "javbeaconsubs-*")
 	if err != nil {
 		return result, err
 	}
@@ -243,7 +243,7 @@ func run(ctx context.Context, name string, args ...string) error {
 
 func atomicWrite(path, content string) error {
 	dir := filepath.Dir(path)
-	f, err := os.CreateTemp(dir, ".beaconsubs-*.tmp")
+	f, err := os.CreateTemp(dir, ".javbeaconsubs-*.tmp")
 	if err != nil {
 		return fmt.Errorf("create subtitle beside %s: %w", path, err)
 	}

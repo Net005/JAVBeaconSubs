@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"beaconsubs/internal/subtitle"
+	"javbeaconsubs/internal/subtitle"
 )
 
 type chatRequest struct {

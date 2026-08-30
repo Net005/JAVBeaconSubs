@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"beaconsubs/internal/config"
+	"javbeaconsubs/internal/config"
 )
 
 func TestDiscoverSpecificFileAndFolder(t *testing.T) {

@@ -2,6 +2,15 @@
 
 All notable changes to JAVBeacon Subtitles are documented here.
 
+## [0.1.3] - 2026-08-30
+
+### Changed
+
+- Standardized all internal identifiers on `javbeaconsubs`, including the Go module, command, binary, environment variables, Compose service, database, and GHCR image.
+- Replaced the named data volume and fixed model bind mount with configurable `JAVBEACONSUBS_DATA_PATH` and `JAVBEACONSUBS_MODELS_PATH` host paths.
+- Made `SUBTITLE_PORT` control the application listener, published container port, and health check together.
+- Documented the distinct purposes of `JAVBEACONSUBS_API_TOKEN` and `JAVBEACONSUBS_TRANSLATION_API_KEY`.
+
 ## [0.1.2] - 2026-08-30
 
 ### Changed

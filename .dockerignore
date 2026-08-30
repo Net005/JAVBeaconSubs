@@ -3,7 +3,7 @@
 data
 media
 models
-beaconsubs
+javbeaconsubs
 *.db
 *.db-shm
 *.db-wal

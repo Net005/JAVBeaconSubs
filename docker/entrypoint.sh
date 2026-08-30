@@ -20,9 +20,9 @@ download_model() {
     fi
     echo "Cached $(basename "$destination") does not match the pinned revision; replacing it."
   fi
-  if [[ "${BEACONSUBS_DOWNLOAD_MODELS:-true}" != "true" ]]; then
+  if [[ "${JAVBEACONSUBS_DOWNLOAD_MODELS:-true}" != "true" ]]; then
     echo "Missing model: $destination" >&2
-    echo "Mount the model or set BEACONSUBS_DOWNLOAD_MODELS=true." >&2
+    echo "Mount the model or set JAVBEACONSUBS_DOWNLOAD_MODELS=true." >&2
     exit 1
   fi
   echo "Downloading $(basename "$destination"); the first startup can take several minutes..."
@@ -43,10 +43,10 @@ download_model() {
   fi
 }
 
-download_model "${BEACONSUBS_WHISPER_MODEL:-/models/ggml-large-v3.bin}" \
+download_model "${JAVBEACONSUBS_WHISPER_MODEL:-/models/ggml-large-v3.bin}" \
   "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin?download=true" \
   "ad82bf6a9043ceed055076d0fd39f5f186ff8062"
-download_model "${BEACONSUBS_VAD_MODEL:-/models/ggml-silero-v6.2.0.bin}" \
+download_model "${JAVBEACONSUBS_VAD_MODEL:-/models/ggml-silero-v6.2.0.bin}" \
   "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin?download=true"
 
 exec "$@"
