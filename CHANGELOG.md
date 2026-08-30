@@ -2,6 +2,13 @@
 
 All notable changes to JAVBeacon Subtitles are documented here.
 
+## [0.1.1] - 2026-08-30
+
+### Changed
+
+- Made the primary Docker Compose stack NVIDIA/CUDA-first with explicit GPU device reservation for a single RTX 3080.
+- Made the GHCR image use whisper.cpp's CUDA runtime by default and added a standalone CPU Compose fallback.
+
 ## [0.1.0] - 2026-08-30
 
 ### Added
