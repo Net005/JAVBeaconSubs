@@ -3,26 +3,18 @@ services:
     build:
       context: .
       args:
-        WHISPER_IMAGE: ghcr.io/ggml-org/whisper.cpp:main-cuda
-    image: "${BEACONSUBS_IMAGE:-ghcr.io/net005/javbeacon-subs:latest}"
+        WHISPER_IMAGE: ghcr.io/ggml-org/whisper.cpp:main
+    image: javbeacon-subs:cpu-local
     restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ["${NVIDIA_GPU_DEVICE_ID:-0}"]
-              capabilities: [gpu]
     ports:
       - "${SUBTITLE_PORT:-8097}:8097"
     environment:
       BEACONSUBS_API_TOKEN: "${BEACONSUBS_API_TOKEN:-}"
       BEACONSUBS_TRANSLATION_API_KEY: "${BEACONSUBS_TRANSLATION_API_KEY:-}"
       BEACONSUBS_DOWNLOAD_MODELS: "${BEACONSUBS_DOWNLOAD_MODELS:-true}"
-      BEACONSUBS_USE_GPU: "true"
-      BEACONSUBS_GPU_PREFLIGHT: "true"
-      BEACONSUBS_GPU_AUTO_RESET: "${BEACONSUBS_GPU_AUTO_RESET:-true}"
-      NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
+      BEACONSUBS_USE_GPU: "false"
+      BEACONSUBS_GPU_PREFLIGHT: "false"
+      BEACONSUBS_GPU_AUTO_RESET: "false"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

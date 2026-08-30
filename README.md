@@ -14,9 +14,11 @@ Two English modes are available:
 
 Go is the service and orchestration layer. `whisper.cpp` and FFmpeg are native executables invoked without a Python runtime.
 
-## Docker Compose (recommended)
+## Docker Compose for NVIDIA RTX 3080 (recommended)
 
-The default Compose stack uses CPU inference. This project already contains the verified `models/ggml-large-v3.bin`; Compose bind-mounts the project model cache at `/models`. The smaller Silero VAD model is downloaded on first startup.
+The default Compose stack is NVIDIA/CUDA accelerated and is configured for the RTX 3080 at host GPU device `0`. It builds on whisper.cpp's official `main-cuda` image, explicitly reserves the NVIDIA device, and enables the `compute` capability for CUDA plus `utility` for `nvidia-smi` health checks and recovery. Install the NVIDIA driver and NVIDIA Container Toolkit on the Docker host first.
+
+This project already contains the verified `models/ggml-large-v3.bin`; Compose bind-mounts the project model cache at `/models`. The smaller Silero VAD model is downloaded on first startup.
 
 ```sh
 cp .env.example .env
@@ -25,15 +27,21 @@ docker compose up --build -d
 docker compose logs -f javbeacon-subs
 ```
 
-Open `http://localhost:8097`. Application state, uploaded media, and `beaconsubs.db` live in the `javbeacon_subs_data` volume. Models live in the project's `models/` directory, outside the Docker build context, so rebuilding or replacing the container does not copy or download `large-v3` again.
-
-For an NVIDIA host with the NVIDIA Container Toolkit:
+Verify that Docker can see the RTX 3080 before starting the service:
 
 ```sh
-docker compose -f compose.yaml -f compose.gpu.yaml up --build -d
+docker run --rm --gpus all nvidia/cuda:12.9.0-base-ubuntu22.04 nvidia-smi
 ```
 
-The GPU overlay uses whisper.cpp's official `main-cuda` image and requests all GPUs. The standard Compose file remains portable and requires no GPU runtime. The model revision is pinned to upstream SHA-1 `ad82bf6a9043ceed055076d0fd39f5f186ff8062`. A verified marker avoids hashing 2.9 GiB on every start; the model is replaced only when missing, corrupt, or the pinned revision changes.
+Open `http://localhost:8097`. Application state, uploaded media, and `beaconsubs.db` live in the `javbeacon_subs_data` volume. Models live in the project's `models/` directory, outside the Docker build context, so rebuilding or replacing the container does not copy or download `large-v3` again.
+
+`NVIDIA_GPU_DEVICE_ID=0` selects the first GPU, which is the normal value for a single RTX 3080 system. Run `nvidia-smi -L` on the host and change it in `.env` if the 3080 has another device index. The model revision is pinned to upstream SHA-1 `ad82bf6a9043ceed055076d0fd39f5f186ff8062`. A verified marker avoids hashing 2.9 GiB on every start; the model is replaced only when missing, corrupt, or the pinned revision changes.
+
+For a host without NVIDIA support, use the standalone CPU definition:
+
+```sh
+docker compose -f compose.cpu.yaml up --build -d
+```
 
 `MEDIA_PATH` is mounted at `/media` read/write because subtitles are written beside server-side media. The service never scans it automatically: JAVBeacon or the web UI must submit a specific file or folder.
 
@@ -87,7 +95,7 @@ The GPU Compose overlay enables guarded automatic recovery. If the preflight pro
 Disable automatic reset while retaining diagnostics with:
 
 ```sh
-BEACONSUBS_GPU_AUTO_RESET=false docker compose -f compose.yaml -f compose.gpu.yaml up -d
+BEACONSUBS_GPU_AUTO_RESET=false docker compose up -d
 ```
 
 ## JAVBeacon REST contract

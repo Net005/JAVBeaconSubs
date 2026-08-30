@@ -1,4 +1,4 @@
-ARG WHISPER_IMAGE=ghcr.io/ggml-org/whisper.cpp:main
+ARG WHISPER_IMAGE=ghcr.io/ggml-org/whisper.cpp:main-cuda
 FROM golang:1.25-bookworm AS go-builder
 WORKDIR /src
 COPY go.mod go.sum ./
