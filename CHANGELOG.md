@@ -2,6 +2,13 @@
 
 All notable changes to JAVBeacon Subtitles are documented here.
 
+## [0.1.5] - 2026-08-30
+
+### Fixed
+
+- Fixed single-file submission in browsers where the built-in `window.external` object shadowed the JAVBeacon reference input.
+- Improved API-token feedback and automatically refresh health and activity after the browser token changes.
+
 ## [0.1.4] - 2026-08-30
 
 ### Changed

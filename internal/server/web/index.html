@@ -40,7 +40,7 @@
       <input id="callback" placeholder="http://javbeacon:8080/api/subtitles/callback">
       <label for="apiToken">API token <span class="muted">(only if configured)</span></label>
       <input id="apiToken" type="password" autocomplete="off" placeholder="Stored only in this browser" oninput="saveToken()">
-      <div class="actions"><button id="submitButton" onclick="submitJob()">Generate subtitles</button><button class="ghost" onclick="loadJobs()">Refresh</button></div>
+      <div class="actions"><button id="submitButton" onclick="submitJob()">Generate subtitles</button><button class="ghost" onclick="refreshAll()">Refresh</button></div>
       <p id="formError"></p>
     </aside>
     <section class="card"><h2>Activity</h2><div id="jobs"><div class="empty">No subtitle jobs yet.</div></div></section>
@@ -48,30 +48,33 @@
 </main>
 <script>
 let mode='upload';
+let authRefreshTimer;
+const element=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function token(){return apiToken.value.trim()}
-function saveToken(){localStorage.setItem('javbeaconsubs-token',token())}
-async function api(url,opt={}){const headers=new Headers(opt.headers||{});if(token())headers.set('Authorization','Bearer '+token());const r=await fetch(url,{...opt,headers});const type=r.headers.get('content-type')||'';const d=type.includes('json')?await r.json():{};if(!r.ok)throw Error(d.error||r.statusText);return d}
-function setMode(next){mode=next;uploadPanel.classList.toggle('hidden',next!=='upload');pathsPanel.classList.toggle('hidden',next!=='paths');uploadTab.classList.toggle('active',next==='upload');pathsTab.classList.toggle('active',next==='paths');formError.textContent=''}
-async function health(){try{const h=await api('/api/v1/health');healthDot.className='dot '+(h.ready?'good':'bad');healthText.textContent=h.ready?'Engine ready':'Setup required'}catch{healthDot.className='dot bad';healthText.textContent='API unavailable'}}
+function token(){return element('apiToken').value.trim()}
+function saveToken(){localStorage.setItem('javbeaconsubs-token',token());clearTimeout(authRefreshTimer);authRefreshTimer=setTimeout(refreshAll,350)}
+async function api(url,opt={}){const headers=new Headers(opt.headers||{});if(token())headers.set('Authorization','Bearer '+token());const r=await fetch(url,{...opt,headers});const type=r.headers.get('content-type')||'';const d=type.includes('json')?await r.json():{};if(!r.ok){const error=Error(d.error||r.statusText);error.status=r.status;throw error}return d}
+function setMode(next){mode=next;element('uploadPanel').classList.toggle('hidden',next!=='upload');element('pathsPanel').classList.toggle('hidden',next!=='paths');element('uploadTab').classList.toggle('active',next==='upload');element('pathsTab').classList.toggle('active',next==='paths');element('formError').textContent=''}
+async function health(){try{const h=await api('/api/v1/health');element('healthDot').className='dot '+(h.ready?'good':'bad');element('healthText').textContent=h.ready?'Engine ready':'Setup required'}catch(e){element('healthDot').className='dot bad';element('healthText').textContent=e.status===401?'API token required':'API unavailable'}}
 async function submitJob(){
-  formError.textContent='';submitButton.disabled=true;submitButton.textContent=mode==='upload'?'Uploading…':'Queuing…';
+  element('formError').textContent='';element('submitButton').disabled=true;element('submitButton').textContent=mode==='upload'?'Uploading…':'Queuing…';
   try{
     if(mode==='upload'){
-      if(!singleFile.files.length)throw Error('Choose one video or audio file.');
-      const data=new FormData();data.append('file',singleFile.files[0]);data.append('overwrite',String(overwrite.checked));data.append('external_id',external.value.trim());data.append('callback_url',callback.value.trim());
-      await api('/api/v1/jobs/upload',{method:'POST',body:data});singleFile.value='';
+      if(!element('singleFile').files.length)throw Error('Choose one video or audio file.');
+      const data=new FormData();data.append('file',element('singleFile').files[0]);data.append('overwrite',String(element('overwrite').checked));data.append('external_id',element('external').value.trim());data.append('callback_url',element('callback').value.trim());
+      await api('/api/v1/jobs/upload',{method:'POST',body:data});element('singleFile').value='';
     }else{
-      const selected=inputs.value.split('\n').map(x=>x.trim()).filter(Boolean);if(!selected.length)throw Error('Enter at least one server file or folder.');
-      await api('/api/v1/jobs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({inputs:selected,recursive:recursive.checked,overwrite:overwrite.checked,external_id:external.value.trim(),callback_url:callback.value.trim()})});inputs.value='';
+      const selected=element('inputs').value.split('\n').map(x=>x.trim()).filter(Boolean);if(!selected.length)throw Error('Enter at least one server file or folder.');
+      await api('/api/v1/jobs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({inputs:selected,recursive:element('recursive').checked,overwrite:element('overwrite').checked,external_id:element('external').value.trim(),callback_url:element('callback').value.trim()})});element('inputs').value='';
     }
     await loadJobs();
-  }catch(e){formError.textContent=e.message}finally{submitButton.disabled=false;submitButton.textContent='Generate subtitles'}
+  }catch(e){element('formError').textContent=e.status===401?'API token rejected. Enter the value configured in JAVBEACONSUBS_API_TOKEN.':e.message}finally{element('submitButton').disabled=false;element('submitButton').textContent='Generate subtitles'}
 }
 function outputLinks(j){if(!j.results?.length)return '';const auth=token()?'?token='+encodeURIComponent(token()):'';return `<div class="actions">${j.results.map((r,i)=>`${r.english_srt?`<a class="download" href="/api/v1/jobs/${encodeURIComponent(j.id)}/outputs/${i}/en${auth}">Download English</a>`:''}${r.japanese_srt?`<a class="download" href="/api/v1/jobs/${encodeURIComponent(j.id)}/outputs/${i}/ja${auth}">Download Japanese</a>`:''}`).join('')}</div>`}
-function render(list){jobs.innerHTML=list.length?list.map(j=>`<article class="job"><div class="jobhead"><strong>${esc(j.external_id||j.id)}</strong><span class="pill ${esc(j.status)}">${esc(j.status)}</span></div><div class="bar"><div class="fill" style="width:${Number(j.progress)||0}%"></div></div><div>${esc(j.message||j.phase||'Queued')}</div><div class="files">${j.files.length} file(s)${j.results?.length?' · '+j.results.length+' complete':''}</div>${outputLinks(j)}${['queued','running'].includes(j.status)?`<div class="actions"><button class="danger" onclick="cancelJob('${esc(j.id)}')">Cancel</button></div>`:''}${j.error?`<div style="color:var(--red);margin-top:8px">${esc(j.error)}</div>`:''}</article>`).join(''):'<div class="empty">No subtitle jobs yet.</div>'}
-async function loadJobs(){try{render((await api('/api/v1/jobs')).jobs)}catch(e){jobs.innerHTML=`<div class="empty">${esc(e.message)}</div>`}}
+function render(list){element('jobs').innerHTML=list.length?list.map(j=>`<article class="job"><div class="jobhead"><strong>${esc(j.external_id||j.id)}</strong><span class="pill ${esc(j.status)}">${esc(j.status)}</span></div><div class="bar"><div class="fill" style="width:${Number(j.progress)||0}%"></div></div><div>${esc(j.message||j.phase||'Queued')}</div><div class="files">${j.files.length} file(s)${j.results?.length?' · '+j.results.length+' complete':''}</div>${outputLinks(j)}${['queued','running'].includes(j.status)?`<div class="actions"><button class="danger" onclick="cancelJob('${esc(j.id)}')">Cancel</button></div>`:''}${j.error?`<div style="color:var(--red);margin-top:8px">${esc(j.error)}</div>`:''}</article>`).join(''):'<div class="empty">No subtitle jobs yet.</div>'}
+async function loadJobs(){try{render((await api('/api/v1/jobs')).jobs)}catch(e){const message=e.status===401?'Enter the configured API token to view activity.':e.message;element('jobs').innerHTML=`<div class="empty">${esc(message)}</div>`}}
 async function cancelJob(id){await api('/api/v1/jobs/'+id,{method:'DELETE'});await loadJobs()}
-apiToken.value=localStorage.getItem('javbeaconsubs-token')||'';health();loadJobs();setInterval(loadJobs,3000);setInterval(health,30000);
+async function refreshAll(){await Promise.all([health(),loadJobs()])}
+element('apiToken').value=localStorage.getItem('javbeaconsubs-token')||'';refreshAll();setInterval(loadJobs,3000);setInterval(health,30000);
 </script>
 </body></html>
