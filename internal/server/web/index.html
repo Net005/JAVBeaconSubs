@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>JAVBeacon Subtitles</title>
+  <style>
+    :root{color-scheme:dark;--bg:#080b12;--card:#111722;--line:#222c3b;--text:#edf2fa;--muted:#8996a9;--cyan:#5de0d1;--violet:#8d7cff;--red:#ff657a}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 15% 0,#19213b 0,transparent 35rem),var(--bg);color:var(--text);font:14px Inter,system-ui,sans-serif}.shell{max-width:1280px;margin:auto;padding:28px}.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px}.brand{display:flex;gap:13px;align-items:center}.mark{width:44px;height:44px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(145deg,var(--violet),#4dd7c8);font-weight:900;color:#071016;box-shadow:0 8px 30px #6757e955}.brand h1{font-size:19px;margin:0}.brand small,.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:380px 1fr;gap:18px}.card{background:#111722dd;border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 18px 50px #0004}.card h2{font-size:14px;margin:0 0 16px;text-transform:uppercase;letter-spacing:.1em;color:#aeb8c8}label{display:block;margin:14px 0 6px;color:#aab5c6;font-weight:650}textarea,input{width:100%;border:1px solid #293446;border-radius:10px;background:#0a0f18;color:var(--text);padding:11px 12px;font:inherit}input[type=file]{padding:8px}input[type=file]::file-selector-button{border:0;border-radius:7px;padding:7px 10px;margin-right:10px;background:#202a39;color:#dce4ef;cursor:pointer}textarea{height:124px;resize:vertical}.row{display:flex;gap:10px;align-items:center}.row input[type=checkbox]{width:auto;accent-color:var(--violet)}button{border:0;border-radius:10px;padding:11px 15px;background:linear-gradient(135deg,var(--violet),#6554dd);color:white;font-weight:750;cursor:pointer}button:disabled{opacity:.55;cursor:wait}button.ghost{background:#1a2230;color:#cbd4e2}button.danger{background:#361923;color:#ff8798}.actions{display:flex;gap:9px;margin-top:17px;flex-wrap:wrap}.health{display:flex;gap:8px;align-items:center}.dot{width:9px;height:9px;border-radius:50%;background:#697386}.dot.good{background:var(--cyan);box-shadow:0 0 14px var(--cyan)}.dot.bad{background:var(--red)}.mode-tabs{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:4px;background:#0a0f18;border:1px solid var(--line);border-radius:11px;margin-bottom:16px}.mode-tabs button{background:transparent;color:var(--muted);box-shadow:none;padding:9px}.mode-tabs button.active{background:#24223e;color:#c7c0ff}.help{font-size:12px;line-height:1.5;color:var(--muted);margin:7px 0 0}.hidden{display:none}.job{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;background:#0d131d}.jobhead{display:flex;justify-content:space-between;gap:10px}.pill{font-size:11px;padding:4px 8px;border-radius:999px;background:#20283a;color:#aeb9ca}.pill.running{background:#2c2851;color:#c2baff}.pill.complete{background:#15362f;color:#73e4c8}.pill.failed,.pill.cancelled{background:#3b1922;color:#ff8393}.bar{height:5px;background:#222a38;border-radius:99px;margin:11px 0;overflow:hidden}.fill{height:100%;background:linear-gradient(90deg,var(--violet),var(--cyan))}.files{color:var(--muted);font-size:12px;word-break:break-all}.download{display:inline-flex;text-decoration:none;border:1px solid #2b3b46;background:#122b2a;color:#72e0c8;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700}.empty{padding:60px;text-align:center;color:var(--muted)}#formError{color:var(--red);margin-bottom:0}
+    @media(max-width:800px){.shell{padding:17px}.grid{grid-template-columns:1fr}.top{align-items:flex-start}.top .muted{display:none}}
+  </style>
+</head>
+<body>
+<main class="shell">
+  <header class="top">
+    <div class="brand"><div class="mark">JB</div><div><h1>JAVBeacon Subtitles</h1><small>Japanese dialogue → natural English</small></div></div>
+    <div class="health"><span id="healthDot" class="dot"></span><span id="healthText" class="muted">Checking engine</span></div>
+  </header>
+  <section class="grid">
+    <aside class="card">
+      <h2>New subtitle job</h2>
+      <div class="mode-tabs">
+        <button id="uploadTab" class="active" onclick="setMode('upload')">Upload one file</button>
+        <button id="pathsTab" onclick="setMode('paths')">Server paths</button>
+      </div>
+      <div id="uploadPanel">
+        <label for="singleFile">Video or audio file</label>
+        <input id="singleFile" type="file" accept="video/*,audio/*,.mkv,.m4v,.ts,.flac">
+        <p class="help">The finished English subtitle can be downloaded from the job card.</p>
+      </div>
+      <div id="pathsPanel" class="hidden">
+        <label for="inputs">Files or folders</label>
+        <textarea id="inputs" placeholder="One absolute path per line&#10;/media/library/example.mkv"></textarea>
+        <label class="row"><input id="recursive" type="checkbox" checked> Include subfolders</label>
+      </div>
+      <label class="row"><input id="overwrite" type="checkbox"> Replace existing subtitles</label>
+      <label for="external">JAVBeacon reference <span class="muted">(optional)</span></label>
+      <input id="external" placeholder="movie-123 or task ID">
+      <label for="callback">Completion callback <span class="muted">(optional)</span></label>
+      <input id="callback" placeholder="http://javbeacon:8080/api/subtitles/callback">
+      <label for="apiToken">API token <span class="muted">(only if configured)</span></label>
+      <input id="apiToken" type="password" autocomplete="off" placeholder="Stored only in this browser" oninput="saveToken()">
+      <div class="actions"><button id="submitButton" onclick="submitJob()">Generate subtitles</button><button class="ghost" onclick="loadJobs()">Refresh</button></div>
+      <p id="formError"></p>
+    </aside>
+    <section class="card"><h2>Activity</h2><div id="jobs"><div class="empty">No subtitle jobs yet.</div></div></section>
+  </section>
+</main>
+<script>
+let mode='upload';
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function token(){return apiToken.value.trim()}
+function saveToken(){localStorage.setItem('beaconsubs-token',token())}
+async function api(url,opt={}){const headers=new Headers(opt.headers||{});if(token())headers.set('Authorization','Bearer '+token());const r=await fetch(url,{...opt,headers});const type=r.headers.get('content-type')||'';const d=type.includes('json')?await r.json():{};if(!r.ok)throw Error(d.error||r.statusText);return d}
+function setMode(next){mode=next;uploadPanel.classList.toggle('hidden',next!=='upload');pathsPanel.classList.toggle('hidden',next!=='paths');uploadTab.classList.toggle('active',next==='upload');pathsTab.classList.toggle('active',next==='paths');formError.textContent=''}
+async function health(){try{const h=await api('/api/v1/health');healthDot.className='dot '+(h.ready?'good':'bad');healthText.textContent=h.ready?'Engine ready':'Setup required'}catch{healthDot.className='dot bad';healthText.textContent='API unavailable'}}
+async function submitJob(){
+  formError.textContent='';submitButton.disabled=true;submitButton.textContent=mode==='upload'?'Uploading…':'Queuing…';
+  try{
+    if(mode==='upload'){
+      if(!singleFile.files.length)throw Error('Choose one video or audio file.');
+      const data=new FormData();data.append('file',singleFile.files[0]);data.append('overwrite',String(overwrite.checked));data.append('external_id',external.value.trim());data.append('callback_url',callback.value.trim());
+      await api('/api/v1/jobs/upload',{method:'POST',body:data});singleFile.value='';
+    }else{
+      const selected=inputs.value.split('\n').map(x=>x.trim()).filter(Boolean);if(!selected.length)throw Error('Enter at least one server file or folder.');
+      await api('/api/v1/jobs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({inputs:selected,recursive:recursive.checked,overwrite:overwrite.checked,external_id:external.value.trim(),callback_url:callback.value.trim()})});inputs.value='';
+    }
+    await loadJobs();
+  }catch(e){formError.textContent=e.message}finally{submitButton.disabled=false;submitButton.textContent='Generate subtitles'}
+}
+function outputLinks(j){if(!j.results?.length)return '';const auth=token()?'?token='+encodeURIComponent(token()):'';return `<div class="actions">${j.results.map((r,i)=>`${r.english_srt?`<a class="download" href="/api/v1/jobs/${encodeURIComponent(j.id)}/outputs/${i}/en${auth}">Download English</a>`:''}${r.japanese_srt?`<a class="download" href="/api/v1/jobs/${encodeURIComponent(j.id)}/outputs/${i}/ja${auth}">Download Japanese</a>`:''}`).join('')}</div>`}
+function render(list){jobs.innerHTML=list.length?list.map(j=>`<article class="job"><div class="jobhead"><strong>${esc(j.external_id||j.id)}</strong><span class="pill ${esc(j.status)}">${esc(j.status)}</span></div><div class="bar"><div class="fill" style="width:${Number(j.progress)||0}%"></div></div><div>${esc(j.message||j.phase||'Queued')}</div><div class="files">${j.files.length} file(s)${j.results?.length?' · '+j.results.length+' complete':''}</div>${outputLinks(j)}${['queued','running'].includes(j.status)?`<div class="actions"><button class="danger" onclick="cancelJob('${esc(j.id)}')">Cancel</button></div>`:''}${j.error?`<div style="color:var(--red);margin-top:8px">${esc(j.error)}</div>`:''}</article>`).join(''):'<div class="empty">No subtitle jobs yet.</div>'}
+async function loadJobs(){try{render((await api('/api/v1/jobs')).jobs)}catch(e){jobs.innerHTML=`<div class="empty">${esc(e.message)}</div>`}}
+async function cancelJob(id){await api('/api/v1/jobs/'+id,{method:'DELETE'});await loadJobs()}
+apiToken.value=localStorage.getItem('beaconsubs-token')||'';health();loadJobs();setInterval(loadJobs,3000);setInterval(health,30000);
+</script>
+</body></html>

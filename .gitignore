@@ -1,0 +1,10 @@
+/beaconsubs
+/config.json
+/data/
+/media/
+/models/*.bin
+/models/*.part
+/models/*.verified-sha1
+*.db
+*.db-shm
+*.db-wal

@@ -1,0 +1,9 @@
+.git
+.github
+data
+media
+models
+beaconsubs
+*.db
+*.db-shm
+*.db-wal
