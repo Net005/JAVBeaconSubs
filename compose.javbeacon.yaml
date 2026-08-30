@@ -1,0 +1,10 @@
+services:
+  javbeacon-subs:
+    networks:
+      - default
+      - javbeacon
+
+networks:
+  javbeacon:
+    external: true
+    name: "${JAVBEACON_NETWORK:-javbeacon_default}"

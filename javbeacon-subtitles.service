@@ -1,0 +1,21 @@
+[Unit]
+Description=JAVBeacon subtitle generation service
+After=network.target
+
+[Service]
+Type=simple
+User=javbeacon
+Group=javbeacon
+WorkingDirectory=/opt/beaconsubs
+ExecStart=/opt/beaconsubs/beaconsubs -config /etc/beaconsubs/config.json
+EnvironmentFile=-/etc/beaconsubs/environment
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/media /var/lib/beaconsubs
+
+[Install]
+WantedBy=multi-user.target

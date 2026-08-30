@@ -1,0 +1,10 @@
+services:
+  javbeacon-subs:
+    build:
+      args:
+        WHISPER_IMAGE: ghcr.io/ggml-org/whisper.cpp:main-cuda
+    environment:
+      BEACONSUBS_USE_GPU: "true"
+      BEACONSUBS_GPU_PREFLIGHT: "true"
+      BEACONSUBS_GPU_AUTO_RESET: "${BEACONSUBS_GPU_AUTO_RESET:-true}"
+    gpus: all
