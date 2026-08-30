@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"beaconsubs/internal/jobs"
+	"javbeaconsubs/internal/jobs"
 )
 
 func TestSQLiteRoundTrip(t *testing.T) {

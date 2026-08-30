@@ -32,7 +32,7 @@ jobs:
         id: metadata
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/net005/javbeacon-subs
+          images: ghcr.io/net005/javbeaconsubs
           tags: |
             type=raw,value=latest
             type=sha,prefix=sha-

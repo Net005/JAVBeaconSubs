@@ -6,16 +6,16 @@ After=network.target
 Type=simple
 User=javbeacon
 Group=javbeacon
-WorkingDirectory=/opt/beaconsubs
-ExecStart=/opt/beaconsubs/beaconsubs -config /etc/beaconsubs/config.json
-EnvironmentFile=-/etc/beaconsubs/environment
+WorkingDirectory=/opt/javbeaconsubs
+ExecStart=/opt/javbeaconsubs/javbeaconsubs -config /etc/javbeaconsubs/config.json
+EnvironmentFile=-/etc/javbeaconsubs/environment
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/media /var/lib/beaconsubs
+ReadWritePaths=/media /var/lib/javbeaconsubs
 
 [Install]
 WantedBy=multi-user.target

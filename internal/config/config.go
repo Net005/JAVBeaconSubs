@@ -61,7 +61,7 @@ type OutputConfig struct {
 
 func defaults() Config {
 	return Config{
-		Listen: "127.0.0.1:8097", DatabasePath: "./data/beaconsubs.db",
+		Listen: "127.0.0.1:8097", DatabasePath: "./data/javbeaconsubs.db",
 		UploadDir: "./data/uploads", MaxUploadGB: 30,
 		Whisper: WhisperConfig{
 			Binary: "whisper-cli", Language: "ja", Threads: 8, UseGPU: true,
@@ -87,37 +87,37 @@ func Load(path string) (Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("decode %s: %w", path, err)
 	}
-	if value := os.Getenv("BEACONSUBS_API_TOKEN"); value != "" {
+	if value := os.Getenv("JAVBEACONSUBS_API_TOKEN"); value != "" {
 		cfg.APIToken = value
 	}
-	if value := os.Getenv("BEACONSUBS_LISTEN"); value != "" {
+	if value := os.Getenv("JAVBEACONSUBS_LISTEN"); value != "" {
 		cfg.Listen = value
 	}
-	if value := os.Getenv("BEACONSUBS_DATABASE_PATH"); value != "" {
+	if value := os.Getenv("JAVBEACONSUBS_DATABASE_PATH"); value != "" {
 		cfg.DatabasePath = value
 	}
-	if value := os.Getenv("BEACONSUBS_UPLOAD_DIR"); value != "" {
+	if value := os.Getenv("JAVBEACONSUBS_UPLOAD_DIR"); value != "" {
 		cfg.UploadDir = value
 	}
-	if value := os.Getenv("BEACONSUBS_WHISPER_BINARY"); value != "" {
+	if value := os.Getenv("JAVBEACONSUBS_WHISPER_BINARY"); value != "" {
 		cfg.Whisper.Binary = value
 	}
-	if value := os.Getenv("BEACONSUBS_WHISPER_MODEL"); value != "" {
+	if value := os.Getenv("JAVBEACONSUBS_WHISPER_MODEL"); value != "" {
 		cfg.Whisper.Model = value
 	}
-	if value := os.Getenv("BEACONSUBS_VAD_MODEL"); value != "" {
+	if value := os.Getenv("JAVBEACONSUBS_VAD_MODEL"); value != "" {
 		cfg.Whisper.VADModel = value
 	}
-	if value := os.Getenv("BEACONSUBS_USE_GPU"); value != "" {
+	if value := os.Getenv("JAVBEACONSUBS_USE_GPU"); value != "" {
 		cfg.Whisper.UseGPU = envBool(value)
 	}
-	if value := os.Getenv("BEACONSUBS_GPU_PREFLIGHT"); value != "" {
+	if value := os.Getenv("JAVBEACONSUBS_GPU_PREFLIGHT"); value != "" {
 		cfg.Whisper.GPUPreflight = envBool(value)
 	}
-	if value := os.Getenv("BEACONSUBS_GPU_AUTO_RESET"); value != "" {
+	if value := os.Getenv("JAVBEACONSUBS_GPU_AUTO_RESET"); value != "" {
 		cfg.Whisper.GPUAutoReset = envBool(value)
 	}
-	if value := os.Getenv("BEACONSUBS_TRANSLATION_API_KEY"); value != "" {
+	if value := os.Getenv("JAVBEACONSUBS_TRANSLATION_API_KEY"); value != "" {
 		cfg.Translation.APIKey = value
 	}
 	if cfg.Workers < 1 {

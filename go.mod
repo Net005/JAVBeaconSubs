@@ -1,4 +1,4 @@
-module beaconsubs
+module javbeaconsubs
 
 go 1.25.0
 

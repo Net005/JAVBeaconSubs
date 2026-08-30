@@ -50,7 +50,7 @@
 let mode='upload';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function token(){return apiToken.value.trim()}
-function saveToken(){localStorage.setItem('beaconsubs-token',token())}
+function saveToken(){localStorage.setItem('javbeaconsubs-token',token())}
 async function api(url,opt={}){const headers=new Headers(opt.headers||{});if(token())headers.set('Authorization','Bearer '+token());const r=await fetch(url,{...opt,headers});const type=r.headers.get('content-type')||'';const d=type.includes('json')?await r.json():{};if(!r.ok)throw Error(d.error||r.statusText);return d}
 function setMode(next){mode=next;uploadPanel.classList.toggle('hidden',next!=='upload');pathsPanel.classList.toggle('hidden',next!=='paths');uploadTab.classList.toggle('active',next==='upload');pathsTab.classList.toggle('active',next==='paths');formError.textContent=''}
 async function health(){try{const h=await api('/api/v1/health');healthDot.className='dot '+(h.ready?'good':'bad');healthText.textContent=h.ready?'Engine ready':'Setup required'}catch{healthDot.className='dot bad';healthText.textContent='API unavailable'}}
@@ -72,6 +72,6 @@ function outputLinks(j){if(!j.results?.length)return '';const auth=token()?'?tok
 function render(list){jobs.innerHTML=list.length?list.map(j=>`<article class="job"><div class="jobhead"><strong>${esc(j.external_id||j.id)}</strong><span class="pill ${esc(j.status)}">${esc(j.status)}</span></div><div class="bar"><div class="fill" style="width:${Number(j.progress)||0}%"></div></div><div>${esc(j.message||j.phase||'Queued')}</div><div class="files">${j.files.length} file(s)${j.results?.length?' · '+j.results.length+' complete':''}</div>${outputLinks(j)}${['queued','running'].includes(j.status)?`<div class="actions"><button class="danger" onclick="cancelJob('${esc(j.id)}')">Cancel</button></div>`:''}${j.error?`<div style="color:var(--red);margin-top:8px">${esc(j.error)}</div>`:''}</article>`).join(''):'<div class="empty">No subtitle jobs yet.</div>'}
 async function loadJobs(){try{render((await api('/api/v1/jobs')).jobs)}catch(e){jobs.innerHTML=`<div class="empty">${esc(e.message)}</div>`}}
 async function cancelJob(id){await api('/api/v1/jobs/'+id,{method:'DELETE'});await loadJobs()}
-apiToken.value=localStorage.getItem('beaconsubs-token')||'';health();loadJobs();setInterval(loadJobs,3000);setInterval(health,30000);
+apiToken.value=localStorage.getItem('javbeaconsubs-token')||'';health();loadJobs();setInterval(loadJobs,3000);setInterval(health,30000);
 </script>
 </body></html>

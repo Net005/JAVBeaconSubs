@@ -18,13 +18,13 @@ Go is the service and orchestration layer. `whisper.cpp` and FFmpeg are native e
 
 The default Compose stack is NVIDIA/CUDA accelerated and uses host GPU device `0` by default. It builds on whisper.cpp's official `main-cuda` image, explicitly reserves the NVIDIA device, and enables the `compute` capability for CUDA plus `utility` for `nvidia-smi` health checks and recovery. Install the NVIDIA driver and NVIDIA Container Toolkit on the Docker host first.
 
-This project already contains the verified `models/ggml-large-v3.bin`; Compose bind-mounts the project model cache at `/models`. The smaller Silero VAD model is downloaded on first startup.
+This project already contains the verified `models/ggml-large-v3.bin`; Compose bind-mounts the configurable `JAVBEACONSUBS_MODELS_PATH` at `/models`. The smaller Silero VAD model is downloaded on first startup. `JAVBEACONSUBS_DATA_PATH` is mounted at `/data` for SQLite and uploaded files. Both default to project-local directories, so container replacement does not discard them.
 
 ```sh
 cp .env.example .env
 # Set MEDIA_PATH in .env to the host folder JAVBeacon and this service share.
 docker compose up --build -d
-docker compose logs -f javbeacon-subs
+docker compose logs -f javbeaconsubs
 ```
 
 Verify that Docker can see the NVIDIA GPU before starting the service:
@@ -33,7 +33,9 @@ Verify that Docker can see the NVIDIA GPU before starting the service:
 docker run --rm --gpus all nvidia/cuda:12.9.0-base-ubuntu22.04 nvidia-smi
 ```
 
-Open `http://localhost:8097`. Application state, uploaded media, and `beaconsubs.db` live in the `javbeacon_subs_data` volume. Models live in the project's `models/` directory, outside the Docker build context, so rebuilding or replacing the container does not copy or download `large-v3` again.
+Open `http://localhost:8097`, or the port selected by `SUBTITLE_PORT`. The application listener, published port, and health check all use that same value. Application state, uploaded media, and `javbeaconsubs.db` live under `JAVBEACONSUBS_DATA_PATH`. Models live under `JAVBEACONSUBS_MODELS_PATH`, outside the Docker build context, so rebuilding or replacing the container does not copy or download `large-v3` again.
+
+When upgrading an installation that used the previous named Docker volume, copy its database and uploads into `JAVBEACONSUBS_DATA_PATH` before starting this version. Docker does not migrate named-volume contents into a host bind mount automatically; the old volume is not deleted.
 
 `NVIDIA_GPU_DEVICE_ID=0` selects the first GPU. Run `nvidia-smi -L` on the host and change it in `.env` when the intended NVIDIA GPU has another device index. The model revision is pinned to upstream SHA-1 `ad82bf6a9043ceed055076d0fd39f5f186ff8062`. A verified marker avoids hashing 2.9 GiB on every start; the model is replaced only when missing, corrupt, or the pinned revision changes.
 
@@ -51,7 +53,7 @@ To attach this service to an existing JAVBeacon Compose network, set `JAVBEACON_
 docker compose -f compose.yaml -f compose.javbeacon.yaml up --build -d
 ```
 
-JAVBeacon can then address this API by its Compose service name, `http://javbeacon-subs:8097`. Keep `MEDIA_PATH` pointed at the same host media tree JAVBeacon uses so a submitted JAVBeacon path maps predictably to `/media/...` here.
+JAVBeacon can then address this API by its Compose service name, `http://javbeaconsubs:8097`. Keep `MEDIA_PATH` pointed at the same host media tree JAVBeacon uses so a submitted JAVBeacon path maps predictably to `/media/...` here.
 
 ## Native install
 
@@ -61,13 +63,18 @@ Requirements: Go 1.25+, FFmpeg, `whisper-cli`, a multilingual `large-v3` GGML mo
 cp config.example.json config.json
 # Edit model paths and allowed_roots.
 go test ./...
-go build -o beaconsubs ./cmd/beaconsubs
-./beaconsubs -config config.json
+go build -o javbeaconsubs ./cmd/javbeaconsubs
+./javbeaconsubs -config config.json
 ```
 
 Open `http://127.0.0.1:8097`.
 
-`allowed_roots` is a safety boundary. JAVBeacon can submit only files inside those directories. The managed upload directory is automatically allowed. An empty array allows every local path and is not recommended for a remotely reachable service. Bind to localhost unless a reverse proxy provides TLS and authentication. Secrets can be supplied through `BEACONSUBS_API_TOKEN` and `BEACONSUBS_TRANSLATION_API_KEY` instead of JSON.
+`allowed_roots` is a safety boundary. JAVBeacon can submit only files inside those directories. The managed upload directory is automatically allowed. An empty array allows every local path and is not recommended for a remotely reachable service. Bind to localhost unless a reverse proxy provides TLS and authentication.
+
+The two `.env` credentials have separate purposes:
+
+- `JAVBEACONSUBS_API_TOKEN` protects this service's web and REST API. JAVBeacon and other clients send the same value as `Authorization: Bearer <token>` or `X-API-Key: <token>`. Leaving it blank disables API authentication.
+- `JAVBEACONSUBS_TRANSLATION_API_KEY` is sent as a Bearer credential to the configured OpenAI-compatible endpoint only when contextual translation is used. It is not used to access JAVBeaconSubs. Leave it blank for direct Whisper translation or an unauthenticated local endpoint such as Ollama.
 
 ## Web interface
 
@@ -95,7 +102,7 @@ The GPU Compose overlay enables guarded automatic recovery. If the preflight pro
 Disable automatic reset while retaining diagnostics with:
 
 ```sh
-BEACONSUBS_GPU_AUTO_RESET=false docker compose up -d
+JAVBEACONSUBS_GPU_AUTO_RESET=false docker compose up -d
 ```
 
 ## JAVBeacon REST contract
@@ -134,7 +141,7 @@ When `api_token` is configured, send `Authorization: Bearer …` or `X-API-Key: 
 
 ## Backups and updates
 
-Back up the Compose data volume to preserve SQLite history and uploaded files. SQLite's main database, WAL, and SHM files must be captured together while the service is running; the simplest consistent backup is to stop the container first. `docker compose down` preserves the named data volume. Models are ordinary files under `models/` and are unaffected by volume removal.
+Back up `JAVBEACONSUBS_DATA_PATH` to preserve SQLite history and uploaded files. SQLite's main database, WAL, and SHM files must be captured together while the service is running; the simplest consistent backup is to stop the container first. `docker compose down` preserves both host directories. Models are ordinary files under `JAVBEACONSUBS_MODELS_PATH`.
 
 ## Quality profile
 

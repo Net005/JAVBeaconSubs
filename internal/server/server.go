@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"beaconsubs/internal/config"
-	"beaconsubs/internal/engine"
-	"beaconsubs/internal/jobs"
+	"javbeaconsubs/internal/config"
+	"javbeaconsubs/internal/engine"
+	"javbeaconsubs/internal/jobs"
 )
 
 //go:embed web/*

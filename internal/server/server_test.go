@@ -12,10 +12,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"beaconsubs/internal/config"
-	"beaconsubs/internal/engine"
-	"beaconsubs/internal/jobs"
-	"beaconsubs/internal/store"
+	"javbeaconsubs/internal/config"
+	"javbeaconsubs/internal/engine"
+	"javbeaconsubs/internal/jobs"
+	"javbeaconsubs/internal/store"
 )
 
 func TestSafeFilename(t *testing.T) {

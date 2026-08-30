@@ -1,7 +1,7 @@
 {
   "listen": "0.0.0.0:8097",
   "api_token": "",
-  "database_path": "/data/beaconsubs.db",
+  "database_path": "/data/javbeaconsubs.db",
   "upload_dir": "/data/uploads",
   "max_upload_gb": 30,
   "allowed_roots": ["/media", "/data/uploads"],

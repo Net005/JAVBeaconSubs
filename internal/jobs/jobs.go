@@ -16,8 +16,8 @@ import (
 	"sync"
 	"time"
 
-	"beaconsubs/internal/config"
-	"beaconsubs/internal/engine"
+	"javbeaconsubs/internal/config"
+	"javbeaconsubs/internal/engine"
 )
 
 var videoExtensions = map[string]bool{".mp4": true, ".mkv": true, ".avi": true, ".mov": true, ".wmv": true, ".flv": true, ".webm": true, ".ts": true, ".m4v": true, ".mp3": true, ".wav": true, ".m4a": true, ".flac": true}
