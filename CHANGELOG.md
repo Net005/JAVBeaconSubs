@@ -2,6 +2,12 @@
 
 All notable changes to JAVBeacon Subtitles are documented here.
 
+## [0.1.4] - 2026-08-30
+
+### Changed
+
+- Made the GHCR publishing workflow run automatically on every push to `main`, attaching build progress directly to the pushed commit while retaining manual dispatch as a fallback.
+
 ## [0.1.3] - 2026-08-30
 
 ### Changed
