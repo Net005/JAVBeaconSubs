@@ -26,20 +26,27 @@ import (
 var assets embed.FS
 
 type Server struct {
-	cfg    config.Config
-	jobs   *jobs.Manager
-	runner *engine.Runner
-	log    *slog.Logger
+	cfg      config.Config
+	jobs     *jobs.Manager
+	runner   *engine.Runner
+	settings SettingsStore
+	log      *slog.Logger
 }
 
-func New(cfg config.Config, jobs *jobs.Manager, runner *engine.Runner, log *slog.Logger) *Server {
-	return &Server{cfg: cfg, jobs: jobs, runner: runner, log: log}
+type SettingsStore interface {
+	SaveTranslation(config.TranslationConfig) error
+}
+
+func New(cfg config.Config, jobs *jobs.Manager, runner *engine.Runner, settings SettingsStore, log *slog.Logger) *Server {
+	return &Server{cfg: cfg, jobs: jobs, runner: runner, settings: settings, log: log}
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", s.index)
 	mux.HandleFunc("GET /api/v1/health", s.health)
+	mux.HandleFunc("GET /api/v1/settings", s.getSettings)
+	mux.HandleFunc("PUT /api/v1/settings", s.updateSettings)
 	mux.HandleFunc("GET /api/v1/jobs", s.listJobs)
 	mux.HandleFunc("POST /api/v1/jobs", s.createJob)
 	mux.HandleFunc("POST /api/v1/jobs/upload", s.uploadJob)
@@ -48,6 +55,67 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/jobs/{id}", s.cancelJob)
 	mux.HandleFunc("GET /api/v1/events", s.events)
 	return s.middleware(mux)
+}
+
+type translationSettingsResponse struct {
+	Mode       string `json:"mode"`
+	BaseURL    string `json:"base_url"`
+	Model      string `json:"model"`
+	BatchSize  int    `json:"batch_size"`
+	TimeoutSec int    `json:"timeout_seconds"`
+	Glossary   string `json:"glossary"`
+	APIKeySet  bool   `json:"api_key_set"`
+}
+
+type translationSettingsRequest struct {
+	Mode        string `json:"mode"`
+	BaseURL     string `json:"base_url"`
+	APIKey      string `json:"api_key"`
+	ClearAPIKey bool   `json:"clear_api_key"`
+	Model       string `json:"model"`
+	BatchSize   int    `json:"batch_size"`
+	TimeoutSec  int    `json:"timeout_seconds"`
+	Glossary    string `json:"glossary"`
+}
+
+func settingsResponse(value config.TranslationConfig) translationSettingsResponse {
+	return translationSettingsResponse{Mode: value.Mode, BaseURL: value.BaseURL, Model: value.Model, BatchSize: value.BatchSize, TimeoutSec: value.TimeoutSec, Glossary: value.Glossary, APIKeySet: value.APIKey != ""}
+}
+
+func (s *Server) getSettings(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, 200, map[string]any{"translation": settingsResponse(s.runner.Translation())})
+}
+
+func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
+	var request translationSettingsRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid settings: " + err.Error()})
+		return
+	}
+	current := s.runner.Translation()
+	value := config.TranslationConfig{Mode: request.Mode, BaseURL: request.BaseURL, Model: request.Model, BatchSize: request.BatchSize, TimeoutSec: request.TimeoutSec, Glossary: request.Glossary, APIKey: current.APIKey}
+	if request.ClearAPIKey {
+		value.APIKey = ""
+	} else if strings.TrimSpace(request.APIKey) != "" {
+		value.APIKey = strings.TrimSpace(request.APIKey)
+	}
+	if err := config.NormalizeTranslation(&value); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	if s.settings == nil {
+		writeJSON(w, 500, map[string]string{"error": "settings storage is unavailable"})
+		return
+	}
+	if err := s.settings.SaveTranslation(value); err != nil {
+		s.log.Error("save translation settings", "error", err)
+		writeJSON(w, 500, map[string]string{"error": "could not save settings"})
+		return
+	}
+	s.runner.UpdateTranslation(value)
+	writeJSON(w, 200, map[string]any{"translation": settingsResponse(value)})
 }
 
 func (s *Server) middleware(next http.Handler) http.Handler {

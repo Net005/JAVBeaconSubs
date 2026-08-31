@@ -36,13 +36,19 @@ func main() {
 		os.Exit(2)
 	}
 	defer database.Close()
+	if saved, ok, loadErr := database.LoadTranslation(); loadErr != nil {
+		fmt.Fprintln(os.Stderr, "load saved settings:", loadErr)
+		os.Exit(2)
+	} else if ok {
+		cfg.Translation = saved
+	}
 	runner := engine.New(cfg, logger)
 	manager, err := jobs.New(cfg, runner, database, logger)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "load jobs:", err)
 		os.Exit(2)
 	}
-	api := server.New(cfg, manager, runner, logger)
+	api := server.New(cfg, manager, runner, database, logger)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Listen,

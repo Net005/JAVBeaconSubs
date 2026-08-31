@@ -5,7 +5,7 @@ services:
     build:
       context: .
       args:
-        WHISPER_IMAGE: ghcr.io/ggml-org/whisper.cpp:main
+        WHISPER_CPP_REF: "${WHISPER_CPP_REF:-f049fff95a089aa9969deb009cdd4892b3e74916}"
     image: javbeaconsubs:cpu-local
     restart: unless-stopped
     ports:
@@ -19,6 +19,7 @@ services:
       JAVBEACONSUBS_USE_GPU: "false"
       JAVBEACONSUBS_GPU_PREFLIGHT: "false"
       JAVBEACONSUBS_GPU_AUTO_RESET: "false"
+      JAVBEACONSUBS_GPU_FALLBACK_CPU: "true"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

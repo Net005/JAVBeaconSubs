@@ -16,7 +16,7 @@ Go is the service and orchestration layer. `whisper.cpp` and FFmpeg are native e
 
 ## Docker Compose for NVIDIA GPUs (CUDA)
 
-The default Compose stack is NVIDIA/CUDA accelerated and uses host GPU device `0` by default. It builds on whisper.cpp's official `main-cuda` image, explicitly reserves the NVIDIA device, and enables the `compute` capability for CUDA plus `utility` for `nvidia-smi` health checks and recovery. Install the NVIDIA driver and NVIDIA Container Toolkit on the Docker host first.
+The default Compose stack is NVIDIA/CUDA accelerated and uses host GPU device `0` by default. It builds a pinned whisper.cpp release with CUDA VMM disabled for better stability after gaming and sleep/resume, explicitly reserves the NVIDIA device, and enables the `compute` capability for CUDA plus `utility` for `nvidia-smi` health checks. Install the NVIDIA driver and NVIDIA Container Toolkit on the Docker host first.
 
 This project already contains the verified `models/ggml-large-v3.bin`; Compose bind-mounts the configurable `JAVBEACONSUBS_MODELS_PATH` at `/models`. The smaller Silero VAD model is downloaded on first startup. `JAVBEACONSUBS_DATA_PATH` is mounted at `/data` for SQLite and uploaded files. Both default to project-local directories, so container replacement does not discard them.
 
@@ -45,7 +45,7 @@ For a host without NVIDIA support, use the standalone CPU definition:
 docker compose -f compose.cpu.yaml up --build -d
 ```
 
-`MEDIA_PATH` is mounted at `/media` read/write because subtitles are written beside server-side media. The service never scans it automatically: JAVBeacon or the web UI must submit a specific file or folder.
+`MEDIA_PATH` is mounted at `/media` read/write because subtitles are written beside server-side media. The service never scans it automatically: JAVBeacon or the web UI must submit a specific file or folder. The application accepts any readable file or folder path; Docker mounts remain the real visibility boundary. Add extra read/write bind mounts under `services.javbeaconsubs.volumes` when libraries live outside `MEDIA_PATH`.
 
 To attach this service to an existing JAVBeacon Compose network, set `JAVBEACON_NETWORK` to that network's actual Docker name and add the optional overlay:
 
@@ -61,7 +61,7 @@ Requirements: Go 1.25+, FFmpeg, `whisper-cli`, a multilingual `large-v3` GGML mo
 
 ```sh
 cp config.example.json config.json
-# Edit model paths and allowed_roots.
+# Edit the model paths.
 go test ./...
 go build -o javbeaconsubs ./cmd/javbeaconsubs
 ./javbeaconsubs -config config.json
@@ -69,7 +69,7 @@ go build -o javbeaconsubs ./cmd/javbeaconsubs
 
 Open `http://127.0.0.1:8097`.
 
-`allowed_roots` is a safety boundary. JAVBeacon can submit only files inside those directories. The managed upload directory is automatically allowed. An empty array allows every local path and is not recommended for a remotely reachable service. Bind to localhost unless a reverse proxy provides TLS and authentication.
+There is no application-level path allowlist. Native installs can process any readable path supplied through the API. Containers can process any path mounted into the container. Because submitted paths can cause media to be read and subtitles to be written beside it, protect remotely reachable installations with `JAVBEACONSUBS_API_TOKEN` and a trusted reverse proxy.
 
 The two `.env` credentials have separate purposes:
 
@@ -82,6 +82,10 @@ The job form has two explicit modes:
 
 - **Upload one file** streams one video/audio file into managed storage. When processing finishes, English and optional Japanese SRT downloads appear on its job card.
 - **Server paths** accepts one or more exact files and/or folders already visible to the service. Folder traversal happens only when requested.
+
+The permanent **Translation settings** panel switches between direct local translation, Japanese-only transcription, and higher-quality contextual translation. It stores the endpoint URL, model, key, batching, timeout, and glossary in SQLite. Saved API keys are never returned to the browser; leaving the key blank keeps the existing value.
+
+Running activity cards show the current absolute path, filename, file number, live Whisper progress, and an estimated completion time. The ETA becomes more accurate after the first few percent of work.
 
 SQLite stores the job request, state, progress, results, and JAVBeacon correlation ID. Queued or running jobs found after an unclean restart are marked failed rather than silently left running forever. SQLite uses WAL mode and a busy timeout; one database file is sufficient for the deliberately small worker pool.
 
@@ -97,12 +101,14 @@ If `translation.base_url` is changed to `https://api.openai.com/v1` and an OpenA
 
 Each media file runs in a separate `whisper-cli` process. When it exits—even after cancellation—the OS and NVIDIA driver destroy that process's CUDA context, releasing all VRAM owned by the subtitle worker. The service also probes `nvidia-smi` before every GPU inference and logs memory state after the worker exits.
 
-The GPU Compose overlay enables guarded automatic recovery. If the preflight probe fails after gaming or sleep/resume, or Whisper reports a CUDA/backend initialization failure, the service attempts `nvidia-smi --gpu-reset`, waits, rechecks the GPU, and retries inference once. NVIDIA refuses the reset while games, display clients, compute processes, or other containers still own the device; the service reports that clearly instead of killing them. Some display-GPU or kernel-driver failures cannot be repaired from a container and still require a host driver/module reload or reboot.
+Automatic GPU reset is disabled by default because NVIDIA refuses to reset a primary/display GPU. If CUDA preflight or inference fails, the current file is retried on CPU instead of failing the job. The image also compiles whisper.cpp with `GGML_CUDA_NO_VMM=ON`, avoiding the CUDA virtual-memory path implicated by startup crashes that stop immediately after `ggml_cuda_init` reports `VMM: yes`.
 
-Disable automatic reset while retaining diagnostics with:
+On a dedicated compute GPU, guarded reset can be enabled with `JAVBEACONSUBS_GPU_AUTO_RESET=true`. The service will try the reset and one GPU retry, then still fall back to CPU when enabled. A genuinely wedged host driver can require a host driver/module reload or reboot; a container cannot safely force-reset the active display GPU.
+
+CPU fallback can be disabled when a hard failure is preferred:
 
 ```sh
-JAVBEACONSUBS_GPU_AUTO_RESET=false docker compose up -d
+JAVBEACONSUBS_GPU_FALLBACK_CPU=false docker compose up -d
 ```
 
 ## JAVBeacon REST contract
@@ -132,6 +138,7 @@ The response is `202 Accepted`, includes the job, and sets `Location: /api/v1/jo
 - `GET /api/v1/events` — server-sent `job` events for live UI updates.
 - `DELETE /api/v1/jobs/{id}` — cancel queued/running work.
 - `GET /api/v1/health` — dependency and model readiness.
+- `GET /api/v1/settings` and `PUT /api/v1/settings` — read/update persistent translation settings (API keys are write-only).
 
 The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, and `overwrite` fields. Generated files can be retrieved through `GET /api/v1/jobs/{id}/outputs/{zeroBasedResultIndex}/{en|ja}`.
 

@@ -10,31 +10,42 @@ import (
 	"time"
 )
 
-func (r *Runner) prepareGPU(ctx context.Context) error {
+func (r *Runner) prepareGPU(ctx context.Context) (bool, error) {
 	if !r.cfg.Whisper.UseGPU || !r.cfg.Whisper.GPUPreflight {
-		return nil
+		return r.cfg.Whisper.UseGPU, nil
 	}
 	if _, err := exec.LookPath("nvidia-smi"); err != nil {
 		r.log.Warn("nvidia-smi is unavailable; skipping the CUDA preflight probe")
-		return nil
+		return true, nil
 	}
 	if status, err := gpuStatus(ctx); err == nil {
 		r.log.Info("GPU preflight passed", "memory", status)
-		return nil
+		return true, nil
 	} else if !r.cfg.Whisper.GPUAutoReset {
-		return fmt.Errorf("GPU preflight failed: %w; automatic reset is disabled", err)
+		if r.cfg.Whisper.GPUFallbackCPU {
+			r.log.Warn("GPU preflight failed; using CPU for this file", "error", err)
+			return false, nil
+		}
+		return false, fmt.Errorf("GPU preflight failed: %w; automatic reset is disabled", err)
 	} else {
 		r.log.Warn("GPU preflight failed after sleep/resume or a previous session; attempting reset", "error", err)
 	}
 	if err := r.resetGPU(ctx); err != nil {
-		return fmt.Errorf("GPU preflight recovery: %w", err)
+		if r.cfg.Whisper.GPUFallbackCPU {
+			r.log.Warn("GPU preflight recovery failed; using CPU for this file", "error", err)
+			return false, nil
+		}
+		return false, fmt.Errorf("GPU preflight recovery: %w", err)
 	}
 	if status, err := gpuStatus(ctx); err != nil {
-		return fmt.Errorf("GPU remained unhealthy after reset: %w", err)
+		if r.cfg.Whisper.GPUFallbackCPU {
+			return false, nil
+		}
+		return false, fmt.Errorf("GPU remained unhealthy after reset: %w", err)
 	} else {
 		r.log.Info("GPU recovered", "memory", status)
 	}
-	return nil
+	return true, nil
 }
 
 func (r *Runner) resetGPU(parent context.Context) error {
