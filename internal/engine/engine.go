@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -12,8 +13,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"javbeaconsubs/internal/config"
@@ -36,6 +39,7 @@ type Result struct {
 }
 
 type Runner struct {
+	mu     sync.RWMutex
 	cfg    config.Config
 	log    *slog.Logger
 	client *http.Client
@@ -45,7 +49,22 @@ func New(cfg config.Config, log *slog.Logger) *Runner {
 	return &Runner{cfg: cfg, log: log, client: &http.Client{Timeout: time.Duration(cfg.Translation.TimeoutSec) * time.Second}}
 }
 
+func (r *Runner) Translation() config.TranslationConfig {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.cfg.Translation
+}
+
+func (r *Runner) UpdateTranslation(value config.TranslationConfig) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cfg.Translation = value
+	r.client = &http.Client{Timeout: time.Duration(value.TimeoutSec) * time.Second}
+}
+
 func (r *Runner) Check() map[string]any {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	whisperPath, whisperErr := exec.LookPath(r.cfg.Whisper.Binary)
 	ffmpegPath, ffmpegErr := exec.LookPath("ffmpeg")
 	_, modelErr := os.Stat(r.cfg.Whisper.Model)
@@ -75,6 +94,13 @@ func (r *Runner) Check() map[string]any {
 }
 
 func (r *Runner) Process(ctx context.Context, input string, overwrite bool, progress ProgressFunc) (Result, error) {
+	r.mu.RLock()
+	worker := &Runner{cfg: r.cfg, log: r.log, client: r.client}
+	r.mu.RUnlock()
+	return worker.process(ctx, input, overwrite, progress)
+}
+
+func (r *Runner) process(ctx context.Context, input string, overwrite bool, progress ProgressFunc) (Result, error) {
 	result := Result{Input: input}
 	base := strings.TrimSuffix(input, filepath.Ext(input))
 	englishPath := base + r.cfg.Output.EnglishSuffix
@@ -100,10 +126,13 @@ func (r *Runner) Process(ctx context.Context, input string, overwrite bool, prog
 
 	direct := r.cfg.Translation.Mode == "direct"
 	progress("transcription", 15, "Transcribing Japanese speech")
-	if err := r.prepareGPU(ctx); err != nil {
+	useGPU, err := r.prepareGPU(ctx)
+	if err != nil {
 		return result, err
 	}
-	segments, err := r.transcribe(ctx, wav, filepath.Join(tmpDir, "transcript"), direct)
+	segments, err := r.transcribe(ctx, wav, filepath.Join(tmpDir, "transcript"), direct, useGPU, func(pct int) {
+		progress("transcription", 15+pct*55/100, fmt.Sprintf("Transcribing Japanese speech — %d%%", pct))
+	})
 	if err != nil {
 		return result, err
 	}
@@ -153,33 +182,45 @@ func (r *Runner) Process(ctx context.Context, input string, overwrite bool, prog
 	return result, nil
 }
 
-func (r *Runner) transcribe(ctx context.Context, wav, prefix string, translate bool) ([]subtitle.Segment, error) {
+func (r *Runner) transcribe(ctx context.Context, wav, prefix string, translate, useGPU bool, report func(int)) ([]subtitle.Segment, error) {
 	c := r.cfg.Whisper
-	args := []string{"-m", c.Model, "-f", wav, "-l", c.Language, "-ojf", "-of", prefix, "-t", strconv.Itoa(c.Threads), "-bs", strconv.Itoa(c.BeamSize), "-bo", strconv.Itoa(c.BeamSize), "-sow", "-ml", "42", "-sns", "-np"}
+	args := []string{"-m", c.Model, "-f", wav, "-l", c.Language, "-ojf", "-of", prefix, "-t", strconv.Itoa(c.Threads), "-bs", strconv.Itoa(c.BeamSize), "-bo", strconv.Itoa(c.BeamSize), "-sow", "-ml", "42", "-sns", "-pp"}
 	if c.Prompt != "" {
 		args = append(args, "--prompt", c.Prompt)
 	}
 	if translate {
 		args = append(args, "-tr")
 	}
-	if !c.UseGPU {
+	if !useGPU {
 		args = append(args, "-ng")
 	}
 	if c.VAD {
 		args = append(args, "--vad", "-vm", c.VADModel, "-vt", fmt.Sprintf("%.2f", c.VADThreshold), "-vspd", strconv.Itoa(c.MinSpeechMS), "-vsd", strconv.Itoa(c.MinSilenceMS), "-vp", strconv.Itoa(c.SpeechPadMS))
 	}
-	if err := run(ctx, c.Binary, args...); err != nil {
-		if c.UseGPU && c.GPUAutoReset && isCUDAFailure(err) {
+	if err := runWithProgress(ctx, report, c.Binary, args...); err != nil {
+		originalErr := err
+		if useGPU && c.GPUAutoReset && isCUDAFailure(err) {
 			r.log.Warn("CUDA inference failed; attempting a guarded GPU reset", "error", err)
-			if resetErr := r.resetGPU(ctx); resetErr != nil {
-				return nil, fmt.Errorf("whisper inference failed and GPU recovery failed: %w (original inference error: %v)", resetErr, err)
+			if resetErr := r.resetGPU(ctx); resetErr == nil {
+				r.log.Info("GPU reset succeeded; retrying whisper inference once")
+				if retryErr := runWithProgress(ctx, report, c.Binary, args...); retryErr == nil {
+					originalErr = nil
+				} else {
+					originalErr = retryErr
+				}
+			} else {
+				r.log.Warn("GPU reset was unavailable; continuing with configured fallback", "error", resetErr)
 			}
-			r.log.Info("GPU reset succeeded; retrying whisper inference once")
-			if retryErr := run(ctx, c.Binary, args...); retryErr != nil {
-				return nil, fmt.Errorf("whisper inference failed after GPU recovery: %w", retryErr)
+		}
+		if originalErr != nil && useGPU && c.GPUFallbackCPU && isCUDAFailure(originalErr) {
+			r.log.Warn("CUDA inference failed; retrying this file on CPU", "error", originalErr)
+			report(0)
+			cpuArgs := append(append([]string{}, args...), "-ng")
+			if cpuErr := runWithProgress(ctx, report, c.Binary, cpuArgs...); cpuErr != nil {
+				return nil, fmt.Errorf("whisper CUDA inference failed (%v); CPU fallback also failed: %w", originalErr, cpuErr)
 			}
-		} else {
-			return nil, fmt.Errorf("whisper inference: %w", err)
+		} else if originalErr != nil {
+			return nil, fmt.Errorf("whisper inference: %w", originalErr)
 		}
 	}
 	r.logGPUStatus(ctx, "after inference")
@@ -239,6 +280,68 @@ func run(ctx context.Context, name string, args ...string) error {
 		return fmt.Errorf("%s: %w: %s", name, err, message)
 	}
 	return nil
+}
+
+var whisperProgress = regexp.MustCompile(`(?i)progress\s*=\s*([0-9]{1,3})%`)
+
+func runWithProgress(ctx context.Context, report func(int), name string, args ...string) error {
+	cmd := exec.CommandContext(ctx, name, args...)
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	var captured bytes.Buffer
+	scanner := bufio.NewScanner(stderr)
+	scanner.Split(splitLinesAndCarriageReturns)
+	scanner.Buffer(make([]byte, 4096), 1<<20)
+	last := -1
+	for scanner.Scan() {
+		line := scanner.Text()
+		if captured.Len()+len(line)+1 > 8000 {
+			content := captured.String()
+			captured.Reset()
+			if len(content) > 4000 {
+				captured.WriteString(content[len(content)-4000:])
+			}
+		}
+		captured.WriteString(line)
+		captured.WriteByte('\n')
+		match := whisperProgress.FindStringSubmatch(line)
+		if len(match) == 2 {
+			pct, _ := strconv.Atoi(match[1])
+			if pct > 100 {
+				pct = 100
+			}
+			if pct != last {
+				last = pct
+				report(pct)
+			}
+		}
+	}
+	waitErr := cmd.Wait()
+	if waitErr != nil {
+		message := strings.TrimSpace(captured.String())
+		if len(message) > 2000 {
+			message = message[len(message)-2000:]
+		}
+		return fmt.Errorf("%s: %w: %s", name, waitErr, message)
+	}
+	return scanner.Err()
+}
+
+func splitLinesAndCarriageReturns(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	for i, value := range data {
+		if value == '\n' || value == '\r' {
+			return i + 1, data[:i], nil
+		}
+	}
+	if atEOF && len(data) > 0 {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
 }
 
 func atomicWrite(path, content string) error {

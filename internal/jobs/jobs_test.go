@@ -19,7 +19,7 @@ func TestDiscoverSpecificFileAndFolder(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	cfg := config.Config{AllowedRoots: []string{root}}
+	cfg := config.Config{}
 	m := &Manager{cfg: cfg}
 
 	flat, err := m.discover([]string{root}, false)
@@ -42,16 +42,14 @@ func TestDiscoverSpecificFileAndFolder(t *testing.T) {
 	}
 }
 
-func TestDiscoverRejectsOutsideAllowedRoots(t *testing.T) {
-	allowed := t.TempDir()
-	outside := t.TempDir()
-	path := filepath.Join(outside, "movie.mkv")
+func TestDiscoverAllowsAnyReadablePath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "movie.mkv")
 	if err := os.WriteFile(path, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg := config.Config{AllowedRoots: []string{allowed}}
-	m := &Manager{cfg: cfg}
-	if _, err := m.discover([]string{path}, false); err == nil {
-		t.Fatal("wanted an allowed_roots error")
+	m := &Manager{cfg: config.Config{}}
+	files, err := m.discover([]string{path}, false)
+	if err != nil || len(files) != 1 || files[0] != path {
+		t.Fatalf("discover any readable path: %#v, %v", files, err)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"javbeaconsubs/internal/config"
 	"javbeaconsubs/internal/jobs"
 	_ "modernc.org/sqlite"
 )
@@ -51,6 +52,11 @@ func (s *SQLite) migrate() error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS jobs_created_at_idx ON jobs(created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS jobs_external_id_idx ON jobs(external_id)`,
+		`CREATE TABLE IF NOT EXISTS settings (
+			key TEXT PRIMARY KEY,
+			value BLOB NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.Exec(statement); err != nil {
@@ -109,3 +115,32 @@ func (s *SQLite) Load() ([]*jobs.Job, error) {
 }
 
 func (s *SQLite) Close() error { return s.db.Close() }
+
+func (s *SQLite) LoadTranslation() (config.TranslationConfig, bool, error) {
+	var payload []byte
+	err := s.db.QueryRow(`SELECT value FROM settings WHERE key = 'translation'`).Scan(&payload)
+	if err == sql.ErrNoRows {
+		return config.TranslationConfig{}, false, nil
+	}
+	if err != nil {
+		return config.TranslationConfig{}, false, fmt.Errorf("load translation settings: %w", err)
+	}
+	var value config.TranslationConfig
+	if err := json.Unmarshal(payload, &value); err != nil {
+		return value, false, fmt.Errorf("decode translation settings: %w", err)
+	}
+	return value, true, nil
+}
+
+func (s *SQLite) SaveTranslation(value config.TranslationConfig) error {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`INSERT INTO settings (key,value,updated_at) VALUES ('translation',?,?)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`, payload, time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return fmt.Errorf("save translation settings: %w", err)
+	}
+	return nil
+}

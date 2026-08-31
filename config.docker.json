@@ -4,7 +4,6 @@
   "database_path": "/data/javbeaconsubs.db",
   "upload_dir": "/data/uploads",
   "max_upload_gb": 30,
-  "allowed_roots": ["/media", "/data/uploads"],
   "workers": 1,
   "whisper": {
     "binary": "/app/build/bin/whisper-cli",
@@ -21,6 +20,7 @@
     "vad_speech_pad_ms": 320,
 		"gpu_preflight": true,
 		"gpu_auto_reset": false,
+		"gpu_fallback_cpu": true,
     "prompt": "日本語の会話です。固有名詞、呼び名、短い返事、息遣いも正確に文字起こししてください。"
   },
   "translation": {

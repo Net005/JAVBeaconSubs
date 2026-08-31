@@ -2,9 +2,10 @@ services:
   javbeaconsubs:
     build:
       args:
-        WHISPER_IMAGE: ghcr.io/ggml-org/whisper.cpp:main-cuda
+        WHISPER_CPP_REF: "${WHISPER_CPP_REF:-f049fff95a089aa9969deb009cdd4892b3e74916}"
     environment:
       JAVBEACONSUBS_USE_GPU: "true"
       JAVBEACONSUBS_GPU_PREFLIGHT: "true"
-      JAVBEACONSUBS_GPU_AUTO_RESET: "${JAVBEACONSUBS_GPU_AUTO_RESET:-true}"
+      JAVBEACONSUBS_GPU_AUTO_RESET: "${JAVBEACONSUBS_GPU_AUTO_RESET:-false}"
+      JAVBEACONSUBS_GPU_FALLBACK_CPU: "${JAVBEACONSUBS_GPU_FALLBACK_CPU:-true}"
     gpus: all

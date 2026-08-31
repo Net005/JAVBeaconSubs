@@ -2,6 +2,20 @@
 
 All notable changes to JAVBeacon Subtitles are documented here.
 
+## [0.2.0] - 2026-09-01
+
+### Added
+
+- Added permanent SQLite-backed translation settings to the web interface and REST API, with write-only API-key handling.
+- Added current path, filename, file number, live Whisper progress, and ETA to activity jobs.
+- Added automatic CPU fallback when CUDA preflight or inference fails.
+
+### Changed
+
+- Removed application-level path restrictions; any container-visible or locally readable media path can now be submitted.
+- Replaced the moving upstream CUDA image with a pinned whisper.cpp source build compiled with CUDA VMM disabled.
+- Disabled automatic GPU reset by default because primary/display GPUs cannot normally be reset safely.
+
 ## [0.1.5] - 2026-08-30
 
 ### Fixed

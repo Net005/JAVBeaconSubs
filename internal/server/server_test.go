@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"javbeaconsubs/internal/config"
@@ -41,7 +42,7 @@ func TestSupportedUploadExtension(t *testing.T) {
 
 func TestSingleFileUploadCreatesPersistedJob(t *testing.T) {
 	root := t.TempDir()
-	cfg := config.Config{UploadDir: filepath.Join(root, "uploads"), MaxUploadGB: 1, AllowedRoots: []string{filepath.Join(root, "uploads")}}
+	cfg := config.Config{UploadDir: filepath.Join(root, "uploads"), MaxUploadGB: 1}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	database, err := store.Open(filepath.Join(root, "jobs.db"))
 	if err != nil {
@@ -68,7 +69,7 @@ func TestSingleFileUploadCreatesPersistedJob(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/jobs/upload", &body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	response := httptest.NewRecorder()
-	New(cfg, manager, runner, logger).Handler().ServeHTTP(response, req)
+	New(cfg, manager, runner, database, logger).Handler().ServeHTTP(response, req)
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("status %d: %s", response.Code, response.Body.String())
 	}
@@ -85,5 +86,35 @@ func TestSingleFileUploadCreatesPersistedJob(t *testing.T) {
 	stored, err := database.Load()
 	if err != nil || len(stored) != 1 {
 		t.Fatalf("persisted jobs: %d, %v", len(stored), err)
+	}
+}
+
+func TestTranslationSettingsArePersistentAndKeyIsWriteOnly(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{Translation: config.TranslationConfig{Mode: "direct", BatchSize: 24, TimeoutSec: 120}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	database, err := store.Open(filepath.Join(root, "settings.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	runner := engine.New(cfg, logger)
+	handler := New(cfg, nil, runner, database, logger).Handler()
+	body := `{"mode":"contextual","base_url":"http://llm/v1","api_key":"very-secret","model":"qwen","batch_size":12,"timeout_seconds":60,"glossary":"Mio=Mio"}`
+	request := httptest.NewRequest(http.MethodPut, "/api/v1/settings", strings.NewReader(body))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), "very-secret") {
+		t.Fatal("API response exposed translation key")
+	}
+	if !strings.Contains(response.Body.String(), `"api_key_set":true`) {
+		t.Fatal("API did not report a saved key")
+	}
+	saved, ok, err := database.LoadTranslation()
+	if err != nil || !ok || saved.APIKey != "very-secret" || saved.Mode != "contextual" {
+		t.Fatalf("saved settings: %#v ok=%v err=%v", saved, ok, err)
 	}
 }

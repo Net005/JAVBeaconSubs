@@ -31,22 +31,27 @@ type Request struct {
 }
 
 type Job struct {
-	ID          string          `json:"id"`
-	ExternalID  string          `json:"external_id,omitempty"`
-	Status      string          `json:"status"`
-	Phase       string          `json:"phase,omitempty"`
-	Progress    int             `json:"progress"`
-	Message     string          `json:"message,omitempty"`
-	Inputs      []string        `json:"inputs"`
-	Files       []string        `json:"files"`
-	Results     []engine.Result `json:"results,omitempty"`
-	Error       string          `json:"error,omitempty"`
-	CallbackURL string          `json:"-"`
-	Overwrite   bool            `json:"-"`
-	CreatedAt   time.Time       `json:"created_at"`
-	StartedAt   *time.Time      `json:"started_at,omitempty"`
-	FinishedAt  *time.Time      `json:"finished_at,omitempty"`
-	cancel      context.CancelFunc
+	ID                string          `json:"id"`
+	ExternalID        string          `json:"external_id,omitempty"`
+	Status            string          `json:"status"`
+	Phase             string          `json:"phase,omitempty"`
+	Progress          int             `json:"progress"`
+	Message           string          `json:"message,omitempty"`
+	CurrentPath       string          `json:"current_path,omitempty"`
+	CurrentFile       string          `json:"current_file,omitempty"`
+	CurrentFileNumber int             `json:"current_file_number,omitempty"`
+	ETASeconds        int64           `json:"eta_seconds,omitempty"`
+	EstimatedFinishAt *time.Time      `json:"estimated_finish_at,omitempty"`
+	Inputs            []string        `json:"inputs"`
+	Files             []string        `json:"files"`
+	Results           []engine.Result `json:"results,omitempty"`
+	Error             string          `json:"error,omitempty"`
+	CallbackURL       string          `json:"-"`
+	Overwrite         bool            `json:"-"`
+	CreatedAt         time.Time       `json:"created_at"`
+	StartedAt         *time.Time      `json:"started_at,omitempty"`
+	FinishedAt        *time.Time      `json:"finished_at,omitempty"`
+	cancel            context.CancelFunc
 }
 
 type Manager struct {
@@ -195,6 +200,14 @@ func (m *Manager) process(ctx context.Context, id string) {
 	job := clone(m.jobs[id])
 	m.mu.RUnlock()
 	for index, file := range job.Files {
+		m.mu.Lock()
+		current := m.jobs[id]
+		current.CurrentPath = file
+		current.CurrentFile = filepath.Base(file)
+		current.CurrentFileNumber = index + 1
+		startSnapshot := clone(current)
+		m.mu.Unlock()
+		m.publish(startSnapshot)
 		progress := func(phase string, pct int, message string) {
 			m.mu.Lock()
 			current := m.jobs[id]
@@ -202,6 +215,13 @@ func (m *Manager) process(ctx context.Context, id string) {
 				current.Phase = phase
 				current.Progress = (index*100 + pct) / len(job.Files)
 				current.Message = message
+				if current.StartedAt != nil && current.Progress > 0 && current.Progress < 100 {
+					elapsed := time.Since(*current.StartedAt)
+					remaining := time.Duration(float64(elapsed) * float64(100-current.Progress) / float64(current.Progress))
+					finish := time.Now().UTC().Add(remaining)
+					current.ETASeconds = int64(remaining.Round(time.Second) / time.Second)
+					current.EstimatedFinishAt = &finish
+				}
 				snapshot := clone(current)
 				m.mu.Unlock()
 				m.publish(snapshot)
@@ -237,6 +257,8 @@ func (m *Manager) finish(id, status, errorMessage string) {
 	}
 	now := time.Now().UTC()
 	job.FinishedAt = &now
+	job.ETASeconds = 0
+	job.EstimatedFinishAt = nil
 	job.cancel = nil
 	snapshot := clone(job)
 	m.mu.Unlock()
@@ -270,9 +292,6 @@ func (m *Manager) discover(inputs []string, recursive bool) ([]string, error) {
 			return nil, err
 		}
 		abs = filepath.Clean(abs)
-		if !m.allowed(abs) {
-			return nil, fmt.Errorf("path is outside allowed_roots: %s", abs)
-		}
 		info, err := os.Stat(abs)
 		if err != nil {
 			return nil, fmt.Errorf("input %s: %w", abs, err)
@@ -303,25 +322,6 @@ func (m *Manager) discover(inputs []string, recursive bool) ([]string, error) {
 	}
 	sort.Strings(out)
 	return out, nil
-}
-
-func (m *Manager) allowed(path string) bool {
-	if m.cfg.UploadDir != "" {
-		rel, err := filepath.Rel(m.cfg.UploadDir, path)
-		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return true
-		}
-	}
-	if len(m.cfg.AllowedRoots) == 0 {
-		return true
-	}
-	for _, root := range m.cfg.AllowedRoots {
-		rel, err := filepath.Rel(root, path)
-		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return true
-		}
-	}
-	return false
 }
 
 func clone(j *Job) *Job {
