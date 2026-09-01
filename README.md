@@ -102,6 +102,8 @@ The legacy free-form `glossary` remains supported. The optional `structured_glos
 
 The Settings tab can import UTF-8 `.txt` mapping files using one `Japanese=English` entry per line. Blank lines and identical duplicate sources are removed automatically. Conflicting translations for the same normalized Japanese source are rejected instead of silently choosing one. Imports merge with mappings already in the editor and remain local to the browser until **Save settings** is selected.
 
+The repository includes an optional [Japanese-to-English JAV base glossary](mappings/japanese-english-jav-mappings-base.txt) that can be imported from the Settings tab and adapted for your collection. It focuses on high-confidence vocabulary used in JAV, GIGA/tokusatsu heroine action, and Akiba-web-style adult/action content. It is intentionally not a general Japanese dictionary: ambiguous everyday words are excluded where a forced mapping could damage the contextual translation. Only mappings whose Japanese term occurs in the current dialogue window are sent to the contextual translation provider.
+
 The same tab can run post-processing after a successful subtitle job. Choose a Bash script mounted under `/scripts`, or an HTTP webhook sent through curl. The full terminal job JSON is supplied to standard input/request body. Bash scripts also receive `JAVBEACONSUBS_JOB_ID`, `JAVBEACONSUBS_EXTERNAL_ID`, `JAVBEACONSUBS_STATUS`, and `JAVBEACONSUBS_FILES`. Both Bash and curl are included in the image, and post-processing status/errors appear on the job card.
 
 `JAVBEACONSUBS_SCRIPTS_PATH` controls the host directory mounted read-only at `/scripts`. Post-processing settings and write-only webhook credentials persist in SQLite.
