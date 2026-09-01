@@ -9,6 +9,14 @@ func TestDefaultASRUsesQwenWithBoundedFallbacks(t *testing.T) {
 	}
 }
 
+func TestNormalizeProfileCanonicalizesLegacyAliases(t *testing.T) {
+	for input, want := range map[string]string{"standard": "standard", "jav": "jav", "giga": "giga", "tokusatsu": "giga", "AKIBA": "giga"} {
+		if got := NormalizeProfile(input); got != want {
+			t.Fatalf("NormalizeProfile(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestNormalizeStructuredGlossaryRemovesBlanksAndDuplicates(t *testing.T) {
 	value := TranslationConfig{
 		Mode: "direct",

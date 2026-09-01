@@ -16,6 +16,7 @@ import (
 	"javbeaconsubs/internal/config"
 	"javbeaconsubs/internal/engine"
 	"javbeaconsubs/internal/jobs"
+	"javbeaconsubs/internal/profile"
 	"javbeaconsubs/internal/server"
 	"javbeaconsubs/internal/store"
 )
@@ -53,12 +54,44 @@ func main() {
 	} else if ok {
 		cfg.PostProcessing = saved
 	}
+	if saved, ok, loadErr := database.LoadProfiles(); loadErr != nil {
+		fmt.Fprintln(os.Stderr, "load profile settings:", loadErr)
+		os.Exit(2)
+	} else if ok {
+		if normalizeErr := config.NormalizeProfiles(&saved); normalizeErr != nil {
+			fmt.Fprintln(os.Stderr, "validate saved profile settings:", normalizeErr)
+			os.Exit(2)
+		}
+		cfg.Profiles = saved
+	}
 	authManager, err := auth.New(database, cfg.WebUsername, cfg.WebPassword)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "load web authentication:", err)
 		os.Exit(2)
 	}
 	runner := engine.New(cfg, logger)
+	recognition, glossary := runner.Catalogs()
+	if saved, ok, loadErr := database.LoadRecognitionVocabulary(); loadErr != nil {
+		fmt.Fprintln(os.Stderr, "load recognition vocabulary:", loadErr)
+		os.Exit(2)
+	} else if ok {
+		if validateErr := profile.ValidateRecognition(saved); validateErr != nil {
+			fmt.Fprintln(os.Stderr, "validate recognition vocabulary:", validateErr)
+			os.Exit(2)
+		}
+		recognition = &saved
+	}
+	if saved, ok, loadErr := database.LoadTranslationGlossary(); loadErr != nil {
+		fmt.Fprintln(os.Stderr, "load translation glossary:", loadErr)
+		os.Exit(2)
+	} else if ok {
+		if validateErr := profile.ValidateTranslationGlossary(saved); validateErr != nil {
+			fmt.Fprintln(os.Stderr, "validate translation glossary:", validateErr)
+			os.Exit(2)
+		}
+		glossary = &saved
+	}
+	runner.UpdateCatalogs(recognition, glossary)
 	postProcessor := jobs.NewPostProcessor(cfg.PostProcessing, logger)
 	manager, err := jobs.New(cfg, runner, database, postProcessor, logger)
 	if err != nil {

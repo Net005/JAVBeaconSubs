@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"javbeaconsubs/internal/config"
+	catalog "javbeaconsubs/internal/profile"
 	"javbeaconsubs/internal/subtitle"
 )
 
@@ -31,31 +32,59 @@ type ProcessOptions struct {
 	ASRMode    string
 	ASRProfile string
 	DebugMode  bool
+	Title      string
 }
 
 type Result struct {
-	Input                   string `json:"input"`
-	EnglishSRT              string `json:"english_srt,omitempty"`
-	JapaneseSRT             string `json:"japanese_srt,omitempty"`
-	EnglishASS              string `json:"english_ass,omitempty"`
-	JapaneseASS             string `json:"japanese_ass,omitempty"`
-	ProjectJSON             string `json:"project_json,omitempty"`
-	Segments                int    `json:"segments"`
-	Skipped                 bool   `json:"skipped,omitempty"`
-	TranslationInputTokens  int    `json:"translation_input_tokens,omitempty"`
-	TranslationOutputTokens int    `json:"translation_output_tokens,omitempty"`
-	TranslationTotalTokens  int    `json:"translation_total_tokens,omitempty"`
+	Input                        string            `json:"input"`
+	EnglishSRT                   string            `json:"english_srt,omitempty"`
+	JapaneseSRT                  string            `json:"japanese_srt,omitempty"`
+	EnglishASS                   string            `json:"english_ass,omitempty"`
+	JapaneseASS                  string            `json:"japanese_ass,omitempty"`
+	ProjectJSON                  string            `json:"project_json,omitempty"`
+	Segments                     int               `json:"segments"`
+	Skipped                      bool              `json:"skipped,omitempty"`
+	TranslationInputTokens       int               `json:"translation_input_tokens,omitempty"`
+	TranslationOutputTokens      int               `json:"translation_output_tokens,omitempty"`
+	TranslationTotalTokens       int               `json:"translation_total_tokens,omitempty"`
+	Profile                      string            `json:"profile,omitempty"`
+	ASRMode                      string            `json:"asr_mode,omitempty"`
+	RecognitionVocabularyVersion int               `json:"recognition_vocabulary_version,omitempty"`
+	RecognitionVocabularyScopes  []string          `json:"recognition_vocabulary_scopes,omitempty"`
+	TranslationGlossaryVersion   int               `json:"translation_glossary_version,omitempty"`
+	TranslationGlossaryScopes    []string          `json:"translation_glossary_scopes,omitempty"`
+	PipelineVersion              string            `json:"pipeline_version,omitempty"`
+	Models                       map[string]string `json:"models,omitempty"`
+	DiagnosticSummary            map[string]any    `json:"diagnostic_summary,omitempty"`
 }
 
 type Runner struct {
-	mu     sync.RWMutex
-	cfg    config.Config
-	log    *slog.Logger
-	client *http.Client
+	mu                    sync.RWMutex
+	cfg                   config.Config
+	log                   *slog.Logger
+	client                *http.Client
+	recognitionVocabulary *catalog.RecognitionVocabulary
+	translationGlossary   *catalog.TranslationGlossary
+	activeTitle           string
 }
 
 func New(cfg config.Config, log *slog.Logger) *Runner {
-	return &Runner{cfg: cfg, log: log, client: &http.Client{Timeout: time.Duration(cfg.Translation.TimeoutSec) * time.Second}}
+	runner := &Runner{cfg: cfg, log: log, client: &http.Client{Timeout: time.Duration(cfg.Translation.TimeoutSec) * time.Second}}
+	if cfg.RecognitionVocabularyPath != "" {
+		if value, err := catalog.LoadRecognition(cfg.RecognitionVocabularyPath); err != nil {
+			log.Warn("load Japanese recognition vocabulary", "error", err)
+		} else {
+			runner.recognitionVocabulary = &value
+		}
+	}
+	if cfg.TranslationGlossaryPath != "" {
+		if value, err := catalog.LoadTranslationGlossary(cfg.TranslationGlossaryPath); err != nil {
+			log.Warn("load translation glossary", "error", err)
+		} else {
+			runner.translationGlossary = &value
+		}
+	}
+	return runner
 }
 
 func (r *Runner) Translation() config.TranslationConfig {
@@ -69,6 +98,18 @@ func (r *Runner) UpdateTranslation(value config.TranslationConfig) {
 	defer r.mu.Unlock()
 	r.cfg.Translation = value
 	r.client = &http.Client{Timeout: time.Duration(value.TimeoutSec) * time.Second}
+}
+
+func (r *Runner) Catalogs() (*catalog.RecognitionVocabulary, *catalog.TranslationGlossary) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.recognitionVocabulary, r.translationGlossary
+}
+
+func (r *Runner) UpdateCatalogs(recognition *catalog.RecognitionVocabulary, glossary *catalog.TranslationGlossary) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.recognitionVocabulary, r.translationGlossary = recognition, glossary
 }
 
 func (r *Runner) Check() map[string]any {
@@ -151,7 +192,7 @@ func (r *Runner) ProcessWithMemory(ctx context.Context, input string, overwrite,
 
 func (r *Runner) ProcessWithOptions(ctx context.Context, input string, overwrite, keepJapanese bool, options ProcessOptions, progress ProgressFunc, memory *TranslationMemory) (Result, error) {
 	r.mu.RLock()
-	worker := &Runner{cfg: r.cfg, log: r.log, client: r.client}
+	worker := &Runner{cfg: r.cfg, log: r.log, client: r.client, recognitionVocabulary: r.recognitionVocabulary, translationGlossary: r.translationGlossary}
 	r.mu.RUnlock()
 	if options.ASRMode != "" {
 		worker.cfg.Whisper.Mode = options.ASRMode
@@ -162,11 +203,41 @@ func (r *Runner) ProcessWithOptions(ctx context.Context, input string, overwrite
 	if options.DebugMode {
 		worker.cfg.Whisper.DebugMode = true
 	}
+	worker.applyCatalogs(options.Title)
+	worker.activeTitle = options.Title
 	return worker.process(ctx, input, overwrite, keepJapanese, progress, memory)
 }
 
+func (r *Runner) applyCatalogs(title string) {
+	if r.translationGlossary != nil {
+		resolved, _ := r.translationGlossary.Resolve(r.cfg.Whisper.Profile, title)
+		custom := r.cfg.Translation.StructuredGlossary
+		if custom != nil {
+			resolved.Style = append(resolved.Style, custom.Style...)
+			for source, target := range custom.Terms {
+				resolved.Terms[source] = target
+			}
+		}
+		r.cfg.Translation.StructuredGlossary = resolved
+	}
+}
+
 func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapanese bool, progress ProgressFunc, memory *TranslationMemory) (Result, error) {
-	result := Result{Input: input}
+	result := Result{Input: input, Profile: r.cfg.Whisper.Profile, ASRMode: r.cfg.Whisper.Mode, PipelineVersion: "qwen-first-v2", Models: map[string]string{
+		"asr_primary":   modelIdentity(r.cfg.Whisper.QwenModel, r.cfg.Whisper.QwenRevision),
+		"aligner":       modelIdentity(r.cfg.Whisper.AlignerModel, r.cfg.Whisper.AlignerRevision),
+		"asr_secondary": r.cfg.Whisper.ReazonModel,
+		"asr_tertiary":  r.cfg.Whisper.Model,
+		"translator":    r.cfg.Translation.Model,
+	}}
+	if r.recognitionVocabulary != nil {
+		_, result.RecognitionVocabularyScopes = r.recognitionVocabulary.Terms(r.cfg.Whisper.Profile, r.activeTitle, 0)
+		result.RecognitionVocabularyVersion = catalog.RecognitionVersion
+	}
+	if r.translationGlossary != nil {
+		_, result.TranslationGlossaryScopes = r.translationGlossary.Resolve(r.cfg.Whisper.Profile, r.activeTitle)
+		result.TranslationGlossaryVersion = catalog.GlossaryVersion
+	}
 	base := strings.TrimSuffix(input, filepath.Ext(input))
 	englishPath := base + r.cfg.Output.EnglishSuffix
 	japanesePath := base + r.cfg.Output.JapaneseSuffix
@@ -207,6 +278,22 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 	segments = subtitle.Clean(segments)
 	if len(segments) == 0 {
 		return result, errors.New("no speech segments were recognized")
+	}
+	if raw, readErr := os.ReadFile(transcriptPrefix + ".qwen.json"); readErr == nil {
+		var metadata struct {
+			PipelineVersion string            `json:"pipeline_version"`
+			ModelVersions   map[string]string `json:"model_versions"`
+			Metrics         map[string]any    `json:"metrics"`
+		}
+		if json.Unmarshal(raw, &metadata) == nil {
+			if metadata.PipelineVersion != "" {
+				result.PipelineVersion = metadata.PipelineVersion
+			}
+			for role, identity := range metadata.ModelVersions {
+				result.Models[role] = identity
+			}
+			result.DiagnosticSummary = metadata.Metrics
+		}
 	}
 
 	if keepJapanese {
@@ -253,13 +340,18 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		}
 		result.JapaneseASS = japaneseASSPath
 		project := map[string]any{
-			"pipeline_version": "qwen-first-v1", "input": input, "language": "ja", "japanese": segments,
-			"models": map[string]string{"asr_primary": modelIdentity(r.cfg.Whisper.QwenModel, r.cfg.Whisper.QwenRevision), "asr_secondary": r.cfg.Whisper.ReazonModel, "asr_tertiary": r.cfg.Whisper.Model, "aligner": modelIdentity(r.cfg.Whisper.AlignerModel, r.cfg.Whisper.AlignerRevision)},
+			"pipeline_version": result.PipelineVersion, "input": input, "language": "ja", "japanese": segments, "profile": r.cfg.Whisper.Profile, "asr_mode": r.cfg.Whisper.Mode,
+			"models":                 result.Models,
+			"diagnostic_summary":     result.DiagnosticSummary,
+			"recognition_vocabulary": map[string]any{"format": catalog.RecognitionFormat, "version": result.RecognitionVocabularyVersion, "active_scopes": result.RecognitionVocabularyScopes},
+			"translation_glossary":   map[string]any{"format": catalog.GlossaryFormat, "version": result.TranslationGlossaryVersion, "active_scopes": result.TranslationGlossaryScopes},
 		}
-		if raw, readErr := os.ReadFile(transcriptPrefix + ".qwen.json"); readErr == nil {
-			var diagnostics any
-			if json.Unmarshal(raw, &diagnostics) == nil {
-				project["diagnostics"] = diagnostics
+		if r.cfg.Whisper.DebugMode {
+			if raw, readErr := os.ReadFile(transcriptPrefix + ".qwen.json"); readErr == nil {
+				var diagnostics any
+				if json.Unmarshal(raw, &diagnostics) == nil {
+					project["diagnostics"] = diagnostics
+				}
 			}
 		}
 		projectJSON, marshalErr := json.MarshalIndent(project, "", "  ")
@@ -282,14 +374,19 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		return result, err
 	}
 	project := map[string]any{
-		"pipeline_version": "qwen-first-v1", "input": input, "language": "ja",
+		"pipeline_version": result.PipelineVersion, "input": input, "language": "ja", "profile": r.cfg.Whisper.Profile, "asr_mode": r.cfg.Whisper.Mode,
 		"japanese": segments, "english": subtitle.Clean(english),
-		"models": map[string]string{"asr_primary": modelIdentity(r.cfg.Whisper.QwenModel, r.cfg.Whisper.QwenRevision), "asr_secondary": r.cfg.Whisper.ReazonModel, "asr_tertiary": r.cfg.Whisper.Model, "aligner": modelIdentity(r.cfg.Whisper.AlignerModel, r.cfg.Whisper.AlignerRevision), "translator": r.cfg.Translation.Model},
+		"models":                 result.Models,
+		"diagnostic_summary":     result.DiagnosticSummary,
+		"recognition_vocabulary": map[string]any{"format": catalog.RecognitionFormat, "version": result.RecognitionVocabularyVersion, "active_scopes": result.RecognitionVocabularyScopes},
+		"translation_glossary":   map[string]any{"format": catalog.GlossaryFormat, "version": result.TranslationGlossaryVersion, "active_scopes": result.TranslationGlossaryScopes},
 	}
-	if raw, readErr := os.ReadFile(transcriptPrefix + ".qwen.json"); readErr == nil {
-		var diagnostics any
-		if json.Unmarshal(raw, &diagnostics) == nil {
-			project["diagnostics"] = diagnostics
+	if r.cfg.Whisper.DebugMode {
+		if raw, readErr := os.ReadFile(transcriptPrefix + ".qwen.json"); readErr == nil {
+			var diagnostics any
+			if json.Unmarshal(raw, &diagnostics) == nil {
+				project["diagnostics"] = diagnostics
+			}
 		}
 	}
 	projectJSON, err := json.MarshalIndent(project, "", "  ")

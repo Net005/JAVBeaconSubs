@@ -76,6 +76,39 @@ class PipelineUtilitiesTest(unittest.TestCase):
         self.assertEqual(result, {1: "もう ダメ"})
         self.assertEqual(run.call_args.args[0][:2], ["/opt/reazon/bin/python", "/app/asr/reazon_batch_worker.py"])
 
+    def test_profiles_are_minimal_japanese_and_aliases_are_canonical(self):
+        self.assertEqual(pipeline.normalize_profile("tokusatsu"), "giga")
+        self.assertEqual(pipeline.normalize_profile("AKIBA"), "giga")
+        self.assertEqual(set(pipeline.PROFILE_CONTEXT), {"standard", "jav", "giga"})
+        self.assertTrue(all(not any(ch.isascii() and ch.isalpha() for ch in value) for value in pipeline.PROFILE_CONTEXT.values()))
+
+    def test_prompt_leakage_catches_old_context_and_partial_fragment(self):
+        old = "Japanese tokusatsu dialogue. Preserve character, organization, attack, and transformation names; also retain shouts and incomplete speech."
+        self.assertTrue(pipeline.detect_prompt_leakage(old, pipeline.PROFILE_CONTEXT["giga"])[0])
+        self.assertTrue(pipeline.detect_prompt_leakage("あっ without inventing sentences", pipeline.PROFILE_CONTEXT["jav"])[0])
+        self.assertTrue(pipeline.detect_prompt_leakage("inventing", pipeline.PROFILE_CONTEXT["jav"])[0])
+        self.assertFalse(pipeline.detect_prompt_leakage("日本語が上手ですね", pipeline.PROFILE_CONTEXT["standard"])[0])
+
+    def test_whisper_requires_meaningful_unresolved_competition(self):
+        suspicious = pipeline.Candidate("qwen3", "q", "もうダメ", ["weak_speech_conflict"])
+        clean = pipeline.Candidate("qwen3", "q", "もうダメ")
+        empty = pipeline.Candidate("reazon", "r", "", ["empty_transcript"])
+        different = pipeline.Candidate("reazon", "r", "気持ちいい")
+        self.assertFalse(pipeline.should_use_whisper(suspicious, empty))
+        self.assertFalse(pipeline.should_use_whisper(clean, different))
+        self.assertTrue(pipeline.should_use_whisper(suspicious, different))
+
+    def test_alignment_integrity_preserves_real_regression_cases(self):
+        damaged = [
+            ("できてるといいな", "できてるとな"),
+            ("もう一年も経ってるし", "もう一年も経っし"),
+            ("またダメだったそっか", "ダメたそっか"),
+            ("おやすみなさいおやすみ", "やすみなさいおやすみ"),
+        ]
+        for canonical, aligned in damaged:
+            self.assertFalse(pipeline.alignment_integrity(canonical, aligned)["valid"], (canonical, aligned))
+        self.assertTrue(pipeline.alignment_integrity("もう、ダメ！", "もうダメ")["valid"])
+
 
 if __name__ == "__main__":
     unittest.main()

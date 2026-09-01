@@ -1,0 +1,5675 @@
+{
+  "format": "javbeaconsubs-japanese-recognition-vocabulary",
+  "version": 1,
+  "description": "Japanese-only recognition vocabulary for JAVBeaconSubs. This is separate from the Japanese-to-English translation glossary. Use it for validation, candidate scoring, selective term biasing, diagnostics, and future title/series overrides. Never inject the complete vocabulary into Qwen context.",
+  "profiles": {
+    "canonical": [
+      "standard",
+      "jav",
+      "giga"
+    ],
+    "legacy_aliases": {
+      "tokusatsu": "giga",
+      "akiba": "giga"
+    }
+  },
+  "activation": {
+    "standard": [
+      "global"
+    ],
+    "jav": [
+      "global",
+      "jav"
+    ],
+    "giga": [
+      "global",
+      "giga"
+    ]
+  },
+  "rules": {
+    "japanese_only": true,
+    "contains_translation_targets": false,
+    "never_blind_replace": true,
+    "never_inject_complete_scope_into_asr_context": true,
+    "profile_context_must_remain_minimal": true,
+    "prefer_validation_over_forcing": true,
+    "unknown_title_names_require_title_or_series_override": true,
+    "do_not_promote_single_run_uncertain_names_to_base_vocab": true,
+    "max_selected_context_terms_default": 24,
+    "selected_terms_must_be_japanese_only": true,
+    "selection_should_prefer_title_override_then_profile_then_global": true
+  },
+  "scopes": {
+    "global": [
+      {
+        "term": "セックス",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "性交",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "性行為",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "交尾",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "前戯",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "後戯",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "愛撫",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "挿入",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "性欲",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "欲情",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "発情",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "性的興奮",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "快感",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "快楽",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "性感帯",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "絶頂",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "オーガズム",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "膣内絶頂",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "中イキ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "潮吹き",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "同時絶頂",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "射精",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "射精する",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "中出し",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "膣内射精",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "中に出して",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "中に出さないで",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "外出し",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "顔射",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "口内射精",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "喉奥射精",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ぶっかけ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "大量射精",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "連続射精",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "精子",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "精液",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ザーメン",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "勃起",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "勃起する",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "フル勃起",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ビンビン",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "早漏",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "遅漏",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "絶倫",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "夢精",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "我慢汁",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "カウパー液",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "精飲",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ごっくん",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "飲精",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "フェラ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "フェラチオ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "尺八",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "イラマチオ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ディープスロート",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "喉奥フェラ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "手コキ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "足コキ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "パイズリ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "素股",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "クンニ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "クンニリングス",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "指マン",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "手マン",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "アナルセックス",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "アナル挿入",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "アナル舐め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "アニリングス",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "二穴挿入",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "二本挿し",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "三本挿し",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "二輪挿し",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "乱交",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "集団性交",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "複数プレイ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "3P",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "スリーピー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "輪姦",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ハメ撮り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "生ハメ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "生挿入",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ゴムなし",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "避妊なし",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "騎乗位",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "逆騎乗位",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "正常位",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "後背位",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "立ちバック",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "寝バック",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "側位",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "座位",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "対面座位",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "背面座位",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "立位",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "屈曲位",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "松葉崩し",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "駅弁",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "シックスナイン",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "69",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "四十八手",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "四つん這い",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "Ｍ字開脚",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "大股開き",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "脚を広げて",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "股を開いて",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "仰向け",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "うつ伏せ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "腰振り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ピストン運動",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "高速ピストン",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "奥まで挿入",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "根元まで挿入",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "膣奥",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "子宮責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ポルチオ責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "Ｇスポット",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "Gスポット",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "性感マッサージ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "オイルマッサージ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "マットプレイ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ローションプレイ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "密着",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "自慰",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "自慰行為",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "オナニー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "オナる",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "手淫",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "相互オナニー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "見せつけオナニー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "公開オナニー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "オナニー鑑賞",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "寸止め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "射精管理",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "禁欲",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "禁欲生活",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "禁欲命令",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "強制射精",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "強制絶頂",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "連続絶頂",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "絶頂責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "焦らし",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "焦らしプレイ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "放置プレイ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "乳房",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "乳首",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "乳輪",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "おっぱい",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "胸",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "巨乳",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "爆乳",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "超乳",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "美乳",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "貧乳",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "微乳",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "垂れ乳",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "母乳",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "母乳プレイ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "授乳",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "陰部",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "性器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "女性器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "男性器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "膣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "膣内",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "膣口",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "膣壁",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "処女膜",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "クリトリス",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "クリ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "陰核",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "陰唇",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "大陰唇",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "小陰唇",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "子宮",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "子宮口",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "卵巣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "男根",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "陰茎",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ペニス",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ちんこ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "チンコ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ちんぽ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "チンポ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ちんちん",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "巨根",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "デカチン",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "短小",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "包茎",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "仮性包茎",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "真性包茎",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "亀頭",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "カリ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "陰嚢",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "睾丸",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "精巣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "金玉",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "アナル",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "肛門",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "尻穴",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "菊門",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "お尻",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "尻",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "臀部",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "股間",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "鼠径部",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "太もも",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "内腿",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "腋",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "脇の下",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "陰毛",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "剃毛",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "パイパン",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "体毛",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "唾液",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "汗",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "体液",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "尿",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "排尿",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "おしっこ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "放尿",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "スカトロ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "浣腸",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "濡れている",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "びしょ濡れ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ぐっしょり",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ヌルヌル",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ベタベタ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "敏感",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "感じやすい",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "気持ちよすぎる",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "我慢できない",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "イキそう",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "イっちゃう",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "イクよ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "イった",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "何度もイく",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "締まりがいい",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "締め付けが強い",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "痙攣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ビクビクする",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ピクピク",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "喘ぐ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "喘ぎ声",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "あえぎ声",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "嬌声",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "吐息",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "息遣い",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "息が荒い",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "息切れ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "息を呑む",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "絶叫",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "悲鳴",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "呻き声",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "うめき声",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "悶える",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "悶絶",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "失禁",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "失神",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "放心状態",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "恍惚",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "恍惚状態",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ディープキス",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "濃厚なキス",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "接吻",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "口づけ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "舌を絡める",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "キスマーク",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "甘噛み",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "耳舐め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "乳首舐め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "乳首責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "乳首攻め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "乳揉み",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "胸揉み",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "尻揉み",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "尻叩き",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "股間責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "亀頭責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "金玉責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "睾丸責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "アナル責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "クリ責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "指責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "舌技",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "エロい",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "いやらしい",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "淫ら",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "卑猥",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "猥褻",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "淫乱",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "好色",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "色情狂",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "スケベ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "助平",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変態",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ド変態",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "露出狂",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "痴漢",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "痴女",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ビッチ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "淫売",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "売女",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "娼婦",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "雌犬",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "メス犬",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "雌豚",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "メス豚",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "肉便器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "肉奴隷",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "性奴隷",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "性玩具",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変態野郎",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "エロ親父",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "色情魔",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "淫獣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "SM",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ＳＭ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "BDSM",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "サディスト",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "マゾヒスト",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "サド",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "マゾ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ドS",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ドＭ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ドM",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "緊縛",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "縄責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "亀甲縛り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "後ろ手縛り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拘束",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拘束具",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拘束台",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拘束椅子",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拘束ベッド",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "磔",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "逆さ吊り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "吊り下げ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "縄",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "手錠",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "手枷",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "足枷",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "革手錠",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "目隠し",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "猿轡",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ボールギャグ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "口枷",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "首輪",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "リード",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "鎖",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "鞭",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "乗馬鞭",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "鞭打ち",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "スパンキング",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "蝋燭責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "蝋責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "電気責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "電撃責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "水責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "くすぐり責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "乳首クリップ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "洗濯ばさみ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "調教",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "性奴隷調教",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "奴隷",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ご主人様",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "女王様",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "支配者",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "被虐",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "加虐",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "羞恥",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "羞恥プレイ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "露出プレイ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "公開羞恥",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "言葉責め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "辱め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "屈辱",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "服従",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "絶対服従",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "命令",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "命令に従え",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "跪け",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "這いつくばれ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "奴隷契約",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ローション",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "潤滑剤",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "媚薬",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "媚薬入り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "催淫剤",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "精力剤",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "コンドーム",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "避妊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "避妊具",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "避妊薬",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "低用量ピル",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "アフターピル",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "妊娠",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "妊娠する",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "孕ませる",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "孕ませ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "種付け",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "種付けプレス",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "受精",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "排卵",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "排卵日",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "危険日",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "安全日",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "妊娠検査薬",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "大人のおもちゃ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "アダルトグッズ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "バイブ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "バイブレーター",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ディルド",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ローター",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "電マ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "電動マッサージ器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "アナルプラグ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ペニスバンド",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "貞操帯",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "男性用貞操器具",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "オナホ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "オナホール",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ダッチワイフ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ラブドール",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "責め具",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拡張器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "膣鏡",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "浣腸器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "吸引器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "搾乳器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "搾精器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "合意",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "同意",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "性的同意",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "合意の上で",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "同意なし",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "不同意",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "不同意性交",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拒否",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拒絶",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "抵抗",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "無抵抗",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "抵抗する",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "無理やり",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "強制",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "強要",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "脅迫",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "脅す",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "犯す",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "強姦",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "レイプ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "集団強姦",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "性的暴行",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "わいせつ行為",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "強制わいせつ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "痴漢行為",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "盗撮",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "のぞき",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "睡眠姦",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "酔わせる",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "薬を盛る",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "意識不明",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "意識を失う",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "押さえつける",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拘束する",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "縛り上げる",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "口を塞ぐ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "助けを呼ぶ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "助けて",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "助けてください",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "離して",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "離せ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "触らないで",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "やめてください",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "警察を呼ぶ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "通報する",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "くそ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "クソ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ちくしょう",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "畜生",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ふざけるな",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ふざけんな",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "なめるな",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "てめえ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "貴様",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "この野郎",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "野郎",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "馬鹿",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "バカ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "アホ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "間抜け",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "クズ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ゲス",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "外道",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "卑怯者",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "腰抜け",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "臆病者",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "役立たず",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "能無し",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "雑魚",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "虫けら",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "化け物",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "悪党",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "人でなし",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "裏切り者",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "偽善者",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変態め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "クソ野郎",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "馬鹿野郎",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "傷",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "傷跡",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "切り傷",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "擦り傷",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "裂傷",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "刺し傷",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "銃創",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "火傷",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "痣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "青あざ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "出血",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "流血",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "大量出血",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "内出血",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "骨折",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "脱臼",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "捻挫",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "打撲",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "脳震盪",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "重傷",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "軽傷",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "致命傷",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "急所",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "急所攻撃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "弱点",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "弱点を突く",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ダメージ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "大ダメージ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "蓄積ダメージ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "回復",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "治療",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "応急処置",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "蘇生",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "足音",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "笑い声",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "すすり泣き",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "泣き声",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拍手",
+        "source": "translation_glossary_v2"
+      }
+    ],
+    "jav": [
+      {
+        "term": "AV",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "アダルトビデオ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "AV女優",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "AV男優",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "セクシー女優",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "女優",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "男優",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "企画女優",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "単体女優",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "専属女優",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "素人",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "素人企画",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "企画物",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "本番行為",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "疑似本番",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "絡み",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "濡れ場",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "撮影",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "撮影現場",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "撮影開始",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "撮影終了",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "収録",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "収録現場",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "テイク",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ワンテイク",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "カット",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "カット割り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "撮り直し",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "リテイク",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "長回し",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "生撮り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "撮影後",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "監督",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "助監督",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "プロデューサー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "カメラマン",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "撮影スタッフ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "スタッフ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "照明",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "音声",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "メイク",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "メイク直し",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "衣装",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "衣装合わせ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "台本",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "台詞",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "セリフ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "演技",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "演出",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "アドリブ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "段取り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "リハーサル",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "インタビュー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "作品",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "新作",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "発売日",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "品番",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "メーカー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "レーベル",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "シリーズ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "企画",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "出演",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "出演者",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "共演",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "デビュー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "引退作",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "復帰作",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "無修正",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "修正済み",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "モザイク",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "モザイク処理",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "モザイクなし",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "顔出し",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "顔出しNG",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "身バレ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "カメラ目線",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "主観映像",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "主観撮影",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ハメ撮り撮影",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "隠し撮り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "固定カメラ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "手持ちカメラ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "顔アップ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "局部アップ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "発射シーン",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "抜きどころ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "メイキング",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "特典映像",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "オフショット",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "バックステージ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "控室",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "楽屋",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "撮影会",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "グラビア",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "イメージビデオ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ヌード",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "全裸",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "半裸",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "着衣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "着衣セックス",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "着衣プレイ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "脱衣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ストリップ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "パンチラ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "胸チラ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ポロリ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ラブホテル",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ラブホ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "風俗",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "風俗店",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "風俗嬢",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "デリヘル",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ホテヘル",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ソープランド",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ソープ嬢",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ピンサロ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "イメクラ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "キャバクラ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "キャバ嬢",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ホストクラブ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ホスト",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "援助交際",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "パパ活",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "売春",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "買春",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "愛人契約",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "人妻",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "熟女",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "未亡人",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "愛人",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "不倫",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "浮気",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "寝取られ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "NTR",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "寝取り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "寝取らせ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "夫婦交換",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "スワッピング",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ナンパ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "逆ナン",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "出会い系",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "マッチングアプリ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "オフ会",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "個人撮影",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "裏垢",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "配信",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "生配信",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ライブチャット",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "チャットレディ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "同人AV",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "自主制作",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "妊活",
+        "source": "observed_start611_fast_test",
+        "notes": "Japanese recognition vocabulary only. Do not force replacement and do not translate here."
+      },
+      {
+        "term": "夫婦",
+        "source": "observed_start611_fast_test",
+        "notes": "Japanese recognition vocabulary only. Do not force replacement and do not translate here."
+      },
+      {
+        "term": "夫",
+        "source": "observed_start611_fast_test",
+        "notes": "Japanese recognition vocabulary only. Do not force replacement and do not translate here."
+      },
+      {
+        "term": "妻",
+        "source": "observed_start611_fast_test",
+        "notes": "Japanese recognition vocabulary only. Do not force replacement and do not translate here."
+      }
+    ],
+    "giga": [
+      {
+        "term": "戦闘",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "戦闘開始",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "戦闘態勢",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "格闘",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "格闘戦",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "格闘技",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "喧嘩",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "殴り合い",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "攻撃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "連続攻撃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "一斉攻撃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "集中攻撃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "奇襲",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "不意打ち",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "先制攻撃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "反撃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "反撃開始",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "防御",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "完全防御",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "回避",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "緊急回避",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ガード",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "受け身",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拳",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "パンチ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ジャブ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ストレート",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "フック",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "アッパー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ボディブロー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "肘打ち",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "膝蹴り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "キック",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "前蹴り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "横蹴り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "後ろ蹴り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "回し蹴り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "飛び蹴り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "二段蹴り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "かかと落とし",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ローキック",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ミドルキック",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ハイキック",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "投げ技",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "背負い投げ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "一本背負い",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "巴投げ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "締め技",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "関節技",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "腕ひしぎ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "腕ひしぎ十字固め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "三角絞め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "裸絞め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ヘッドロック",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "羽交い締め",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "組み技",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "寝技",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "馬乗り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "押し倒す",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "組み伏せる",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "叩きつける",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "壁に叩きつける",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "床に叩きつける",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "投げ飛ばす",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "吹き飛ばす",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "弾き飛ばす",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "殴り飛ばす",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "蹴り飛ばす",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "平手打ち",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ビンタ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "往復ビンタ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "張り手",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "頭突き",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "首を絞める",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "絞殺",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "噛みつく",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "引っ掻く",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "体当たり",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "タックル",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "突進",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "受け止める",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "跳ね返す",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "気絶",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "失神する",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "昏倒",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "戦闘不能",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "再起不能",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "降参",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "降伏",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "敗北",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "勝利",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "圧勝",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "完敗",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "相打ち",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "決着",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "一騎打ち",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "決闘",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "死闘",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "覚悟しろ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "かかってこい",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "勝負だ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "殺す",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ぶっ殺す",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "抹殺",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "始末する",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "処刑",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "公開処刑",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "暗殺",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "殺害",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "惨殺",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "命乞い",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拷問",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拷問器具",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "処刑台",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "捕虜",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "囚人",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "人質",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "監禁",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "幽閉",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "軟禁",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拉致",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "誘拐",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "捕獲",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "捕縛",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "逮捕",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拘留",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "投獄",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "囚われの身",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "脱出",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "脱走",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "脱獄",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "救出",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "救助",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "解放",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "尋問",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "尋問室",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "取り調べ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "自白",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "自白剤",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "情報を吐け",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "口を割る",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "秘密を話せ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "黙秘",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拷問に耐える",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "口封じ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "証拠隠滅",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "監視",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "監視カメラ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "盗聴",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "発信機",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "追跡装置",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "罠",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "罠にかかる",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "落とし穴",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "待ち伏せ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "包囲",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "包囲網",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "追跡",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "尾行",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "逃走",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "逃亡",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "潜伏",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "潜入",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "潜入捜査",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "偵察",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "諜報",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "スパイ活動",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "救援",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "援軍",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "増援",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身する",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身解除",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "強制変身解除",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身シーン",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身ヒロイン",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身ヒーロー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身アイテム",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身ベルト",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身装置",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身ブレスレット",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身コンパクト",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身能力",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身ポーズ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身完了",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身不能",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身失敗",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身前",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身後",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身形態",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身者",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "正体",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "正体を現す",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "正体がばれる",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "素顔",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "マスクオフ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "名乗り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "決め台詞",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "決めポーズ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ヒロイン",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ヒーロー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "戦士",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "女戦士",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "美少女戦士",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "魔法少女",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "魔法戦士",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "正義の味方",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "守護者",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "守護戦士",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "超戦士",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "光の戦士",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "選ばれし戦士",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "戦隊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "戦隊ヒロイン",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "隊員",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "追加戦士",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "戦闘員",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "怪人",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "改造怪人",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "怪物",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "魔物",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "魔人",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "悪魔",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "妖怪",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "怪獣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "巨大怪獣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "宇宙怪獣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "宇宙人",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "異星人",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "侵略者",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "敵",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "宿敵",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "強敵",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "幹部",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "敵幹部",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "女幹部",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "首領",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "総統",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "大首領",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "魔王",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "女王",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "皇帝",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "帝王",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ボス",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ラスボス",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "悪の組織",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "秘密結社",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "怪人軍団",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "戦闘員軍団",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "基地",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "秘密基地",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "地下基地",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "アジト",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "本拠地",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "司令室",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "研究所",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "実験室",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "牢獄",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "牢屋",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "必殺技",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "必殺攻撃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "必殺光線",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "特殊攻撃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "特殊能力",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "超能力",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "能力",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "超人",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "怪力",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "飛行能力",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "透視能力",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "念動力",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "瞬間移動",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "分身",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "分身の術",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "透明化",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "巨大化",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "縮小化",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "強化",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "強化形態",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "最終形態",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "究極形態",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "覚醒",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "覚醒形態",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "暴走",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "暴走状態",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "限界突破",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "パワーアップ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "エネルギー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "エネルギー切れ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "エネルギー吸収",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "エネルギー放出",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "生命エネルギー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "戦闘エネルギー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "体力",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "体力切れ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "限界",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "力が入らない",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "能力封印",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "能力無効化",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身封じ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "必殺技封じ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "光線",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "光線技",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "レーザー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ビーム",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "光弾",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "エネルギー弾",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "衝撃波",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "衝撃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "爆発",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "大爆発",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "爆破",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "爆弾",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "時限爆弾",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "電撃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "雷撃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "高圧電流",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "火炎",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "火炎攻撃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "火球",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "冷凍",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "冷凍光線",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "凍結",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "氷結",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "毒",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "毒液",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "毒ガス",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "麻痺",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "麻痺毒",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "催眠",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "催眠術",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "洗脳",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "精神操作",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "精神攻撃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "幻覚",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "幻術",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "呪縛",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "石化",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "吸収",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "融合",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "分裂",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "再生",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "不死身",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "無敵",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "バリア",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "防御壁",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "結界",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "シールド",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "剣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "刀",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "日本刀",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "短剣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "大剣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "双剣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "槍",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "薙刀",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "斧",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "戦斧",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "鎌",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "大鎌",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "棍棒",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "鉄棒",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "鞭状武器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "弓",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "矢",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "弓矢",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "銃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拳銃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ライフル",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "散弾銃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "機関銃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "狙撃銃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "光線銃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "レーザー銃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "弾丸",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "弾薬",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "武器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "兵器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "秘密兵器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "最終兵器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "生物兵器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "化学兵器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "武装",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "装備",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "防具",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "鎧",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "胸当て",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "肩当て",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "腕当て",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "すね当て",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "盾",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "戦闘スーツ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "強化スーツ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "パワードスーツ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ボディスーツ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "全身タイツ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "レオタード",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ラバースーツ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ラテックススーツ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "メタリックスーツ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "バトルスーツ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ヒロインスーツ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "戦隊スーツ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身スーツ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "スーツアクター",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "マスク",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "仮面",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ヘルメット",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "バイザー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ゴーグル",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ブーツ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ロングブーツ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "手袋",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "長手袋",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "マント",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ベルト",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ブレスレット",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "アーマー",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "装甲",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "コスチューム",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "コスプレ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "着ぐるみ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "着ぐるみ怪人",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "スーツ破壊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "マスク破壊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "装甲破壊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身アイテム破壊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "衣装破壊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "スーツ剥ぎ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "マスク剥ぎ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身解除攻撃",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "敗れる",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "倒される",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "捕まる",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "拘束される",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "捕らわれる",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "追い詰められる",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "追い詰める",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "包囲される",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "奇襲を受ける",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "罠に落ちる",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "基地に潜入する",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "脱出経路",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "救出作戦",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "人質救出",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "単独行動",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "単独潜入",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "秘密任務",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "極秘任務",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "潜入任務",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "護衛任務",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "捜索任務",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "討伐任務",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "復讐",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "敵討ち",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "裏切り",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "洗脳される",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "操られる",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "精神支配",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "完全支配",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "支配",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "屈服",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "服従させる",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "洗脳装置",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "催眠装置",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "精神操作装置",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "記憶操作",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "記憶消去",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "記憶改変",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "人格改造",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "闇堕ち",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "悪堕ち",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "快楽堕ち",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "洗脳堕ち",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "改造",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "人体改造",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "人体実験",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "生体実験",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "実験体",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "被験者",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "検体",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "改造人間",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "強化人間",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "超人化",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "怪人化",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "獣人化",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "機械化",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "クローン",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "複製体",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "人造人間",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "アンドロイド",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "サイボーグ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ロボット",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "機械人間",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "生体兵器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "戦闘兵器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "殺人兵器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "魔法",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "魔力",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "魔法陣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "魔法杖",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "魔法の杖",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "呪い",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "呪文",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "魔術",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "魔導",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "召喚",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "召喚する",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "召喚獣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "使い魔",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "封印",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "封印する",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "封印解除",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "封印術",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "結界魔法",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "回復魔法",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "攻撃魔法",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "防御魔法",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "禁断の魔法",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "黒魔術",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "白魔術",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "魔界",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "異世界",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "異次元",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "異空間",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "時空",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "時空間",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "次元の裂け目",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "転移",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "転送",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "異世界転移",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "転生",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "聖剣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "魔剣",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "神器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "聖なる力",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "闇の力",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "光の力",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "魔族",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "獣人",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "吸血鬼",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "狼男",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "悪霊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "怨霊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "幽霊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "精霊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "妖精",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "天使",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "堕天使",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "女神",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "邪神",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "宇宙",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "宇宙船",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "宇宙基地",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "宇宙ステーション",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "母艦",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "戦闘機",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "宇宙戦闘機",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "未確認飛行物体",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "UFO",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "惑星",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "母星",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "地球",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "地球人",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "人類",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "銀河",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "銀河系",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "宇宙帝国",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "侵略宇宙人",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "異星文明",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "超古代文明",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "古代兵器",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "人工知能",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "AI",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "電脳",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "仮想空間",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "仮想現実",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "電脳世界",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "制御装置",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "動力炉",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "反応炉",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "エネルギー炉",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "自爆装置",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "自爆",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "起爆装置",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "遠隔操作",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "転送装置",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "瞬間移動装置",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "冷凍睡眠",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "生命維持装置",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "培養槽",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "カプセル",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "秘密",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "使命",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "任務",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "作戦",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "作戦開始",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "作戦完了",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "任務完了",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "任務失敗",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "作戦失敗",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "作戦中止",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "撤退",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "撤退命令",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "緊急脱出",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "警戒",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "厳戒態勢",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "警報",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "非常警報",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "緊急事態",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "非常事態",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "侵入者",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "侵入",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "不法侵入",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "侵略",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "征服",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "世界征服",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "地球征服",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "殲滅",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "全滅",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "壊滅",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "破壊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "破壊工作",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "基地破壊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "都市破壊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "人類滅亡",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "世界滅亡",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "地球滅亡",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "隊長",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "副隊長",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "司令官",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "司令",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "総司令",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "最高司令官",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "長官",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "博士",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "教授",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "研究員",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "科学者",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "主任研究員",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "技術者",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "整備士",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "兵士",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "傭兵",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "暗殺者",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "殺し屋",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "エージェント",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "諜報員",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "スパイ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "捜査官",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "刑事",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "警官",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "警備員",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "特殊部隊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "防衛隊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "地球防衛隊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "秘密部隊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "精鋭部隊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "親衛隊",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "反乱軍",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "抵抗組織",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "レジスタンス",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身音",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "変身エフェクト",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "爆発音",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "銃声",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "発砲音",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "斬撃音",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "打撃音",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "衝突音",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "破壊音",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "警報音",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "雄叫び",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "咆哮",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "うなり声",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "高笑い",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "爆音",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "轟音",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "金属音",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "電子音",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ノイズ",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "無線",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "通信",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "通信機",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "通信障害",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "通信不能",
+        "source": "translation_glossary_v2"
+      },
+      {
+        "term": "ギガ",
+        "source": "observed_spsf57_fast_test",
+        "notes": "Japanese recognition vocabulary only. Do not force replacement and do not translate here."
+      },
+      {
+        "term": "宝玉",
+        "source": "observed_spsf57_fast_test",
+        "notes": "Japanese recognition vocabulary only. Do not force replacement and do not translate here."
+      },
+      {
+        "term": "学園長",
+        "source": "observed_spsf57_fast_test",
+        "notes": "Japanese recognition vocabulary only. Do not force replacement and do not translate here."
+      },
+      {
+        "term": "組織",
+        "source": "observed_spsf57_fast_test",
+        "notes": "Japanese recognition vocabulary only. Do not force replacement and do not translate here."
+      },
+      {
+        "term": "悪徳",
+        "source": "observed_spsf57_fast_test",
+        "notes": "Japanese recognition vocabulary only. Do not force replacement and do not translate here."
+      },
+      {
+        "term": "教師",
+        "source": "observed_spsf57_fast_test",
+        "notes": "Japanese recognition vocabulary only. Do not force replacement and do not translate here."
+      },
+      {
+        "term": "戦闘服",
+        "source": "observed_spsf57_fast_test",
+        "notes": "Japanese recognition vocabulary only. Do not force replacement and do not translate here."
+      },
+      {
+        "term": "超人パワー",
+        "source": "observed_spsf57_fast_test",
+        "notes": "Japanese recognition vocabulary only. Do not force replacement and do not translate here."
+      },
+      {
+        "term": "訓練室",
+        "source": "observed_spsf57_fast_test",
+        "notes": "Japanese recognition vocabulary only. Do not force replacement and do not translate here."
+      },
+      {
+        "term": "正義",
+        "source": "observed_spsf57_fast_test",
+        "notes": "Japanese recognition vocabulary only. Do not force replacement and do not translate here."
+      },
+      {
+        "term": "宝石",
+        "source": "observed_spsf57_fast_test",
+        "notes": "Japanese recognition vocabulary only. Do not force replacement and do not translate here."
+      },
+      {
+        "term": "聖なる",
+        "source": "observed_spsf57_fast_test",
+        "notes": "Japanese recognition vocabulary only. Do not force replacement and do not translate here."
+      },
+      {
+        "term": "パワー",
+        "source": "observed_spsf57_fast_test",
+        "notes": "Japanese recognition vocabulary only. Do not force replacement and do not translate here."
+      }
+    ]
+  },
+  "title_or_series_overrides": [],
+  "observed_but_not_promoted": [
+    {
+      "source": "SPSF-57",
+      "candidate": "サークロノス",
+      "reason": "One Fast-mode run produced this as a plausible proper name, but one ASR observation is not enough to make it a global/base term. Add it as a title override only after verification."
+    }
+  ]
+}

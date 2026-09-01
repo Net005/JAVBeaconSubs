@@ -1,12 +1,12 @@
 # JAVBeacon Subtitles
 
-A Go subtitle service optimized for Japanese dialogue in JAV, GIGA/tokusatsu, Akiba-web, and similarly difficult material. It accepts a browser upload, exact media files, or folders; queues jobs; extracts clean mono audio with FFmpeg; runs a Japanese-forced Qwen-first recognition pipeline; and writes atomic SRT, ASS, and diagnostic JSON outputs. Jobs survive restarts in an embedded SQLite database.
+A Go subtitle service optimized for Japanese dialogue in JAV, GIGA/tokusatsu heroine action, and similarly difficult material. It accepts a browser upload, exact media files, or folders; queues jobs; extracts clean mono audio with FFmpeg; runs a Japanese-forced Qwen-first recognition pipeline; and writes atomic SRT, ASS, and diagnostic JSON outputs. Jobs survive restarts in an embedded SQLite database.
 
 ## Why this pipeline is different
 
 The old implementation auto-detected the language, removed short lines, and sent isolated fragments to MyMemory/Google-free translation. The primary pipeline now forces Japanese in Qwen3-ASR-1.7B, uses recall-biased padded dialogue detection, validates suspicious text before timing it, and rejects impossible or out-of-order timestamps instead of silently collapsing hours of audio into one subtitle.
 
-Balanced mode (the default) runs [Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B) for every detected region, ReazonSpeech NeMo v2 only when a result is suspicious, and Whisper Large-v3 only when the two Japanese systems materially disagree. [Qwen3-ForcedAligner-0.6B](https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B) is loaded after the accepted Japanese text has been selected, so timing can never be mistaken for transcription validation. Fast mode skips multi-ASR verification; High Accuracy verifies every detected region with Reazon. Models run in separate lifecycle phases so they do not all occupy GPU memory at once.
+Balanced mode (the default) runs [Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B) for every detected region, ReazonSpeech NeMo v2 only when a result is suspicious, and Whisper Large-v3 only for meaningful unresolved lexical competition. Whisper fallback clips are grouped into one model invocation instead of reloading Large-v3 per segment. [Qwen3-ForcedAligner-0.6B](https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B) supplies timing without replacing canonical ASR text; material aligner omissions fall back to timing-only or VAD timing. Fast mode skips normal secondary ASR, while prompt leakage still receives one no-context Qwen retry. Models run in separate lifecycle phases so they do not all occupy GPU memory at once.
 
 Two English modes are available:
 
@@ -103,7 +103,9 @@ The job form has two explicit modes:
 - **Upload one file** streams one video/audio file into managed storage. When processing finishes, English SRT/ASS, optional Japanese SRT/ASS, and diagnostic JSON downloads appear on its job card.
 - **Server paths** accepts one or more exact files and/or folders already visible to the service. Folder traversal happens only when requested.
 
-Each job selects Fast, Balanced, or High Accuracy recognition plus a small `jav`, `tokusatsu`, `akiba`, or `standard` context profile. The profile biases names and domain terms without injecting one enormous vocabulary into every weak audio region. **Also keep Japanese** writes `.ja.srt` and `.ja.ass` from the already-canonical Japanese transcript without another ASR pass. Japanese-only mode always writes them because they are the primary output.
+The canonical content profiles are `standard`, `jav`, and `giga`; legacy `tokusatsu` and `akiba` inputs normalize to `giga`. Their Qwen hints are deliberately minimal Japanese-only strings to prevent prompt text leaking into subtitles. Profile and recognition accuracy can each be Auto, explicitly selected, or resolved independently per file by case-insensitive path mappings in the Profiles tab. **Also keep Japanese** writes `.ja.srt` and `.ja.ass` from the canonical Japanese transcript without another ASR pass.
+
+The Profiles tab also manages the bundled Japanese Recognition Vocabulary v1 and Translation Glossary v2. Recognition vocabulary contains Japanese recognition guidance only and is never blindly substituted or injected wholesale into Qwen. Translation mappings inherit Global plus JAV or GIGA scope and are filtered to terms occurring in the active translation window. Title/series overrides take precedence when present.
 
 The separate **Settings** tab switches between direct local translation, Japanese-only transcription, and higher-quality contextual translation. It stores the endpoint URL, model, key, batching, timeout, scene-gap threshold, translation-memory preference, and glossaries in SQLite. Saved API keys are never returned to the browser; leaving the key blank keeps the existing value.
 
@@ -119,7 +121,7 @@ The same tab can run post-processing after a successful subtitle job. Choose a B
 
 `JAVBEACONSUBS_SCRIPTS_PATH` controls the host directory mounted read-only at `/scripts`. Post-processing settings and write-only webhook credentials persist in SQLite.
 
-Running activity cards show the current absolute path, filename, file number, recognition mode/profile, live ASR phase progress, and an estimated completion time. The Qwen worker reports dialogue detection, primary transcription, conditional fallback, alignment, and completion rather than appearing stalled during a monolithic inference call.
+Running activity cards show the current absolute path, filename, file number, resolved recognition mode/profile and their sources, live ASR phase progress, and an estimated completion time. History is server-side paginated (25/50/100), supports case-insensitive `*` wildcard filtering over job name, filename, and full path, and can export selected Japanese/English subtitles and diagnostics as a collision-safe streaming ZIP with `manifest.json`.
 
 SQLite stores the job request, state, progress, results, and JAVBeacon correlation ID. Queued or running jobs found after an unclean restart are marked failed rather than silently left running forever. SQLite uses WAL mode and a busy timeout; one database file is sufficient for the deliberately small worker pool.
 
@@ -159,7 +161,7 @@ curl --fail-with-body --request POST 'http://localhost:8097/api/v1/jobs' \
     "overwrite": false,
     "keep_japanese": true,
     "asr_mode": "balanced",
-    "asr_profile": "jav",
+    "profile": "jav",
     "debug_mode": false
   }'
 ```
@@ -179,7 +181,7 @@ Content-Type: application/json
   "overwrite": false,
   "keep_japanese": true,
   "asr_mode": "high_accuracy",
-  "asr_profile": "tokusatsu",
+  "profile": "giga",
   "debug_mode": true,
   "external_id": "javbeacon-movie-4182",
   "callback_url": "http://127.0.0.1:8080/api/subtitles/callback"
@@ -189,13 +191,14 @@ Content-Type: application/json
 The response is `202 Accepted`, includes the job, and sets `Location: /api/v1/jobs/{id}`. JAVBeacon can then:
 
 - `GET /api/v1/jobs/{id}` — poll one job.
-- `GET /api/v1/jobs` — recent jobs.
+- `GET /api/v1/jobs?page=1&page_size=50&filter=*SPSF*` — paginated/filterable history.
+- `POST /api/v1/jobs/export` — stream selected job artifacts and a manifest as ZIP.
 - `GET /api/v1/events` — server-sent `job` events for live UI updates.
 - `DELETE /api/v1/jobs/{id}` — cancel queued/running work.
 - `GET /api/v1/health` — dependency and model readiness.
 - `GET /api/v1/settings` and `PUT /api/v1/settings` — read/update persistent translation and post-processing settings (credentials are write-only).
 
-The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, `overwrite`, `keep_japanese`, `asr_mode`, `asr_profile`, and `debug_mode` fields. For JSON and multipart jobs, omitting `keep_japanese` uses `output.keep_japanese` from service configuration. Generated files are available through `GET /api/v1/jobs/{id}/outputs/{zeroBasedResultIndex}/{en|ja|en-ass|ja-ass|json}`.
+The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, `overwrite`, `keep_japanese`, `asr_mode`, `profile`, and `debug_mode` fields. The legacy `asr_profile` field remains accepted as an alias. For JSON and multipart jobs, omitting `keep_japanese` uses `output.keep_japanese` from service configuration. Generated files are available through `GET /api/v1/jobs/{id}/outputs/{zeroBasedResultIndex}/{en|ja|en-ass|ja-ass|json}`.
 
 If `callback_url` is supplied, the terminal job document is POSTed there. `external_id` round-trips unchanged so JAVBeacon can associate it with its own movie or task record.
 

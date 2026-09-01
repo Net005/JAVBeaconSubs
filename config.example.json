@@ -5,8 +5,15 @@
 	"web_password": "",
 	"database_path": "./data/javbeaconsubs.db",
 	"upload_dir": "./data/uploads",
+	"recognition_vocabulary_path": "./vocabulary/javbeaconsubs_japanese_recognition_vocabulary_v1.json",
+	"translation_glossary_path": "./javbeaconsubs_translation_glossary_v2.json",
 	"max_upload_gb": 30,
   "workers": 1,
+  "profiles": {
+    "default_profile": "jav",
+    "default_asr_mode": "balanced",
+    "path_mappings": []
+  },
   "whisper": {
     "backend": "qwen",
     "mode": "balanced",

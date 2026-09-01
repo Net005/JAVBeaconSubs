@@ -39,11 +39,15 @@ COPY --from=whisper-builder /app/build/bin /app/build/bin
 COPY --from=go-builder /out/javbeaconsubs /usr/local/bin/javbeaconsubs
 COPY config.docker.json /app/config.json
 COPY asr /app/asr
+COPY vocabulary /app/vocabulary
+COPY javbeaconsubs_translation_glossary_v2.json /app/javbeaconsubs_translation_glossary_v2.json
 COPY docker/entrypoint.sh /usr/local/bin/javbeaconsubs-entrypoint
 RUN chmod 0755 /usr/local/bin/javbeaconsubs-entrypoint /app/asr/reazon_worker.py /app/asr/reazon_batch_worker.py /app/asr/qwen_pipeline.py && mkdir -p /data/uploads /models /scripts
 ENV JAVBEACONSUBS_LISTEN=0.0.0.0:8097 \
     JAVBEACONSUBS_DATABASE_PATH=/data/javbeaconsubs.db \
     JAVBEACONSUBS_UPLOAD_DIR=/data/uploads \
+    JAVBEACONSUBS_RECOGNITION_VOCABULARY=/app/vocabulary/javbeaconsubs_japanese_recognition_vocabulary_v1.json \
+    JAVBEACONSUBS_TRANSLATION_GLOSSARY=/app/javbeaconsubs_translation_glossary_v2.json \
     JAVBEACONSUBS_WHISPER_BINARY=/app/build/bin/whisper-cli \
     JAVBEACONSUBS_WHISPER_MODEL=/models/ggml-large-v3.bin \
     JAVBEACONSUBS_VAD_MODEL=/models/ggml-silero-v6.2.0.bin \
