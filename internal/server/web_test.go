@@ -14,7 +14,7 @@ func TestWebUIUsesExplicitExternalIDLookup(t *testing.T) {
 	if strings.Contains(page, "external.value") {
 		t.Fatal("web UI relies on window.external instead of the reference input")
 	}
-	if !strings.Contains(page, "element('external').value.trim()") {
+	if !strings.Contains(page, "el('externalId').value") {
 		t.Fatal("web UI does not explicitly resolve the reference input")
 	}
 }

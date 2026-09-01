@@ -23,6 +23,8 @@ services:
       SUBTITLE_PORT: "${SUBTITLE_PORT:-8097}"
       JAVBEACONSUBS_LISTEN: "0.0.0.0:${SUBTITLE_PORT:-8097}"
       JAVBEACONSUBS_API_TOKEN: "${JAVBEACONSUBS_API_TOKEN:-}"
+      JAVBEACONSUBS_WEB_USERNAME: "${JAVBEACONSUBS_WEB_USERNAME:-}"
+      JAVBEACONSUBS_WEB_PASSWORD: "${JAVBEACONSUBS_WEB_PASSWORD:-}"
       JAVBEACONSUBS_TRANSLATION_API_KEY: "${JAVBEACONSUBS_TRANSLATION_API_KEY:-}"
       JAVBEACONSUBS_DOWNLOAD_MODELS: "${JAVBEACONSUBS_DOWNLOAD_MODELS:-true}"
       JAVBEACONSUBS_USE_GPU: "true"
@@ -35,6 +37,7 @@ services:
     volumes:
       - "${JAVBEACONSUBS_DATA_PATH:-./data}:/data"
       - "${JAVBEACONSUBS_MODELS_PATH:-./models}:/models"
+      - "${JAVBEACONSUBS_SCRIPTS_PATH:-./scripts}:/scripts:ro"
       - "${MEDIA_PATH:-./media}:/media"
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --header \"Authorization: Bearer $${JAVBEACONSUBS_API_TOKEN}\" http://127.0.0.1:$${SUBTITLE_PORT}/api/v1/health"]

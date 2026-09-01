@@ -1,6 +1,8 @@
 {
   "listen": "127.0.0.1:8097",
   "api_token": "",
+	"web_username": "",
+	"web_password": "",
 	"database_path": "./data/javbeaconsubs.db",
 	"upload_dir": "./data/uploads",
 	"max_upload_gb": 30,
@@ -30,8 +32,21 @@
     "model": "qwen3:14b",
     "batch_size": 24,
     "timeout_seconds": 120,
-    "glossary": ""
+		"context_gap_ms": 8000,
+		"translation_memory": false,
+		"glossary": "",
+		"structured_glossary": {
+			"style": [],
+			"terms": {}
+		}
   },
+	"post_processing": {
+		"mode": "none",
+		"shell_script": "",
+		"webhook_url": "",
+		"webhook_bearer_token": "",
+		"timeout_seconds": 60
+	},
   "output": {
     "english_suffix": ".en.srt",
     "japanese_suffix": ".ja.srt",

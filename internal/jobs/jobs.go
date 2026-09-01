@@ -31,27 +31,29 @@ type Request struct {
 }
 
 type Job struct {
-	ID                string          `json:"id"`
-	ExternalID        string          `json:"external_id,omitempty"`
-	Status            string          `json:"status"`
-	Phase             string          `json:"phase,omitempty"`
-	Progress          int             `json:"progress"`
-	Message           string          `json:"message,omitempty"`
-	CurrentPath       string          `json:"current_path,omitempty"`
-	CurrentFile       string          `json:"current_file,omitempty"`
-	CurrentFileNumber int             `json:"current_file_number,omitempty"`
-	ETASeconds        int64           `json:"eta_seconds,omitempty"`
-	EstimatedFinishAt *time.Time      `json:"estimated_finish_at,omitempty"`
-	Inputs            []string        `json:"inputs"`
-	Files             []string        `json:"files"`
-	Results           []engine.Result `json:"results,omitempty"`
-	Error             string          `json:"error,omitempty"`
-	CallbackURL       string          `json:"-"`
-	Overwrite         bool            `json:"-"`
-	CreatedAt         time.Time       `json:"created_at"`
-	StartedAt         *time.Time      `json:"started_at,omitempty"`
-	FinishedAt        *time.Time      `json:"finished_at,omitempty"`
-	cancel            context.CancelFunc
+	ID                   string          `json:"id"`
+	ExternalID           string          `json:"external_id,omitempty"`
+	Status               string          `json:"status"`
+	Phase                string          `json:"phase,omitempty"`
+	Progress             int             `json:"progress"`
+	Message              string          `json:"message,omitempty"`
+	CurrentPath          string          `json:"current_path,omitempty"`
+	CurrentFile          string          `json:"current_file,omitempty"`
+	CurrentFileNumber    int             `json:"current_file_number,omitempty"`
+	ETASeconds           int64           `json:"eta_seconds,omitempty"`
+	EstimatedFinishAt    *time.Time      `json:"estimated_finish_at,omitempty"`
+	Inputs               []string        `json:"inputs"`
+	Files                []string        `json:"files"`
+	Results              []engine.Result `json:"results,omitempty"`
+	Error                string          `json:"error,omitempty"`
+	CallbackURL          string          `json:"-"`
+	Overwrite            bool            `json:"-"`
+	CreatedAt            time.Time       `json:"created_at"`
+	StartedAt            *time.Time      `json:"started_at,omitempty"`
+	FinishedAt           *time.Time      `json:"finished_at,omitempty"`
+	PostProcessingStatus string          `json:"post_processing_status,omitempty"`
+	PostProcessingError  string          `json:"post_processing_error,omitempty"`
+	cancel               context.CancelFunc
 }
 
 type Manager struct {
@@ -63,6 +65,7 @@ type Manager struct {
 	queue       chan string
 	subscribers map[chan []byte]struct{}
 	persistence Persistence
+	post        *PostProcessor
 }
 
 type Persistence interface {
@@ -70,8 +73,8 @@ type Persistence interface {
 	Load() ([]*Job, error)
 }
 
-func New(cfg config.Config, runner *engine.Runner, persistence Persistence, log *slog.Logger) (*Manager, error) {
-	m := &Manager{cfg: cfg, runner: runner, persistence: persistence, log: log, jobs: make(map[string]*Job), queue: make(chan string, 256), subscribers: make(map[chan []byte]struct{})}
+func New(cfg config.Config, runner *engine.Runner, persistence Persistence, post *PostProcessor, log *slog.Logger) (*Manager, error) {
+	m := &Manager{cfg: cfg, runner: runner, persistence: persistence, post: post, log: log, jobs: make(map[string]*Job), queue: make(chan string, 256), subscribers: make(map[chan []byte]struct{})}
 	stored, err := persistence.Load()
 	if err != nil {
 		return nil, err
@@ -199,6 +202,7 @@ func (m *Manager) process(ctx context.Context, id string) {
 	m.mu.RLock()
 	job := clone(m.jobs[id])
 	m.mu.RUnlock()
+	translationMemory := engine.NewTranslationMemory()
 	for index, file := range job.Files {
 		m.mu.Lock()
 		current := m.jobs[id]
@@ -229,7 +233,7 @@ func (m *Manager) process(ctx context.Context, id string) {
 				m.mu.Unlock()
 			}
 		}
-		result, err := m.runner.Process(ctx, file, job.Overwrite, progress)
+		result, err := m.runner.ProcessWithMemory(ctx, file, job.Overwrite, progress, translationMemory)
 		if err != nil {
 			m.finish(id, "failed", err.Error())
 			return
@@ -266,6 +270,31 @@ func (m *Manager) finish(id, status, errorMessage string) {
 	if snapshot.CallbackURL != "" {
 		go callback(snapshot)
 	}
+	if status == "complete" && m.post != nil && m.post.Enabled() {
+		go m.runPostProcessing(id)
+	}
+}
+
+func (m *Manager) runPostProcessing(id string) {
+	m.mu.Lock()
+	job := m.jobs[id]
+	job.PostProcessingStatus = "running"
+	job.PostProcessingError = ""
+	snapshot := clone(job)
+	m.mu.Unlock()
+	m.publish(snapshot)
+	err := m.post.Run(context.Background(), snapshot)
+	m.mu.Lock()
+	job = m.jobs[id]
+	if err != nil {
+		job.PostProcessingStatus = "failed"
+		job.PostProcessingError = err.Error()
+	} else {
+		job.PostProcessingStatus = "complete"
+	}
+	snapshot = clone(job)
+	m.mu.Unlock()
+	m.publish(snapshot)
 }
 
 func (m *Manager) publish(job *Job) {
