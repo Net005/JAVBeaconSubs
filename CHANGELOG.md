@@ -14,6 +14,9 @@ All notable changes to JAVBeacon Subtitles are documented here.
 - Added contextual translation observability for translated, context, reused, and included-glossary rows while preserving provider token totals.
 - Added validated local text-file import for effectively unbounded `Japanese=English` mappings, with blank-line removal and duplicate/conflict handling.
 - Added an optional high-confidence Japanese-to-English base glossary for JAV, GIGA/tokusatsu heroine, and Akiba-web-style adult/action vocabulary.
+- Added a per-job `keep_japanese` web/API option for retaining `.ja.srt` beside the English subtitle.
+- Added ReazonSpeech NeMo v2 as the primary Japanese ASR backend with persistent model caching and validated Whisper fallback.
+- Added bounded overlapping transcription windows, per-window retry/progress, full-duration coverage checks, and timestamp safety validation.
 
 ### Changed
 
@@ -21,10 +24,14 @@ All notable changes to JAVBeacon Subtitles are documented here.
 - Clarified that server path jobs accept any path visible to the process or container, not only `/media`.
 - Reduced contextual request overhead without adding model passes, embedding calls, summaries, or more than four external context rows.
 - Indexed large structured glossaries once per job and raised the settings payload allowance for very large mapping collections.
+- Changed Docker startup to run the service as the configured `PUID` and `PGID` (`GID`/`GUID` aliases supported) after root-only model preparation.
+- Changed contextual and Japanese-only modes to use Japanese-specific ReazonSpeech; direct speech-to-English mode continues to use Whisper.
 
 ### Fixed
 
 - Made large Japanese term-mapping imports open at the first entry in a taller editor, with controls to show every mapping or collapse the overview.
+- Made generated SRT files group-readable/writable so the configured host user and group can manage them normally.
+- Prevented malformed ASR output such as a segment spanning from six minutes to the end of a feature-length recording from being accepted as a successful job.
 
 ## [0.2.1] - 2026-09-01
 

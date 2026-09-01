@@ -8,6 +8,7 @@ services:
         WHISPER_CPP_REF: "${WHISPER_CPP_REF:-f049fff95a089aa9969deb009cdd4892b3e74916}"
         CUDA_ARCHITECTURES: "${CUDA_ARCHITECTURES:-75;86}"
         WHISPER_BUILD_JOBS: "${WHISPER_BUILD_JOBS:-2}"
+        REAZONSPEECH_REF: "${REAZONSPEECH_REF:-8be654dc9ba8d205759d9d93fe717ae37f321b01}"
     image: javbeaconsubs:cpu-local
     restart: unless-stopped
     ports:
@@ -19,11 +20,18 @@ services:
       JAVBEACONSUBS_WEB_USERNAME: "${JAVBEACONSUBS_WEB_USERNAME:-}"
       JAVBEACONSUBS_WEB_PASSWORD: "${JAVBEACONSUBS_WEB_PASSWORD:-}"
       JAVBEACONSUBS_TRANSLATION_API_KEY: "${JAVBEACONSUBS_TRANSLATION_API_KEY:-}"
+      JAVBEACONSUBS_ASR_BACKEND: "${JAVBEACONSUBS_ASR_BACKEND:-reazon}"
+      JAVBEACONSUBS_REAZON_MODEL: "${JAVBEACONSUBS_REAZON_MODEL:-reazon-research/reazonspeech-nemo-v2}"
       JAVBEACONSUBS_DOWNLOAD_MODELS: "${JAVBEACONSUBS_DOWNLOAD_MODELS:-true}"
       JAVBEACONSUBS_USE_GPU: "false"
       JAVBEACONSUBS_GPU_PREFLIGHT: "false"
       JAVBEACONSUBS_GPU_AUTO_RESET: "false"
       JAVBEACONSUBS_GPU_FALLBACK_CPU: "true"
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-}"
+      GID: "${GID:-}"
+      GUID: "${GUID:-}"
+      UMASK: "${UMASK:-0002}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

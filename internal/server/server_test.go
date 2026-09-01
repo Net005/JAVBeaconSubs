@@ -41,6 +41,18 @@ func TestSupportedUploadExtension(t *testing.T) {
 	}
 }
 
+func TestOptionalFormBool(t *testing.T) {
+	if value, err := optionalFormBool(""); err != nil || value != nil {
+		t.Fatalf("empty value = %v, %v", value, err)
+	}
+	if value, err := optionalFormBool("false"); err != nil || value == nil || *value {
+		t.Fatalf("false value = %v, %v", value, err)
+	}
+	if _, err := optionalFormBool("sometimes"); err == nil {
+		t.Fatal("invalid boolean was accepted")
+	}
+}
+
 func TestSingleFileUploadCreatesPersistedJob(t *testing.T) {
 	root := t.TempDir()
 	cfg := config.Config{UploadDir: filepath.Join(root, "uploads"), MaxUploadGB: 1, APIToken: "test-api-token"}
@@ -69,6 +81,7 @@ func TestSingleFileUploadCreatesPersistedJob(t *testing.T) {
 	}
 	_, _ = file.Write([]byte("fake media"))
 	_ = writer.WriteField("external_id", "movie-42")
+	_ = writer.WriteField("keep_japanese", "true")
 	if err := writer.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +97,7 @@ func TestSingleFileUploadCreatesPersistedJob(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &job); err != nil {
 		t.Fatal(err)
 	}
-	if job.ExternalID != "movie-42" || len(job.Files) != 1 {
+	if job.ExternalID != "movie-42" || len(job.Files) != 1 || !job.KeepJapanese {
 		t.Fatalf("unexpected job: %#v", job)
 	}
 	if _, err := os.Stat(job.Files[0]); err != nil {

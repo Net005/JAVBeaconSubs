@@ -44,3 +44,29 @@ func TestWebUICanShowEveryGlossaryMapping(t *testing.T) {
 		}
 	}
 }
+
+func TestWebUIExposesJapaneseSidecarAndOwnershipSetup(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{"keepJapanese", "keep_japanese", "Also keep Japanese", "PUID", "PGID", "GUID"} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("web sidecar/setup UI is missing %q", required)
+		}
+	}
+}
+
+func TestWebUIExplainsPrimaryJapaneseASR(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{"Japanese speech recognition", "ReazonSpeech", "JAVBEACONSUBS_ASR_BACKEND", "validated fallback"} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("web ASR setup is missing %q", required)
+		}
+	}
+}

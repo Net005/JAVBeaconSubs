@@ -25,22 +25,29 @@ type Config struct {
 }
 
 type WhisperConfig struct {
-	Binary         string  `json:"binary"`
-	Model          string  `json:"model"`
-	VADModel       string  `json:"vad_model"`
-	Language       string  `json:"language"`
-	Threads        int     `json:"threads"`
-	UseGPU         bool    `json:"use_gpu"`
-	BeamSize       int     `json:"beam_size"`
-	VAD            bool    `json:"vad"`
-	VADThreshold   float64 `json:"vad_threshold"`
-	MinSpeechMS    int     `json:"vad_min_speech_ms"`
-	MinSilenceMS   int     `json:"vad_min_silence_ms"`
-	SpeechPadMS    int     `json:"vad_speech_pad_ms"`
-	Prompt         string  `json:"prompt"`
-	GPUPreflight   bool    `json:"gpu_preflight"`
-	GPUAutoReset   bool    `json:"gpu_auto_reset"`
-	GPUFallbackCPU bool    `json:"gpu_fallback_cpu"`
+	Backend         string  `json:"backend"`
+	Binary          string  `json:"binary"`
+	Model           string  `json:"model"`
+	ReazonScript    string  `json:"reazon_script"`
+	ReazonModel     string  `json:"reazon_model"`
+	ChunkSeconds    int     `json:"chunk_seconds"`
+	OverlapSeconds  int     `json:"chunk_overlap_seconds"`
+	MaxSegmentSec   int     `json:"max_segment_seconds"`
+	FallbackWhisper bool    `json:"fallback_whisper"`
+	VADModel        string  `json:"vad_model"`
+	Language        string  `json:"language"`
+	Threads         int     `json:"threads"`
+	UseGPU          bool    `json:"use_gpu"`
+	BeamSize        int     `json:"beam_size"`
+	VAD             bool    `json:"vad"`
+	VADThreshold    float64 `json:"vad_threshold"`
+	MinSpeechMS     int     `json:"vad_min_speech_ms"`
+	MinSilenceMS    int     `json:"vad_min_silence_ms"`
+	SpeechPadMS     int     `json:"vad_speech_pad_ms"`
+	Prompt          string  `json:"prompt"`
+	GPUPreflight    bool    `json:"gpu_preflight"`
+	GPUAutoReset    bool    `json:"gpu_auto_reset"`
+	GPUFallbackCPU  bool    `json:"gpu_fallback_cpu"`
 }
 
 type TranslationConfig struct {
@@ -83,7 +90,9 @@ func defaults() Config {
 		Listen: "127.0.0.1:8097", DatabasePath: "./data/javbeaconsubs.db",
 		UploadDir: "./data/uploads", MaxUploadGB: 30,
 		Whisper: WhisperConfig{
-			Binary: "whisper-cli", Language: "ja", Threads: 8, UseGPU: true,
+			Backend: "reazon", Binary: "whisper-cli", Language: "ja", Threads: 8, UseGPU: true,
+			ReazonScript: "./asr/reazon_worker.py", ReazonModel: "reazon-research/reazonspeech-nemo-v2",
+			ChunkSeconds: 45, OverlapSeconds: 2, MaxSegmentSec: 60, FallbackWhisper: true,
 			BeamSize: 5, VAD: true, VADThreshold: .42, MinSpeechMS: 100,
 			MinSilenceMS: 250, SpeechPadMS: 320, GPUPreflight: true,
 			GPUFallbackCPU: true,
@@ -91,7 +100,7 @@ func defaults() Config {
 		},
 		Translation:    TranslationConfig{Mode: "direct", BatchSize: 24, TimeoutSec: 120, ContextGapMS: 8000},
 		PostProcessing: PostProcessingConfig{Mode: "none", TimeoutSec: 60},
-		Output:         OutputConfig{EnglishSuffix: ".en.srt", JapaneseSuffix: ".ja.srt", KeepJapanese: true, MaxLineChars: 42, MaxLines: 2},
+		Output:         OutputConfig{EnglishSuffix: ".en.srt", JapaneseSuffix: ".ja.srt", KeepJapanese: false, MaxLineChars: 42, MaxLines: 2},
 		Workers:        1,
 	}
 }
@@ -128,6 +137,15 @@ func Load(path string) (Config, error) {
 	}
 	if value := os.Getenv("JAVBEACONSUBS_WHISPER_BINARY"); value != "" {
 		cfg.Whisper.Binary = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_ASR_BACKEND"); value != "" {
+		cfg.Whisper.Backend = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_REAZON_SCRIPT"); value != "" {
+		cfg.Whisper.ReazonScript = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_REAZON_MODEL"); value != "" {
+		cfg.Whisper.ReazonModel = value
 	}
 	if value := os.Getenv("JAVBEACONSUBS_WHISPER_MODEL"); value != "" {
 		cfg.Whisper.Model = value
@@ -170,6 +188,22 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Whisper.Language == "" {
 		cfg.Whisper.Language = "ja"
+	}
+	cfg.Whisper.Backend = strings.ToLower(strings.TrimSpace(cfg.Whisper.Backend))
+	if cfg.Whisper.Backend == "" {
+		cfg.Whisper.Backend = "reazon"
+	}
+	if cfg.Whisper.Backend != "reazon" && cfg.Whisper.Backend != "whisper" {
+		return cfg, errors.New("whisper.backend must be reazon or whisper")
+	}
+	if cfg.Whisper.ChunkSeconds < 10 {
+		cfg.Whisper.ChunkSeconds = 45
+	}
+	if cfg.Whisper.OverlapSeconds < 0 || cfg.Whisper.OverlapSeconds*2 >= cfg.Whisper.ChunkSeconds {
+		return cfg, errors.New("whisper.chunk_overlap_seconds must be non-negative and less than half the chunk duration")
+	}
+	if cfg.Whisper.MaxSegmentSec < 1 {
+		cfg.Whisper.MaxSegmentSec = 60
 	}
 	if err := NormalizeTranslation(&cfg.Translation); err != nil {
 		return cfg, err
