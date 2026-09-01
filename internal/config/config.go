@@ -231,13 +231,23 @@ func NormalizeTranslation(value *TranslationConfig) error {
 		return errors.New("translation.context_gap_ms cannot exceed 3600000")
 	}
 	if value.StructuredGlossary != nil {
-		for i := range value.StructuredGlossary.Style {
-			value.StructuredGlossary.Style[i] = strings.TrimSpace(value.StructuredGlossary.Style[i])
+		styles := make([]string, 0, len(value.StructuredGlossary.Style))
+		seenStyles := make(map[string]bool, len(value.StructuredGlossary.Style))
+		for _, style := range value.StructuredGlossary.Style {
+			style = strings.TrimSpace(style)
+			if style != "" && !seenStyles[style] {
+				styles = append(styles, style)
+				seenStyles[style] = true
+			}
 		}
+		value.StructuredGlossary.Style = styles
 		cleanTerms := make(map[string]string, len(value.StructuredGlossary.Terms))
 		for source, target := range value.StructuredGlossary.Terms {
 			source, target = strings.TrimSpace(source), strings.TrimSpace(target)
 			if source != "" && target != "" {
+				if existing, exists := cleanTerms[source]; exists && existing != target {
+					return fmt.Errorf("structured glossary has conflicting translations for %q", source)
+				}
 				cleanTerms[source] = target
 			}
 		}

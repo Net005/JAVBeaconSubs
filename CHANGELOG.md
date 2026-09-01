@@ -12,12 +12,14 @@ All notable changes to JAVBeacon Subtitles are documented here.
 - Included Bash and curl in the runtime image and added a configurable read-only scripts mount.
 - Added scene-aware translation windows with a configurable silence boundary, compact request rows, relevant structured glossary filtering, and optional job-scoped exact translation memory.
 - Added contextual translation observability for translated, context, reused, and included-glossary rows while preserving provider token totals.
+- Added validated local text-file import for effectively unbounded `Japanese=English` mappings, with blank-line removal and duplicate/conflict handling.
 
 ### Changed
 
 - Removed the API-token field from the browser workflow; signed-in users have full web functionality through their session.
 - Clarified that server path jobs accept any path visible to the process or container, not only `/media`.
 - Reduced contextual request overhead without adding model passes, embedding calls, summaries, or more than four external context rows.
+- Indexed large structured glossaries once per job and raised the settings payload allowance for very large mapping collections.
 
 ## [0.2.1] - 2026-09-01
 

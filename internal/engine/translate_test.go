@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -131,6 +132,21 @@ func TestStructuredGlossaryIncludesOnlyRelevantTerms(t *testing.T) {
 	}
 	if count != 3 {
 		t.Fatalf("included entries = %d, want 3", count)
+	}
+}
+
+func TestLargeStructuredGlossaryFiltersBeforeSerialization(t *testing.T) {
+	terms := make(map[string]string, 2000)
+	for i := 0; i < 2000; i++ {
+		terms[fmt.Sprintf("用語%04d", i)] = fmt.Sprintf("term-%04d", i)
+	}
+	index := newStructuredGlossaryIndex(&config.StructuredGlossary{Terms: terms})
+	instructions, count := glossaryInstructionsIndexed("", index, []translationWindowRow{{Text: "ここでは用語1499だけを使います"}})
+	if count != 1 || !strings.Contains(instructions, "用語1499 => term-1499") {
+		t.Fatalf("large glossary filtering failed: count=%d instructions=%q", count, instructions)
+	}
+	if strings.Contains(instructions, "用語1498") {
+		t.Fatal("irrelevant mapping was serialized")
 	}
 }
 
