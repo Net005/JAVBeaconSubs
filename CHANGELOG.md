@@ -39,7 +39,7 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ### Fixed
 
-- Installed the native SoX executable and NumPy before resolving Qwen/NeMo dependencies, preventing the Python `sox` package from failing during Docker metadata generation.
+- Installed the native SoX executable plus NumPy and `typing-extensions` before resolving Qwen/NeMo dependencies, covering the Python `sox` package's undeclared metadata-time imports during Docker builds.
 - Made large Japanese term-mapping imports open at the first entry in a taller editor, with controls to show every mapping or collapse the overview.
 - Made generated SRT files group-readable/writable so the configured host user and group can manage them normally.
 - Prevented malformed ASR output such as a segment spanning from six minutes to the end of a feature-length recording from being accepted as a successful job.
