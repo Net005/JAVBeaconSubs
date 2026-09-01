@@ -2,6 +2,23 @@
 
 All notable changes to JAVBeacon Subtitles are documented here.
 
+## [Unreleased]
+
+### Added
+
+- Added first-run username/password web login with SQLite-backed password hashes and HTTP-only sessions, while retaining bearer-token authentication for external API clients.
+- Added a dedicated Settings tab for translation and persistent Bash/webhook post-processing.
+- Added an in-app Setup tab with recursive folder API, arbitrary mount, and post-processing examples.
+- Included Bash and curl in the runtime image and added a configurable read-only scripts mount.
+- Added scene-aware translation windows with a configurable silence boundary, compact request rows, relevant structured glossary filtering, and optional job-scoped exact translation memory.
+- Added contextual translation observability for translated, context, reused, and included-glossary rows while preserving provider token totals.
+
+### Changed
+
+- Removed the API-token field from the browser workflow; signed-in users have full web functionality through their session.
+- Clarified that server path jobs accept any path visible to the process or container, not only `/media`.
+- Reduced contextual request overhead without adding model passes, embedding calls, summaries, or more than four external context rows.
+
 ## [0.2.1] - 2026-09-01
 
 ### Fixed

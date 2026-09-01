@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"javbeaconsubs/internal/auth"
 	"javbeaconsubs/internal/config"
 	"javbeaconsubs/internal/engine"
 	"javbeaconsubs/internal/jobs"
@@ -40,15 +41,31 @@ func main() {
 		fmt.Fprintln(os.Stderr, "load saved settings:", loadErr)
 		os.Exit(2)
 	} else if ok {
+		if normalizeErr := config.NormalizeTranslation(&saved); normalizeErr != nil {
+			fmt.Fprintln(os.Stderr, "validate saved translation settings:", normalizeErr)
+			os.Exit(2)
+		}
 		cfg.Translation = saved
 	}
+	if saved, ok, loadErr := database.LoadPostProcessing(); loadErr != nil {
+		fmt.Fprintln(os.Stderr, "load saved post-processing settings:", loadErr)
+		os.Exit(2)
+	} else if ok {
+		cfg.PostProcessing = saved
+	}
+	authManager, err := auth.New(database, cfg.WebUsername, cfg.WebPassword)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "load web authentication:", err)
+		os.Exit(2)
+	}
 	runner := engine.New(cfg, logger)
-	manager, err := jobs.New(cfg, runner, database, logger)
+	postProcessor := jobs.NewPostProcessor(cfg.PostProcessing, logger)
+	manager, err := jobs.New(cfg, runner, database, postProcessor, logger)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "load jobs:", err)
 		os.Exit(2)
 	}
-	api := server.New(cfg, manager, runner, database, logger)
+	api := server.New(cfg, manager, runner, authManager, postProcessor, database, logger)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Listen,

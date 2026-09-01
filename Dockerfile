@@ -18,12 +18,12 @@ RUN cmake -S . -B build -DGGML_CUDA=ON -DGGML_CUDA_NO_VMM=ON -DCMAKE_CUDA_ARCHIT
 
 FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION}
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends bash ca-certificates curl ffmpeg && rm -rf /var/lib/apt/lists/*
 COPY --from=whisper-builder /app/build/bin /app/build/bin
 COPY --from=go-builder /out/javbeaconsubs /usr/local/bin/javbeaconsubs
 COPY config.docker.json /app/config.json
 COPY docker/entrypoint.sh /usr/local/bin/javbeaconsubs-entrypoint
-RUN chmod 0755 /usr/local/bin/javbeaconsubs-entrypoint && mkdir -p /data/uploads /models
+RUN chmod 0755 /usr/local/bin/javbeaconsubs-entrypoint && mkdir -p /data/uploads /models /scripts
 ENV JAVBEACONSUBS_LISTEN=0.0.0.0:8097 \
     JAVBEACONSUBS_DATABASE_PATH=/data/javbeaconsubs.db \
     JAVBEACONSUBS_UPLOAD_DIR=/data/uploads \
@@ -33,6 +33,6 @@ ENV JAVBEACONSUBS_LISTEN=0.0.0.0:8097 \
     JAVBEACONSUBS_DOWNLOAD_MODELS=true \
     JAVBEACONSUBS_GPU_FALLBACK_CPU=true
 EXPOSE 8097
-VOLUME ["/data", "/models"]
+VOLUME ["/data", "/models", "/scripts"]
 ENTRYPOINT ["/usr/local/bin/javbeaconsubs-entrypoint"]
 CMD ["/usr/local/bin/javbeaconsubs", "-config", "/app/config.json"]

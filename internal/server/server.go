@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"javbeaconsubs/internal/auth"
 	"javbeaconsubs/internal/config"
 	"javbeaconsubs/internal/engine"
 	"javbeaconsubs/internal/jobs"
@@ -29,21 +30,28 @@ type Server struct {
 	cfg      config.Config
 	jobs     *jobs.Manager
 	runner   *engine.Runner
+	auth     *auth.Manager
+	post     *jobs.PostProcessor
 	settings SettingsStore
 	log      *slog.Logger
 }
 
 type SettingsStore interface {
 	SaveTranslation(config.TranslationConfig) error
+	SavePostProcessing(config.PostProcessingConfig) error
 }
 
-func New(cfg config.Config, jobs *jobs.Manager, runner *engine.Runner, settings SettingsStore, log *slog.Logger) *Server {
-	return &Server{cfg: cfg, jobs: jobs, runner: runner, settings: settings, log: log}
+func New(cfg config.Config, manager *jobs.Manager, runner *engine.Runner, authManager *auth.Manager, post *jobs.PostProcessor, settings SettingsStore, log *slog.Logger) *Server {
+	return &Server{cfg: cfg, jobs: manager, runner: runner, auth: authManager, post: post, settings: settings, log: log}
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", s.index)
+	mux.HandleFunc("GET /api/v1/session", s.sessionStatus)
+	mux.HandleFunc("POST /api/v1/session", s.login)
+	mux.HandleFunc("POST /api/v1/session/setup", s.setupAccount)
+	mux.HandleFunc("DELETE /api/v1/session", s.logout)
 	mux.HandleFunc("GET /api/v1/health", s.health)
 	mux.HandleFunc("GET /api/v1/settings", s.getSettings)
 	mux.HandleFunc("PUT /api/v1/settings", s.updateSettings)
@@ -58,36 +66,65 @@ func (s *Server) Handler() http.Handler {
 }
 
 type translationSettingsResponse struct {
-	Mode       string `json:"mode"`
-	BaseURL    string `json:"base_url"`
-	Model      string `json:"model"`
-	BatchSize  int    `json:"batch_size"`
-	TimeoutSec int    `json:"timeout_seconds"`
-	Glossary   string `json:"glossary"`
-	APIKeySet  bool   `json:"api_key_set"`
+	Mode               string                     `json:"mode"`
+	BaseURL            string                     `json:"base_url"`
+	Model              string                     `json:"model"`
+	BatchSize          int                        `json:"batch_size"`
+	TimeoutSec         int                        `json:"timeout_seconds"`
+	ContextGapMS       int64                      `json:"context_gap_ms"`
+	TranslationMemory  bool                       `json:"translation_memory"`
+	Glossary           string                     `json:"glossary"`
+	StructuredGlossary *config.StructuredGlossary `json:"structured_glossary,omitempty"`
+	APIKeySet          bool                       `json:"api_key_set"`
 }
 
 type translationSettingsRequest struct {
-	Mode        string `json:"mode"`
-	BaseURL     string `json:"base_url"`
-	APIKey      string `json:"api_key"`
-	ClearAPIKey bool   `json:"clear_api_key"`
-	Model       string `json:"model"`
-	BatchSize   int    `json:"batch_size"`
-	TimeoutSec  int    `json:"timeout_seconds"`
-	Glossary    string `json:"glossary"`
+	Mode               string                     `json:"mode"`
+	BaseURL            string                     `json:"base_url"`
+	APIKey             string                     `json:"api_key"`
+	ClearAPIKey        bool                       `json:"clear_api_key"`
+	Model              string                     `json:"model"`
+	BatchSize          int                        `json:"batch_size"`
+	TimeoutSec         int                        `json:"timeout_seconds"`
+	ContextGapMS       int64                      `json:"context_gap_ms"`
+	TranslationMemory  bool                       `json:"translation_memory"`
+	Glossary           string                     `json:"glossary"`
+	StructuredGlossary *config.StructuredGlossary `json:"structured_glossary"`
+}
+
+type postProcessingSettingsResponse struct {
+	Mode           string `json:"mode"`
+	ShellScript    string `json:"shell_script"`
+	WebhookURL     string `json:"webhook_url"`
+	TimeoutSec     int    `json:"timeout_seconds"`
+	BearerTokenSet bool   `json:"bearer_token_set"`
+}
+
+type postProcessingSettingsRequest struct {
+	Mode               string `json:"mode"`
+	ShellScript        string `json:"shell_script"`
+	WebhookURL         string `json:"webhook_url"`
+	WebhookBearerToken string `json:"webhook_bearer_token"`
+	ClearBearerToken   bool   `json:"clear_bearer_token"`
+	TimeoutSec         int    `json:"timeout_seconds"`
+}
+
+type settingsRequest struct {
+	Translation    translationSettingsRequest    `json:"translation"`
+	PostProcessing postProcessingSettingsRequest `json:"post_processing"`
 }
 
 func settingsResponse(value config.TranslationConfig) translationSettingsResponse {
-	return translationSettingsResponse{Mode: value.Mode, BaseURL: value.BaseURL, Model: value.Model, BatchSize: value.BatchSize, TimeoutSec: value.TimeoutSec, Glossary: value.Glossary, APIKeySet: value.APIKey != ""}
+	return translationSettingsResponse{Mode: value.Mode, BaseURL: value.BaseURL, Model: value.Model, BatchSize: value.BatchSize, TimeoutSec: value.TimeoutSec, ContextGapMS: value.ContextGapMS, TranslationMemory: value.TranslationMemory, Glossary: value.Glossary, StructuredGlossary: value.StructuredGlossary, APIKeySet: value.APIKey != ""}
 }
 
 func (s *Server) getSettings(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, 200, map[string]any{"translation": settingsResponse(s.runner.Translation())})
+	post := s.post.Config()
+	writeJSON(w, 200, map[string]any{"translation": settingsResponse(s.runner.Translation()), "post_processing": postProcessingSettingsResponse{Mode: post.Mode, ShellScript: post.ShellScript, WebhookURL: post.WebhookURL, TimeoutSec: post.TimeoutSec, BearerTokenSet: post.WebhookBearerToken != ""}})
 }
 
 func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
-	var request translationSettingsRequest
+	var request settingsRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
@@ -95,13 +132,26 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current := s.runner.Translation()
-	value := config.TranslationConfig{Mode: request.Mode, BaseURL: request.BaseURL, Model: request.Model, BatchSize: request.BatchSize, TimeoutSec: request.TimeoutSec, Glossary: request.Glossary, APIKey: current.APIKey}
-	if request.ClearAPIKey {
+	t := request.Translation
+	value := config.TranslationConfig{Mode: t.Mode, BaseURL: t.BaseURL, Model: t.Model, BatchSize: t.BatchSize, TimeoutSec: t.TimeoutSec, ContextGapMS: t.ContextGapMS, TranslationMemory: t.TranslationMemory, Glossary: t.Glossary, StructuredGlossary: t.StructuredGlossary, APIKey: current.APIKey}
+	if t.ClearAPIKey {
 		value.APIKey = ""
-	} else if strings.TrimSpace(request.APIKey) != "" {
-		value.APIKey = strings.TrimSpace(request.APIKey)
+	} else if strings.TrimSpace(t.APIKey) != "" {
+		value.APIKey = strings.TrimSpace(t.APIKey)
 	}
 	if err := config.NormalizeTranslation(&value); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	currentPost := s.post.Config()
+	p := request.PostProcessing
+	postValue := config.PostProcessingConfig{Mode: p.Mode, ShellScript: p.ShellScript, WebhookURL: p.WebhookURL, TimeoutSec: p.TimeoutSec, WebhookBearerToken: currentPost.WebhookBearerToken}
+	if p.ClearBearerToken {
+		postValue.WebhookBearerToken = ""
+	} else if strings.TrimSpace(p.WebhookBearerToken) != "" {
+		postValue.WebhookBearerToken = strings.TrimSpace(p.WebhookBearerToken)
+	}
+	if err := config.NormalizePostProcessing(&postValue); err != nil {
 		writeJSON(w, 400, map[string]string{"error": err.Error()})
 		return
 	}
@@ -114,29 +164,100 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 500, map[string]string{"error": "could not save settings"})
 		return
 	}
+	if err := s.settings.SavePostProcessing(postValue); err != nil {
+		s.log.Error("save post-processing settings", "error", err)
+		writeJSON(w, 500, map[string]string{"error": "could not save post-processing settings"})
+		return
+	}
 	s.runner.UpdateTranslation(value)
-	writeJSON(w, 200, map[string]any{"translation": settingsResponse(value)})
+	s.post.Update(postValue)
+	writeJSON(w, 200, map[string]any{"translation": settingsResponse(value), "post_processing": postProcessingSettingsResponse{Mode: postValue.Mode, ShellScript: postValue.ShellScript, WebhookURL: postValue.WebhookURL, TimeoutSec: postValue.TimeoutSec, BearerTokenSet: postValue.WebhookBearerToken != ""}})
 }
 
 func (s *Server) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		if strings.HasPrefix(r.URL.Path, "/api/") && s.cfg.APIToken != "" {
-			provided := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-			if provided == "" {
-				provided = r.Header.Get("X-API-Key")
-			}
-			if provided == "" {
-				provided = r.URL.Query().Get("token")
-			}
-			if subtle.ConstantTimeCompare([]byte(provided), []byte(s.cfg.APIToken)) != 1 {
+		if strings.HasPrefix(r.URL.Path, "/api/") && !strings.HasPrefix(r.URL.Path, "/api/v1/session") {
+			if !s.validSession(r) && !s.validAPIToken(r) {
 				writeJSON(w, 401, map[string]string{"error": "unauthorized"})
 				return
 			}
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+const sessionCookieName = "javbeaconsubs_session"
+
+func (s *Server) validSession(r *http.Request) bool {
+	if s.auth == nil {
+		return false
+	}
+	cookie, err := r.Cookie(sessionCookieName)
+	return err == nil && s.auth.Valid(cookie.Value)
+}
+
+func (s *Server) validAPIToken(r *http.Request) bool {
+	if s.cfg.APIToken == "" {
+		return false
+	}
+	provided := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if provided == "" {
+		provided = r.Header.Get("X-API-Key")
+	}
+	if provided == "" {
+		provided = r.URL.Query().Get("token")
+	}
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(s.cfg.APIToken)) == 1
+}
+
+func (s *Server) sessionStatus(w http.ResponseWriter, r *http.Request) {
+	username, configured := s.auth.Status()
+	writeJSON(w, 200, map[string]any{"authenticated": s.validSession(r), "configured": configured, "username": username})
+}
+
+type credentialsRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func (s *Server) setupAccount(w http.ResponseWriter, r *http.Request) {
+	var input credentialsRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&input); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid credentials"})
+		return
+	}
+	if err := s.auth.Setup(input.Username, input.Password); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	s.issueSession(w, r, input)
+}
+
+func (s *Server) login(w http.ResponseWriter, r *http.Request) {
+	var input credentialsRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&input); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid credentials"})
+		return
+	}
+	s.issueSession(w, r, input)
+}
+
+func (s *Server) issueSession(w http.ResponseWriter, r *http.Request, input credentialsRequest) {
+	token, err := s.auth.Authenticate(input.Username, input.Password)
+	if err != nil {
+		writeJSON(w, 401, map[string]string{"error": err.Error()})
+		return
+	}
+	secure := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: token, Path: "/", HttpOnly: true, Secure: secure, SameSite: http.SameSiteStrictMode, MaxAge: 7 * 24 * 60 * 60})
+	writeJSON(w, 200, map[string]any{"authenticated": true, "username": input.Username})
+}
+
+func (s *Server) logout(w http.ResponseWriter, _ *http.Request) {
+	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: "", Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: -1})
+	writeJSON(w, 200, map[string]bool{"authenticated": false})
 }
 func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {

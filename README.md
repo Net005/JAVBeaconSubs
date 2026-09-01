@@ -24,7 +24,7 @@ This project already contains the verified `models/ggml-large-v3.bin`; Compose b
 
 ```sh
 cp .env.example .env
-# Set MEDIA_PATH in .env to the host folder JAVBeacon and this service share.
+# Set an external API token and any host paths you want to expose.
 docker compose up --build -d
 docker compose logs -f javbeaconsubs
 ```
@@ -47,7 +47,15 @@ For a host without NVIDIA support, use the standalone CPU definition:
 docker compose -f compose.cpu.yaml up --build -d
 ```
 
-`MEDIA_PATH` is mounted at `/media` read/write because subtitles are written beside server-side media. The service never scans it automatically: JAVBeacon or the web UI must submit a specific file or folder. The application accepts any readable file or folder path; Docker mounts remain the real visibility boundary. Add extra read/write bind mounts under `services.javbeaconsubs.volumes` when libraries live outside `MEDIA_PATH`.
+`MEDIA_PATH` is only a convenient default mount at `/media`; it is not an allowlist. The service accepts any file or folder path visible inside the container and never scans a mount automatically. Add as many read/write bind mounts as needed, preferably preserving the same host and container path so JAVBeacon can submit paths without translation:
+
+```yaml
+services:
+  javbeaconsubs:
+    volumes:
+      - "/mnt/data/movies:/mnt/data/movies"
+      - "/srv/archive:/srv/archive"
+```
 
 To attach this service to an existing JAVBeacon Compose network, set `JAVBEACON_NETWORK` to that network's actual Docker name and add the optional overlay:
 
@@ -73,9 +81,10 @@ Open `http://127.0.0.1:8097`.
 
 There is no application-level path allowlist. Native installs can process any readable path supplied through the API. Containers can process any path mounted into the container. Because submitted paths can cause media to be read and subtitles to be written beside it, protect remotely reachable installations with `JAVBEACONSUBS_API_TOKEN` and a trusted reverse proxy.
 
-The two `.env` credentials have separate purposes:
+Authentication and translation credentials have separate purposes:
 
-- `JAVBEACONSUBS_API_TOKEN` protects this service's web and REST API. JAVBeacon and other clients send the same value as `Authorization: Bearer <token>` or `X-API-Key: <token>`. Leaving it blank disables API authentication.
+- The web interface uses a username/password account stored in SQLite. On first launch it asks you to create the administrator account, then uses a secure, HTTP-only session cookie. Optional `JAVBEACONSUBS_WEB_USERNAME` and `JAVBEACONSUBS_WEB_PASSWORD` values can seed the first account for unattended deployments.
+- `JAVBEACONSUBS_API_TOKEN` is only for JAVBeacon, curl, and other external REST clients. Send it as `Authorization: Bearer <token>` or `X-API-Key: <token>`. It is never required in the browser after web login.
 - `JAVBEACONSUBS_TRANSLATION_API_KEY` is sent as a Bearer credential to the configured OpenAI-compatible endpoint only when contextual translation is used. It is not used to access JAVBeaconSubs. Leave it blank for direct Whisper translation or an unauthenticated local endpoint such as Ollama.
 
 ## Web interface
@@ -85,7 +94,15 @@ The job form has two explicit modes:
 - **Upload one file** streams one video/audio file into managed storage. When processing finishes, English and optional Japanese SRT downloads appear on its job card.
 - **Server paths** accepts one or more exact files and/or folders already visible to the service. Folder traversal happens only when requested.
 
-The permanent **Translation settings** panel switches between direct local translation, Japanese-only transcription, and higher-quality contextual translation. It stores the endpoint URL, model, key, batching, timeout, and glossary in SQLite. Saved API keys are never returned to the browser; leaving the key blank keeps the existing value.
+The separate **Settings** tab switches between direct local translation, Japanese-only transcription, and higher-quality contextual translation. It stores the endpoint URL, model, key, batching, timeout, scene-gap threshold, translation-memory preference, and glossaries in SQLite. Saved API keys are never returned to the browser; leaving the key blank keeps the existing value.
+
+Contextual requests use scene-aware windows with up to three preceding rows and one following row, stopping at the configured `context_gap_ms` silence boundary (8 seconds by default). Timestamps remain local and are never included in translation requests. Rows are serialized compactly as `[id,t,text]`, and a payload budget prevents the selected window from exceeding the previous serializer's request payload for the same transcript and batch.
+
+The legacy free-form `glossary` remains supported. The optional `structured_glossary` separates global `style` rules from Japanese `terms`; style rules are always included, while a term mapping is sent only when its Japanese source appears in that request's dialogue. Optional exact translation memory is scoped to one submitted job, normalizes whitespace, and deliberately excludes very short reactions.
+
+The same tab can run post-processing after a successful subtitle job. Choose a Bash script mounted under `/scripts`, or an HTTP webhook sent through curl. The full terminal job JSON is supplied to standard input/request body. Bash scripts also receive `JAVBEACONSUBS_JOB_ID`, `JAVBEACONSUBS_EXTERNAL_ID`, `JAVBEACONSUBS_STATUS`, and `JAVBEACONSUBS_FILES`. Both Bash and curl are included in the image, and post-processing status/errors appear on the job card.
+
+`JAVBEACONSUBS_SCRIPTS_PATH` controls the host directory mounted read-only at `/scripts`. Post-processing settings and write-only webhook credentials persist in SQLite.
 
 Running activity cards show the current absolute path, filename, file number, live Whisper progress, and an estimated completion time. The ETA becomes more accurate after the first few percent of work.
 
@@ -97,7 +114,7 @@ The default `translation.mode=direct` uses local whisper.cpp and therefore consu
 
 The example contextual endpoint, `http://host.docker.internal:11434/v1`, is local Ollama. It also consumes no OpenAI usage. “OpenAI-compatible” describes the HTTP protocol; it does not mean requests automatically go to OpenAI.
 
-If `translation.base_url` is changed to `https://api.openai.com/v1` and an OpenAI API key is supplied, calls are billed to that API account using the selected model's input/output token rates. API billing and API rate limits are separate from ChatGPT/Codex plan limits. Exact usage depends on dialogue length; completed job results now record `translation_input_tokens`, `translation_output_tokens`, and `translation_total_tokens` whenever the endpoint returns standard usage metadata.
+If `translation.base_url` is changed to `https://api.openai.com/v1` and an OpenAI API key is supplied, calls are billed to that API account using the selected model's input/output token rates. API billing and API rate limits are separate from ChatGPT/Codex plan limits. Exact usage depends on dialogue length; completed job results record `translation_input_tokens`, `translation_output_tokens`, and `translation_total_tokens` whenever the endpoint returns standard usage metadata. Logs also report translated, context, reused, and included-glossary row counts without dialogue text or credentials, making an old/new movie A/B comparison straightforward.
 
 ## CUDA recovery and VRAM behavior
 
@@ -115,7 +132,20 @@ JAVBEACONSUBS_GPU_FALLBACK_CPU=false docker compose up -d
 
 ## JAVBeacon REST contract
 
-Create one job from any mixture of files and folders:
+Create one job from any mixture of files and folders. This curl example recursively scans `/mnt/data/movies` while preserving existing subtitle files:
+
+```sh
+curl --fail-with-body --request POST 'http://localhost:8097/api/v1/jobs' \
+  --header 'Authorization: Bearer YOUR_API_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "inputs": ["/mnt/data/movies"],
+    "recursive": true,
+    "overwrite": false
+  }'
+```
+
+The equivalent request body, including optional JAVBeacon integration fields, is:
 
 ```http
 POST /api/v1/jobs
@@ -123,8 +153,8 @@ Content-Type: application/json
 
 {
   "inputs": [
-    "/media/library/ABC-123.mkv",
-    "/media/incoming/batch-7"
+    "/mnt/data/movies/ABC-123.mkv",
+    "/srv/archive/incoming/batch-7"
   ],
   "recursive": true,
   "overwrite": false,
@@ -140,13 +170,13 @@ The response is `202 Accepted`, includes the job, and sets `Location: /api/v1/jo
 - `GET /api/v1/events` — server-sent `job` events for live UI updates.
 - `DELETE /api/v1/jobs/{id}` — cancel queued/running work.
 - `GET /api/v1/health` — dependency and model readiness.
-- `GET /api/v1/settings` and `PUT /api/v1/settings` — read/update persistent translation settings (API keys are write-only).
+- `GET /api/v1/settings` and `PUT /api/v1/settings` — read/update persistent translation and post-processing settings (credentials are write-only).
 
 The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, and `overwrite` fields. Generated files can be retrieved through `GET /api/v1/jobs/{id}/outputs/{zeroBasedResultIndex}/{en|ja}`.
 
 If `callback_url` is supplied, the terminal job document is POSTed there. `external_id` round-trips unchanged so JAVBeacon can associate it with its own movie or task record.
 
-When `api_token` is configured, send `Authorization: Bearer …` or `X-API-Key: …` to `/api/*` requests. The web interface has a token field stored locally in that browser.
+External clients send `Authorization: Bearer …` or `X-API-Key: …` to `/api/*` requests. Browser requests are authorized by the web login session instead; the browser never stores or asks for the external API token.
 
 ## Backups and updates
 
@@ -154,6 +184,6 @@ Back up `JAVBEACONSUBS_DATA_PATH` to preserve SQLite history and uploaded files.
 
 ## Quality profile
 
-For the highest-quality Japanese-to-English output, use `ggml-large-v3.bin`, GPU acceleration, and `translation.mode=contextual` with a strong Japanese-capable instruction model. Put recurring names, honorific preferences, and domain vocabulary in `translation.glossary`. `direct` mode is faster and avoids a second model, but it cannot use wider dialogue context or produce the Japanese sidecar.
+For the highest-quality Japanese-to-English output, use `ggml-large-v3.bin`, GPU acceleration, and `translation.mode=contextual` with a strong Japanese-capable instruction model. Put global preferences in `structured_glossary.style` and recurring Japanese names or vocabulary in `structured_glossary.terms`; the legacy `translation.glossary` remains available. `direct` mode is faster and avoids a second model, but it cannot use wider dialogue context or produce the Japanese sidecar.
 
 The default VAD profile intentionally uses 100 ms minimum speech plus 320 ms padding to retain short replies that older region detectors commonly miss. If very quiet speech is still absent, lower `vad_threshold` toward `0.35`; if noise creates false lines, raise it toward `0.50`. Do not compensate by deleting all short segments—Japanese reactions often are short.

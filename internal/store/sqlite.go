@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"javbeaconsubs/internal/auth"
 	"javbeaconsubs/internal/config"
 	"javbeaconsubs/internal/jobs"
 	_ "modernc.org/sqlite"
@@ -133,14 +134,51 @@ func (s *SQLite) LoadTranslation() (config.TranslationConfig, bool, error) {
 }
 
 func (s *SQLite) SaveTranslation(value config.TranslationConfig) error {
+	return s.saveSetting("translation", value)
+}
+
+func (s *SQLite) LoadPostProcessing() (config.PostProcessingConfig, bool, error) {
+	var value config.PostProcessingConfig
+	ok, err := s.loadSetting("post_processing", &value)
+	return value, ok, err
+}
+
+func (s *SQLite) SavePostProcessing(value config.PostProcessingConfig) error {
+	return s.saveSetting("post_processing", value)
+}
+
+func (s *SQLite) LoadWebAuth() (auth.Record, bool, error) {
+	var value auth.Record
+	ok, err := s.loadSetting("web_auth", &value)
+	return value, ok, err
+}
+
+func (s *SQLite) SaveWebAuth(value auth.Record) error { return s.saveSetting("web_auth", value) }
+
+func (s *SQLite) loadSetting(key string, output any) (bool, error) {
+	var payload []byte
+	err := s.db.QueryRow(`SELECT value FROM settings WHERE key = ?`, key).Scan(&payload)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("load setting %s: %w", key, err)
+	}
+	if err := json.Unmarshal(payload, output); err != nil {
+		return false, fmt.Errorf("decode setting %s: %w", key, err)
+	}
+	return true, nil
+}
+
+func (s *SQLite) saveSetting(key string, value any) error {
 	payload, err := json.Marshal(value)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(`INSERT INTO settings (key,value,updated_at) VALUES ('translation',?,?)
-		ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`, payload, time.Now().UTC().Format(time.RFC3339Nano))
+	_, err = s.db.Exec(`INSERT INTO settings (key,value,updated_at) VALUES (?,?,?)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`, key, payload, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
-		return fmt.Errorf("save translation settings: %w", err)
+		return fmt.Errorf("save setting %s: %w", key, err)
 	}
 	return nil
 }

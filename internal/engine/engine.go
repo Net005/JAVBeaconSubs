@@ -94,13 +94,17 @@ func (r *Runner) Check() map[string]any {
 }
 
 func (r *Runner) Process(ctx context.Context, input string, overwrite bool, progress ProgressFunc) (Result, error) {
+	return r.ProcessWithMemory(ctx, input, overwrite, progress, NewTranslationMemory())
+}
+
+func (r *Runner) ProcessWithMemory(ctx context.Context, input string, overwrite bool, progress ProgressFunc, memory *TranslationMemory) (Result, error) {
 	r.mu.RLock()
 	worker := &Runner{cfg: r.cfg, log: r.log, client: r.client}
 	r.mu.RUnlock()
-	return worker.process(ctx, input, overwrite, progress)
+	return worker.process(ctx, input, overwrite, progress, memory)
 }
 
-func (r *Runner) process(ctx context.Context, input string, overwrite bool, progress ProgressFunc) (Result, error) {
+func (r *Runner) process(ctx context.Context, input string, overwrite bool, progress ProgressFunc, memory *TranslationMemory) (Result, error) {
 	result := Result{Input: input}
 	base := strings.TrimSuffix(input, filepath.Ext(input))
 	englishPath := base + r.cfg.Output.EnglishSuffix
@@ -154,7 +158,7 @@ func (r *Runner) process(ctx context.Context, input string, overwrite bool, prog
 	case "contextual":
 		progress("translation", 74, "Translating with surrounding dialogue context")
 		var usage tokenUsage
-		english, usage, err = r.translate(ctx, segments, progress)
+		english, usage, err = r.translate(ctx, segments, progress, memory)
 		if err != nil {
 			return result, err
 		}

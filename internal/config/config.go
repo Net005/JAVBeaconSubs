@@ -10,15 +10,18 @@ import (
 )
 
 type Config struct {
-	Listen       string            `json:"listen"`
-	APIToken     string            `json:"api_token"`
-	DatabasePath string            `json:"database_path"`
-	UploadDir    string            `json:"upload_dir"`
-	MaxUploadGB  int64             `json:"max_upload_gb"`
-	Whisper      WhisperConfig     `json:"whisper"`
-	Translation  TranslationConfig `json:"translation"`
-	Output       OutputConfig      `json:"output"`
-	Workers      int               `json:"workers"`
+	Listen         string               `json:"listen"`
+	APIToken       string               `json:"api_token"`
+	WebUsername    string               `json:"web_username"`
+	WebPassword    string               `json:"web_password"`
+	DatabasePath   string               `json:"database_path"`
+	UploadDir      string               `json:"upload_dir"`
+	MaxUploadGB    int64                `json:"max_upload_gb"`
+	Whisper        WhisperConfig        `json:"whisper"`
+	Translation    TranslationConfig    `json:"translation"`
+	PostProcessing PostProcessingConfig `json:"post_processing"`
+	Output         OutputConfig         `json:"output"`
+	Workers        int                  `json:"workers"`
 }
 
 type WhisperConfig struct {
@@ -41,13 +44,29 @@ type WhisperConfig struct {
 }
 
 type TranslationConfig struct {
-	Mode       string `json:"mode"`
-	BaseURL    string `json:"base_url"`
-	APIKey     string `json:"api_key"`
-	Model      string `json:"model"`
-	BatchSize  int    `json:"batch_size"`
-	TimeoutSec int    `json:"timeout_seconds"`
-	Glossary   string `json:"glossary"`
+	Mode               string              `json:"mode"`
+	BaseURL            string              `json:"base_url"`
+	APIKey             string              `json:"api_key"`
+	Model              string              `json:"model"`
+	BatchSize          int                 `json:"batch_size"`
+	TimeoutSec         int                 `json:"timeout_seconds"`
+	ContextGapMS       int64               `json:"context_gap_ms"`
+	TranslationMemory  bool                `json:"translation_memory"`
+	Glossary           string              `json:"glossary"`
+	StructuredGlossary *StructuredGlossary `json:"structured_glossary,omitempty"`
+}
+
+type StructuredGlossary struct {
+	Style []string          `json:"style,omitempty"`
+	Terms map[string]string `json:"terms,omitempty"`
+}
+
+type PostProcessingConfig struct {
+	Mode               string `json:"mode"`
+	ShellScript        string `json:"shell_script"`
+	WebhookURL         string `json:"webhook_url"`
+	WebhookBearerToken string `json:"webhook_bearer_token"`
+	TimeoutSec         int    `json:"timeout_seconds"`
 }
 
 type OutputConfig struct {
@@ -70,9 +89,10 @@ func defaults() Config {
 			GPUFallbackCPU: true,
 			Prompt:         "日本語の会話です。固有名詞、呼び名、短い返事、息遣いも正確に文字起こししてください。",
 		},
-		Translation: TranslationConfig{Mode: "direct", BatchSize: 24, TimeoutSec: 120},
-		Output:      OutputConfig{EnglishSuffix: ".en.srt", JapaneseSuffix: ".ja.srt", KeepJapanese: true, MaxLineChars: 42, MaxLines: 2},
-		Workers:     1,
+		Translation:    TranslationConfig{Mode: "direct", BatchSize: 24, TimeoutSec: 120, ContextGapMS: 8000},
+		PostProcessing: PostProcessingConfig{Mode: "none", TimeoutSec: 60},
+		Output:         OutputConfig{EnglishSuffix: ".en.srt", JapaneseSuffix: ".ja.srt", KeepJapanese: true, MaxLineChars: 42, MaxLines: 2},
+		Workers:        1,
 	}
 }
 
@@ -90,6 +110,12 @@ func Load(path string) (Config, error) {
 	}
 	if value := os.Getenv("JAVBEACONSUBS_API_TOKEN"); value != "" {
 		cfg.APIToken = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_WEB_USERNAME"); value != "" {
+		cfg.WebUsername = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_WEB_PASSWORD"); value != "" {
+		cfg.WebPassword = value
 	}
 	if value := os.Getenv("JAVBEACONSUBS_LISTEN"); value != "" {
 		cfg.Listen = value
@@ -148,6 +174,9 @@ func Load(path string) (Config, error) {
 	if err := NormalizeTranslation(&cfg.Translation); err != nil {
 		return cfg, err
 	}
+	if err := NormalizePostProcessing(&cfg.PostProcessing); err != nil {
+		return cfg, err
+	}
 	for field, value := range map[string]*string{"database_path": &cfg.DatabasePath, "upload_dir": &cfg.UploadDir} {
 		absolute, err := filepath.Abs(*value)
 		if err != nil {
@@ -156,6 +185,33 @@ func Load(path string) (Config, error) {
 		*value = filepath.Clean(absolute)
 	}
 	return cfg, nil
+}
+
+func NormalizePostProcessing(value *PostProcessingConfig) error {
+	value.Mode = strings.ToLower(strings.TrimSpace(value.Mode))
+	value.ShellScript = strings.TrimSpace(value.ShellScript)
+	value.WebhookURL = strings.TrimSpace(value.WebhookURL)
+	if value.TimeoutSec < 1 {
+		value.TimeoutSec = 60
+	}
+	if value.TimeoutSec > 3600 {
+		return errors.New("post-processing timeout cannot exceed 3600 seconds")
+	}
+	switch value.Mode {
+	case "none":
+		return nil
+	case "shell":
+		if value.ShellScript == "" {
+			return errors.New("shell post-processing requires a script path")
+		}
+	case "webhook":
+		if value.WebhookURL == "" || (!strings.HasPrefix(value.WebhookURL, "http://") && !strings.HasPrefix(value.WebhookURL, "https://")) {
+			return errors.New("webhook post-processing requires an http:// or https:// URL")
+		}
+	default:
+		return errors.New("post-processing mode must be none, shell, or webhook")
+	}
+	return nil
 }
 
 func NormalizeTranslation(value *TranslationConfig) error {
@@ -167,6 +223,25 @@ func NormalizeTranslation(value *TranslationConfig) error {
 	}
 	if value.TimeoutSec < 1 {
 		value.TimeoutSec = 120
+	}
+	if value.ContextGapMS < 1 {
+		value.ContextGapMS = 8000
+	}
+	if value.ContextGapMS > 3_600_000 {
+		return errors.New("translation.context_gap_ms cannot exceed 3600000")
+	}
+	if value.StructuredGlossary != nil {
+		for i := range value.StructuredGlossary.Style {
+			value.StructuredGlossary.Style[i] = strings.TrimSpace(value.StructuredGlossary.Style[i])
+		}
+		cleanTerms := make(map[string]string, len(value.StructuredGlossary.Terms))
+		for source, target := range value.StructuredGlossary.Terms {
+			source, target = strings.TrimSpace(source), strings.TrimSpace(target)
+			if source != "" && target != "" {
+				cleanTerms[source] = target
+			}
+		}
+		value.StructuredGlossary.Terms = cleanTerms
 	}
 	if value.Mode != "direct" && value.Mode != "contextual" && value.Mode != "none" {
 		return fmt.Errorf("translation.mode must be direct, contextual, or none")
