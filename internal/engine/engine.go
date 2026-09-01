@@ -80,7 +80,7 @@ func (r *Runner) Check() map[string]any {
 	result := map[string]any{"ready": whisperErr == nil && ffmpegErr == nil && modelErr == nil, "translation_mode": r.cfg.Translation.Mode}
 	result["asr_backend"] = r.cfg.Whisper.Backend
 	if r.cfg.Whisper.Backend == "qwen" {
-		pythonPath, pythonErr := exec.LookPath("python3")
+		pythonPath, pythonErr := exec.LookPath(r.cfg.Whisper.QwenPython)
 		_, scriptErr := os.Stat(r.cfg.Whisper.QwenScript)
 		if pythonErr != nil || scriptErr != nil {
 			result["ready"] = false
@@ -98,7 +98,7 @@ func (r *Runner) Check() map[string]any {
 		}
 	}
 	if r.cfg.Whisper.Backend == "reazon" {
-		pythonPath, pythonErr := exec.LookPath("python3")
+		pythonPath, pythonErr := exec.LookPath(r.cfg.Whisper.ReazonPython)
 		_, scriptErr := os.Stat(r.cfg.Whisper.ReazonScript)
 		if pythonErr != nil || scriptErr != nil {
 			result["ready"] = false
@@ -352,6 +352,7 @@ func (r *Runner) transcribeQwen(ctx context.Context, wav, prefix string, useGPU 
 		"--qwen-revision", c.QwenRevision,
 		"--context", c.Prompt,
 		"--aligner-model", c.AlignerModel, "--aligner-revision", c.AlignerRevision, "--reazon-model", c.ReazonModel,
+		"--reazon-python", c.ReazonPython, "--reazon-script", c.ReazonBatchScript,
 		"--whisper-binary", c.Binary, "--whisper-model", c.Model,
 		"--batch-size", strconv.Itoa(c.ASRBatchSize),
 		"--vad-threshold", fmt.Sprintf("%.3f", c.VADEnergyFactor),
@@ -370,7 +371,7 @@ func (r *Runner) transcribeQwen(ctx context.Context, wav, prefix string, useGPU 
 	if c.DebugMode {
 		args = append(args, "--debug")
 	}
-	err := runWithProgress(ctx, report, "python3", args...)
+	err := runWithProgress(ctx, report, c.QwenPython, args...)
 	if err != nil && useGPU && c.GPUFallbackCPU {
 		r.log.Warn("Qwen CUDA pipeline failed; retrying this file in CPU mode", "error", err)
 		_ = os.Remove(output)
@@ -380,7 +381,7 @@ func (r *Runner) transcribeQwen(ctx context.Context, wav, prefix string, useGPU 
 			}
 		}
 		report(0)
-		err = runWithProgress(ctx, report, "python3", args...)
+		err = runWithProgress(ctx, report, c.QwenPython, args...)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("Qwen Japanese ASR pipeline: %w", err)
@@ -429,13 +430,13 @@ func (r *Runner) transcribeReazon(ctx context.Context, wav, prefix string, useGP
 		device = "cuda"
 	}
 	args := reazonArgs(c, wav, output, device)
-	err := runWithProgress(ctx, report, "python3", args...)
+	err := runWithProgress(ctx, report, c.ReazonPython, args...)
 	if err != nil && useGPU && c.GPUFallbackCPU {
 		r.log.Warn("ReazonSpeech CUDA inference failed; retrying this file on CPU", "error", err)
 		_ = os.Remove(output)
 		args = reazonArgs(c, wav, output, "cpu")
 		report(0)
-		err = runWithProgress(ctx, report, "python3", args...)
+		err = runWithProgress(ctx, report, c.ReazonPython, args...)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("ReazonSpeech inference: %w", err)

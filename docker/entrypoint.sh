@@ -61,7 +61,7 @@ if [[ "${JAVBEACONSUBS_ASR_BACKEND:-qwen}" == "qwen" ]]; then
       exit 1
     fi
     echo "Caching Qwen Japanese ASR and forced-alignment models..."
-    python3 "${JAVBEACONSUBS_QWEN_SCRIPT:-/app/asr/qwen_pipeline.py}" \
+    "${JAVBEACONSUBS_QWEN_PYTHON:-/opt/qwen-asr/bin/python}" "${JAVBEACONSUBS_QWEN_SCRIPT:-/app/asr/qwen_pipeline.py}" \
       --download-only \
       --qwen-model "$qwen_model" \
       --qwen-revision "$qwen_revision" \
@@ -80,7 +80,7 @@ if [[ "${JAVBEACONSUBS_ASR_BACKEND:-qwen}" == "reazon" ]] || [[ "${JAVBEACONSUBS
       exit 1
     fi
     echo "Caching ReazonSpeech model $reazon_model..."
-    python3 "${JAVBEACONSUBS_REAZON_SCRIPT:-/app/asr/reazon_worker.py}" \
+    "${JAVBEACONSUBS_REAZON_PYTHON:-/opt/reazon/bin/python}" "${JAVBEACONSUBS_REAZON_SCRIPT:-/app/asr/reazon_worker.py}" \
       --download-only --device cpu --model "$reazon_model" --ready-marker "$reazon_marker"
   fi
 fi

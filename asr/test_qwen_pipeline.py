@@ -2,6 +2,7 @@ import importlib.util
 import pathlib
 import sys
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -60,6 +61,20 @@ class PipelineUtilitiesTest(unittest.TestCase):
         groups = pipeline.split_alignment(items)
         self.assertEqual(len(groups), 2)
         self.assertEqual("".join(x["text"] for x in groups[0]), "もうダメ。")
+
+    def test_reazon_fallback_runs_in_external_interpreter(self):
+        regions = [pipeline.Region(10, 20, 0.8, "speech"), pipeline.Region(30, 45, 0.7, "speech")]
+
+        def complete_worker(command, **_kwargs):
+            output = command[command.index("--output") + 1]
+            with open(output, "w", encoding="utf-8") as handle:
+                pipeline.json.dump({"results": [{"index": 1, "text": "  もう   ダメ  "}]}, handle)
+
+        with mock.patch.object(pipeline.subprocess, "run", side_effect=complete_worker) as run:
+            result = pipeline.reazon_batch_transcribe("/opt/reazon/bin/python", "/app/asr/reazon_batch_worker.py", "movie.wav", regions, [1], "model", "cuda")
+
+        self.assertEqual(result, {1: "もう ダメ"})
+        self.assertEqual(run.call_args.args[0][:2], ["/opt/reazon/bin/python", "/app/asr/reazon_batch_worker.py"])
 
 
 if __name__ == "__main__":

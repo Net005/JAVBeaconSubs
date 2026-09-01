@@ -25,43 +25,46 @@ type Config struct {
 }
 
 type WhisperConfig struct {
-	Backend         string  `json:"backend"`
-	Mode            string  `json:"mode"`
-	Profile         string  `json:"profile"`
-	QwenScript      string  `json:"qwen_script"`
-	QwenModel       string  `json:"qwen_model"`
-	QwenRevision    string  `json:"qwen_revision"`
-	AlignerModel    string  `json:"aligner_model"`
-	AlignerRevision string  `json:"aligner_revision"`
-	ASRBatchSize    int     `json:"asr_batch_size"`
-	ReazonEnabled   bool    `json:"reazon_enabled"`
-	WhisperEnabled  bool    `json:"whisper_enabled"`
-	DebugMode       bool    `json:"debug_mode"`
-	Binary          string  `json:"binary"`
-	Model           string  `json:"model"`
-	ReazonScript    string  `json:"reazon_script"`
-	ReazonModel     string  `json:"reazon_model"`
-	ChunkSeconds    int     `json:"chunk_seconds"`
-	OverlapSeconds  int     `json:"chunk_overlap_seconds"`
-	MaxSegmentSec   int     `json:"max_segment_seconds"`
-	FallbackWhisper bool    `json:"fallback_whisper"`
-	VADModel        string  `json:"vad_model"`
-	Language        string  `json:"language"`
-	Threads         int     `json:"threads"`
-	UseGPU          bool    `json:"use_gpu"`
-	BeamSize        int     `json:"beam_size"`
-	VAD             bool    `json:"vad"`
-	VADThreshold    float64 `json:"vad_threshold"`
-	MinSpeechMS     int     `json:"vad_min_speech_ms"`
-	MinSilenceMS    int     `json:"vad_min_silence_ms"`
-	SpeechPadMS     int     `json:"vad_speech_pad_ms"`
-	VADPreRollMS    int     `json:"vad_pre_roll_ms"`
-	VADPostRollMS   int     `json:"vad_post_roll_ms"`
-	VADEnergyFactor float64 `json:"vad_energy_factor"`
-	Prompt          string  `json:"prompt"`
-	GPUPreflight    bool    `json:"gpu_preflight"`
-	GPUAutoReset    bool    `json:"gpu_auto_reset"`
-	GPUFallbackCPU  bool    `json:"gpu_fallback_cpu"`
+	Backend           string  `json:"backend"`
+	Mode              string  `json:"mode"`
+	Profile           string  `json:"profile"`
+	QwenPython        string  `json:"qwen_python"`
+	QwenScript        string  `json:"qwen_script"`
+	QwenModel         string  `json:"qwen_model"`
+	QwenRevision      string  `json:"qwen_revision"`
+	AlignerModel      string  `json:"aligner_model"`
+	AlignerRevision   string  `json:"aligner_revision"`
+	ASRBatchSize      int     `json:"asr_batch_size"`
+	ReazonEnabled     bool    `json:"reazon_enabled"`
+	WhisperEnabled    bool    `json:"whisper_enabled"`
+	DebugMode         bool    `json:"debug_mode"`
+	Binary            string  `json:"binary"`
+	Model             string  `json:"model"`
+	ReazonPython      string  `json:"reazon_python"`
+	ReazonScript      string  `json:"reazon_script"`
+	ReazonBatchScript string  `json:"reazon_batch_script"`
+	ReazonModel       string  `json:"reazon_model"`
+	ChunkSeconds      int     `json:"chunk_seconds"`
+	OverlapSeconds    int     `json:"chunk_overlap_seconds"`
+	MaxSegmentSec     int     `json:"max_segment_seconds"`
+	FallbackWhisper   bool    `json:"fallback_whisper"`
+	VADModel          string  `json:"vad_model"`
+	Language          string  `json:"language"`
+	Threads           int     `json:"threads"`
+	UseGPU            bool    `json:"use_gpu"`
+	BeamSize          int     `json:"beam_size"`
+	VAD               bool    `json:"vad"`
+	VADThreshold      float64 `json:"vad_threshold"`
+	MinSpeechMS       int     `json:"vad_min_speech_ms"`
+	MinSilenceMS      int     `json:"vad_min_silence_ms"`
+	SpeechPadMS       int     `json:"vad_speech_pad_ms"`
+	VADPreRollMS      int     `json:"vad_pre_roll_ms"`
+	VADPostRollMS     int     `json:"vad_post_roll_ms"`
+	VADEnergyFactor   float64 `json:"vad_energy_factor"`
+	Prompt            string  `json:"prompt"`
+	GPUPreflight      bool    `json:"gpu_preflight"`
+	GPUAutoReset      bool    `json:"gpu_auto_reset"`
+	GPUFallbackCPU    bool    `json:"gpu_fallback_cpu"`
 }
 
 type TranslationConfig struct {
@@ -108,10 +111,10 @@ func defaults() Config {
 		UploadDir: "./data/uploads", MaxUploadGB: 30,
 		Whisper: WhisperConfig{
 			Backend: "qwen", Mode: "balanced", Profile: "jav", Binary: "whisper-cli", Language: "ja", Threads: 8, UseGPU: true,
-			QwenScript: "./asr/qwen_pipeline.py", QwenModel: "Qwen/Qwen3-ASR-1.7B", AlignerModel: "Qwen/Qwen3-ForcedAligner-0.6B",
+			QwenPython: "python3", QwenScript: "./asr/qwen_pipeline.py", QwenModel: "Qwen/Qwen3-ASR-1.7B", AlignerModel: "Qwen/Qwen3-ForcedAligner-0.6B",
 			QwenRevision: "7278e1e70fe206f11671096ffdd38061171dd6e5", AlignerRevision: "c7cbfc2048c462b0d63a45797104fc9db3ad62b7",
 			ASRBatchSize: 4, ReazonEnabled: true, WhisperEnabled: true,
-			ReazonScript: "./asr/reazon_worker.py", ReazonModel: "reazon-research/reazonspeech-nemo-v2",
+			ReazonPython: "python3", ReazonScript: "./asr/reazon_worker.py", ReazonBatchScript: "./asr/reazon_batch_worker.py", ReazonModel: "reazon-research/reazonspeech-nemo-v2",
 			ChunkSeconds: 45, OverlapSeconds: 2, MaxSegmentSec: 30, FallbackWhisper: true,
 			BeamSize: 5, VAD: true, VADThreshold: .42, MinSpeechMS: 100,
 			MinSilenceMS: 500, SpeechPadMS: 320, VADPreRollMS: 350, VADPostRollMS: 600, VADEnergyFactor: 1.45, GPUPreflight: true,
@@ -167,6 +170,9 @@ func Load(path string) (Config, error) {
 	if value := os.Getenv("JAVBEACONSUBS_ASR_PROFILE"); value != "" {
 		cfg.Whisper.Profile = value
 	}
+	if value := os.Getenv("JAVBEACONSUBS_QWEN_PYTHON"); value != "" {
+		cfg.Whisper.QwenPython = value
+	}
 	if value := os.Getenv("JAVBEACONSUBS_QWEN_SCRIPT"); value != "" {
 		cfg.Whisper.QwenScript = value
 	}
@@ -193,6 +199,12 @@ func Load(path string) (Config, error) {
 	}
 	if value := os.Getenv("JAVBEACONSUBS_REAZON_SCRIPT"); value != "" {
 		cfg.Whisper.ReazonScript = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_REAZON_PYTHON"); value != "" {
+		cfg.Whisper.ReazonPython = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_REAZON_BATCH_SCRIPT"); value != "" {
+		cfg.Whisper.ReazonBatchScript = value
 	}
 	if value := os.Getenv("JAVBEACONSUBS_REAZON_MODEL"); value != "" {
 		cfg.Whisper.ReazonModel = value
