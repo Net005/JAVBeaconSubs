@@ -21,6 +21,10 @@ All notable changes to JAVBeacon Subtitles are documented here.
 - Reduced contextual request overhead without adding model passes, embedding calls, summaries, or more than four external context rows.
 - Indexed large structured glossaries once per job and raised the settings payload allowance for very large mapping collections.
 
+### Fixed
+
+- Made large Japanese term-mapping imports open at the first entry in a taller editor, with controls to show every mapping or collapse the overview.
+
 ## [0.2.1] - 2026-09-01
 
 ### Fixed

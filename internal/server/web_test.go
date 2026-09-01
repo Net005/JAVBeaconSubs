@@ -31,3 +31,16 @@ func TestWebUIProvidesValidatedLocalGlossaryImport(t *testing.T) {
 		}
 	}
 }
+
+func TestWebUICanShowEveryGlossaryMapping(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{"translationTermsToggle", "Show all ${count} mappings", "editor.scrollTop=0", "editor.scrollHeight+'px'"} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("web glossary overview is missing %q", required)
+		}
+	}
+}
