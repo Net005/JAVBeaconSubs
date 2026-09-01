@@ -1,0 +1,5591 @@
+{
+  "format": "javbeaconsubs-translation-glossary",
+  "version": 2,
+  "description": "Context-aware Japanese-to-English translation guidance for JAVBeaconSubs. Global terms are shared; profile terms extend the resolved content profile. These mappings are for translation only and must never be injected into Qwen ASR prompts or treated as blind search-and-replace rules.",
+  "precedence": [
+    "title_or_series_override",
+    "profile",
+    "global"
+  ],
+  "profiles": {
+    "canonical": [
+      "standard",
+      "jav",
+      "giga"
+    ],
+    "legacy_aliases": {
+      "tokusatsu": "giga",
+      "akiba": "giga"
+    }
+  },
+  "scopes": {
+    "global": [
+      {
+        "ja": "セックス",
+        "en": "sex"
+      },
+      {
+        "ja": "性交",
+        "en": "sexual intercourse"
+      },
+      {
+        "ja": "性行為",
+        "en": "sexual activity"
+      },
+      {
+        "ja": "交尾",
+        "en": "mating"
+      },
+      {
+        "ja": "前戯",
+        "en": "foreplay"
+      },
+      {
+        "ja": "後戯",
+        "en": "afterplay"
+      },
+      {
+        "ja": "愛撫",
+        "en": "caressing"
+      },
+      {
+        "ja": "挿入",
+        "en": "penetration"
+      },
+      {
+        "ja": "性欲",
+        "en": "sex drive"
+      },
+      {
+        "ja": "欲情",
+        "en": "lust"
+      },
+      {
+        "ja": "発情",
+        "en": "sexual arousal"
+      },
+      {
+        "ja": "性的興奮",
+        "en": "sexual arousal"
+      },
+      {
+        "ja": "快感",
+        "en": "pleasure"
+      },
+      {
+        "ja": "快楽",
+        "en": "pleasure"
+      },
+      {
+        "ja": "性感帯",
+        "en": "erogenous zone"
+      },
+      {
+        "ja": "絶頂",
+        "en": "orgasm"
+      },
+      {
+        "ja": "オーガズム",
+        "en": "orgasm"
+      },
+      {
+        "ja": "膣内絶頂",
+        "en": "vaginal orgasm"
+      },
+      {
+        "ja": "中イキ",
+        "en": "vaginal orgasm"
+      },
+      {
+        "ja": "潮吹き",
+        "en": "squirting",
+        "notes": "Adult-context meaning; outside sexual context this can describe a blowhole spout."
+      },
+      {
+        "ja": "同時絶頂",
+        "en": "simultaneous orgasm"
+      },
+      {
+        "ja": "射精",
+        "en": "ejaculation"
+      },
+      {
+        "ja": "射精する",
+        "en": "ejaculate"
+      },
+      {
+        "ja": "中出し",
+        "en": "creampie"
+      },
+      {
+        "ja": "膣内射精",
+        "en": "intravaginal ejaculation"
+      },
+      {
+        "ja": "中に出して",
+        "en": "come inside me"
+      },
+      {
+        "ja": "中に出さないで",
+        "en": "don't come inside me"
+      },
+      {
+        "ja": "外出し",
+        "en": "withdrawal ejaculation"
+      },
+      {
+        "ja": "顔射",
+        "en": "facial"
+      },
+      {
+        "ja": "口内射精",
+        "en": "oral ejaculation"
+      },
+      {
+        "ja": "喉奥射精",
+        "en": "ejaculation deep in the throat"
+      },
+      {
+        "ja": "ぶっかけ",
+        "en": "bukkake"
+      },
+      {
+        "ja": "大量射精",
+        "en": "heavy ejaculation"
+      },
+      {
+        "ja": "連続射精",
+        "en": "multiple ejaculations"
+      },
+      {
+        "ja": "精子",
+        "en": "sperm"
+      },
+      {
+        "ja": "精液",
+        "en": "semen"
+      },
+      {
+        "ja": "ザーメン",
+        "en": "semen"
+      },
+      {
+        "ja": "勃起",
+        "en": "erection"
+      },
+      {
+        "ja": "勃起する",
+        "en": "get an erection"
+      },
+      {
+        "ja": "フル勃起",
+        "en": "full erection"
+      },
+      {
+        "ja": "ビンビン",
+        "en": "rock hard"
+      },
+      {
+        "ja": "早漏",
+        "en": "premature ejaculation"
+      },
+      {
+        "ja": "遅漏",
+        "en": "delayed ejaculation"
+      },
+      {
+        "ja": "絶倫",
+        "en": "insatiable"
+      },
+      {
+        "ja": "夢精",
+        "en": "wet dream"
+      },
+      {
+        "ja": "我慢汁",
+        "en": "pre-ejaculate"
+      },
+      {
+        "ja": "カウパー液",
+        "en": "pre-ejaculate"
+      },
+      {
+        "ja": "精飲",
+        "en": "semen swallowing"
+      },
+      {
+        "ja": "ごっくん",
+        "en": "semen swallowing"
+      },
+      {
+        "ja": "飲精",
+        "en": "semen swallowing"
+      },
+      {
+        "ja": "フェラ",
+        "en": "blowjob"
+      },
+      {
+        "ja": "フェラチオ",
+        "en": "blowjob"
+      },
+      {
+        "ja": "尺八",
+        "en": "blowjob",
+        "notes": "Adult slang here; it also denotes the shakuhachi flute."
+      },
+      {
+        "ja": "イラマチオ",
+        "en": "face-fucking"
+      },
+      {
+        "ja": "ディープスロート",
+        "en": "deep throat"
+      },
+      {
+        "ja": "喉奥フェラ",
+        "en": "deep-throat blowjob"
+      },
+      {
+        "ja": "手コキ",
+        "en": "handjob"
+      },
+      {
+        "ja": "足コキ",
+        "en": "footjob"
+      },
+      {
+        "ja": "パイズリ",
+        "en": "titfuck"
+      },
+      {
+        "ja": "素股",
+        "en": "intercrural sex"
+      },
+      {
+        "ja": "クンニ",
+        "en": "cunnilingus"
+      },
+      {
+        "ja": "クンニリングス",
+        "en": "cunnilingus"
+      },
+      {
+        "ja": "指マン",
+        "en": "fingering"
+      },
+      {
+        "ja": "手マン",
+        "en": "fingering"
+      },
+      {
+        "ja": "アナルセックス",
+        "en": "anal sex"
+      },
+      {
+        "ja": "アナル挿入",
+        "en": "anal penetration"
+      },
+      {
+        "ja": "アナル舐め",
+        "en": "rimming"
+      },
+      {
+        "ja": "アニリングス",
+        "en": "rimming"
+      },
+      {
+        "ja": "二穴挿入",
+        "en": "double penetration"
+      },
+      {
+        "ja": "二本挿し",
+        "en": "double penetration"
+      },
+      {
+        "ja": "三本挿し",
+        "en": "triple penetration"
+      },
+      {
+        "ja": "二輪挿し",
+        "en": "double penetration"
+      },
+      {
+        "ja": "乱交",
+        "en": "group sex"
+      },
+      {
+        "ja": "集団性交",
+        "en": "group sex"
+      },
+      {
+        "ja": "複数プレイ",
+        "en": "group sex"
+      },
+      {
+        "ja": "3P",
+        "en": "threesome"
+      },
+      {
+        "ja": "スリーピー",
+        "en": "threesome",
+        "notes": "Adult-context reading for 3P; otherwise it can be interpreted as 'sleepy'."
+      },
+      {
+        "ja": "輪姦",
+        "en": "gang rape"
+      },
+      {
+        "ja": "ハメ撮り",
+        "en": "point-of-view sex filming"
+      },
+      {
+        "ja": "生ハメ",
+        "en": "unprotected sex"
+      },
+      {
+        "ja": "生挿入",
+        "en": "unprotected penetration"
+      },
+      {
+        "ja": "ゴムなし",
+        "en": "without a condom"
+      },
+      {
+        "ja": "避妊なし",
+        "en": "without contraception"
+      },
+      {
+        "ja": "騎乗位",
+        "en": "cowgirl position"
+      },
+      {
+        "ja": "逆騎乗位",
+        "en": "reverse cowgirl"
+      },
+      {
+        "ja": "正常位",
+        "en": "missionary position"
+      },
+      {
+        "ja": "後背位",
+        "en": "doggy style"
+      },
+      {
+        "ja": "立ちバック",
+        "en": "standing doggy style"
+      },
+      {
+        "ja": "寝バック",
+        "en": "prone bone"
+      },
+      {
+        "ja": "側位",
+        "en": "side position"
+      },
+      {
+        "ja": "座位",
+        "en": "seated position"
+      },
+      {
+        "ja": "対面座位",
+        "en": "face-to-face seated position"
+      },
+      {
+        "ja": "背面座位",
+        "en": "rear-facing seated position"
+      },
+      {
+        "ja": "立位",
+        "en": "standing position"
+      },
+      {
+        "ja": "屈曲位",
+        "en": "folded position"
+      },
+      {
+        "ja": "松葉崩し",
+        "en": "modified missionary position"
+      },
+      {
+        "ja": "駅弁",
+        "en": "standing carry position",
+        "notes": "Sex-position slang here; it ordinarily also means a station bento."
+      },
+      {
+        "ja": "シックスナイン",
+        "en": "sixty-nine"
+      },
+      {
+        "ja": "69",
+        "en": "sixty-nine"
+      },
+      {
+        "ja": "四十八手",
+        "en": "forty-eight sexual positions"
+      },
+      {
+        "ja": "四つん這い",
+        "en": "on all fours"
+      },
+      {
+        "ja": "Ｍ字開脚",
+        "en": "M-shaped leg spread"
+      },
+      {
+        "ja": "大股開き",
+        "en": "legs spread wide"
+      },
+      {
+        "ja": "脚を広げて",
+        "en": "spread your legs"
+      },
+      {
+        "ja": "股を開いて",
+        "en": "spread your legs"
+      },
+      {
+        "ja": "仰向け",
+        "en": "lying on your back"
+      },
+      {
+        "ja": "うつ伏せ",
+        "en": "lying face down"
+      },
+      {
+        "ja": "腰振り",
+        "en": "hip thrusting"
+      },
+      {
+        "ja": "ピストン運動",
+        "en": "piston-like thrusting"
+      },
+      {
+        "ja": "高速ピストン",
+        "en": "rapid thrusting"
+      },
+      {
+        "ja": "奥まで挿入",
+        "en": "penetrate all the way"
+      },
+      {
+        "ja": "根元まで挿入",
+        "en": "penetrate to the base"
+      },
+      {
+        "ja": "膣奥",
+        "en": "deep inside the vagina"
+      },
+      {
+        "ja": "子宮責め",
+        "en": "cervix pounding"
+      },
+      {
+        "ja": "ポルチオ責め",
+        "en": "deep vaginal stimulation"
+      },
+      {
+        "ja": "Ｇスポット",
+        "en": "G-spot"
+      },
+      {
+        "ja": "Gスポット",
+        "en": "G-spot"
+      },
+      {
+        "ja": "性感マッサージ",
+        "en": "erotic massage"
+      },
+      {
+        "ja": "オイルマッサージ",
+        "en": "oil massage"
+      },
+      {
+        "ja": "マットプレイ",
+        "en": "mat play"
+      },
+      {
+        "ja": "ローションプレイ",
+        "en": "lube play"
+      },
+      {
+        "ja": "密着",
+        "en": "close body contact"
+      },
+      {
+        "ja": "自慰",
+        "en": "masturbation"
+      },
+      {
+        "ja": "自慰行為",
+        "en": "masturbation"
+      },
+      {
+        "ja": "オナニー",
+        "en": "masturbation"
+      },
+      {
+        "ja": "オナる",
+        "en": "masturbate"
+      },
+      {
+        "ja": "手淫",
+        "en": "masturbation"
+      },
+      {
+        "ja": "相互オナニー",
+        "en": "mutual masturbation"
+      },
+      {
+        "ja": "見せつけオナニー",
+        "en": "exhibitionist masturbation"
+      },
+      {
+        "ja": "公開オナニー",
+        "en": "public masturbation"
+      },
+      {
+        "ja": "オナニー鑑賞",
+        "en": "watching masturbation"
+      },
+      {
+        "ja": "寸止め",
+        "en": "edging"
+      },
+      {
+        "ja": "射精管理",
+        "en": "orgasm control"
+      },
+      {
+        "ja": "禁欲",
+        "en": "abstinence"
+      },
+      {
+        "ja": "禁欲生活",
+        "en": "sexual abstinence"
+      },
+      {
+        "ja": "禁欲命令",
+        "en": "orgasm-denial order"
+      },
+      {
+        "ja": "強制射精",
+        "en": "forced ejaculation"
+      },
+      {
+        "ja": "強制絶頂",
+        "en": "forced orgasm"
+      },
+      {
+        "ja": "連続絶頂",
+        "en": "multiple orgasms"
+      },
+      {
+        "ja": "絶頂責め",
+        "en": "orgasm torture"
+      },
+      {
+        "ja": "焦らし",
+        "en": "teasing"
+      },
+      {
+        "ja": "焦らしプレイ",
+        "en": "teasing play"
+      },
+      {
+        "ja": "放置プレイ",
+        "en": "neglect play"
+      },
+      {
+        "ja": "乳房",
+        "en": "breast"
+      },
+      {
+        "ja": "乳首",
+        "en": "nipple"
+      },
+      {
+        "ja": "乳輪",
+        "en": "areola"
+      },
+      {
+        "ja": "おっぱい",
+        "en": "boobs"
+      },
+      {
+        "ja": "胸",
+        "en": "chest"
+      },
+      {
+        "ja": "巨乳",
+        "en": "big breasts"
+      },
+      {
+        "ja": "爆乳",
+        "en": "huge breasts"
+      },
+      {
+        "ja": "超乳",
+        "en": "extremely large breasts"
+      },
+      {
+        "ja": "美乳",
+        "en": "beautiful breasts"
+      },
+      {
+        "ja": "貧乳",
+        "en": "small breasts"
+      },
+      {
+        "ja": "微乳",
+        "en": "petite breasts"
+      },
+      {
+        "ja": "垂れ乳",
+        "en": "sagging breasts"
+      },
+      {
+        "ja": "母乳",
+        "en": "breast milk"
+      },
+      {
+        "ja": "母乳プレイ",
+        "en": "lactation play"
+      },
+      {
+        "ja": "授乳",
+        "en": "breastfeeding"
+      },
+      {
+        "ja": "陰部",
+        "en": "genitals"
+      },
+      {
+        "ja": "性器",
+        "en": "genitals"
+      },
+      {
+        "ja": "女性器",
+        "en": "female genitals"
+      },
+      {
+        "ja": "男性器",
+        "en": "male genitals"
+      },
+      {
+        "ja": "膣",
+        "en": "vagina"
+      },
+      {
+        "ja": "膣内",
+        "en": "inside the vagina"
+      },
+      {
+        "ja": "膣口",
+        "en": "vaginal opening"
+      },
+      {
+        "ja": "膣壁",
+        "en": "vaginal wall"
+      },
+      {
+        "ja": "処女膜",
+        "en": "hymen"
+      },
+      {
+        "ja": "クリトリス",
+        "en": "clitoris"
+      },
+      {
+        "ja": "クリ",
+        "en": "clit"
+      },
+      {
+        "ja": "陰核",
+        "en": "clitoris"
+      },
+      {
+        "ja": "陰唇",
+        "en": "labia"
+      },
+      {
+        "ja": "大陰唇",
+        "en": "labia majora"
+      },
+      {
+        "ja": "小陰唇",
+        "en": "labia minora"
+      },
+      {
+        "ja": "子宮",
+        "en": "uterus"
+      },
+      {
+        "ja": "子宮口",
+        "en": "cervix"
+      },
+      {
+        "ja": "卵巣",
+        "en": "ovary"
+      },
+      {
+        "ja": "男根",
+        "en": "penis"
+      },
+      {
+        "ja": "陰茎",
+        "en": "penis"
+      },
+      {
+        "ja": "ペニス",
+        "en": "penis"
+      },
+      {
+        "ja": "ちんこ",
+        "en": "dick"
+      },
+      {
+        "ja": "チンコ",
+        "en": "dick"
+      },
+      {
+        "ja": "ちんぽ",
+        "en": "dick"
+      },
+      {
+        "ja": "チンポ",
+        "en": "dick"
+      },
+      {
+        "ja": "ちんちん",
+        "en": "dick"
+      },
+      {
+        "ja": "巨根",
+        "en": "huge cock"
+      },
+      {
+        "ja": "デカチン",
+        "en": "big cock"
+      },
+      {
+        "ja": "短小",
+        "en": "small penis"
+      },
+      {
+        "ja": "包茎",
+        "en": "phimosis"
+      },
+      {
+        "ja": "仮性包茎",
+        "en": "partial phimosis"
+      },
+      {
+        "ja": "真性包茎",
+        "en": "complete phimosis"
+      },
+      {
+        "ja": "亀頭",
+        "en": "glans"
+      },
+      {
+        "ja": "カリ",
+        "en": "corona of the glans"
+      },
+      {
+        "ja": "陰嚢",
+        "en": "scrotum"
+      },
+      {
+        "ja": "睾丸",
+        "en": "testicles"
+      },
+      {
+        "ja": "精巣",
+        "en": "testicles"
+      },
+      {
+        "ja": "金玉",
+        "en": "balls"
+      },
+      {
+        "ja": "アナル",
+        "en": "anus"
+      },
+      {
+        "ja": "肛門",
+        "en": "anus"
+      },
+      {
+        "ja": "尻穴",
+        "en": "asshole"
+      },
+      {
+        "ja": "菊門",
+        "en": "anus"
+      },
+      {
+        "ja": "お尻",
+        "en": "butt"
+      },
+      {
+        "ja": "尻",
+        "en": "ass"
+      },
+      {
+        "ja": "臀部",
+        "en": "buttocks"
+      },
+      {
+        "ja": "股間",
+        "en": "crotch"
+      },
+      {
+        "ja": "鼠径部",
+        "en": "groin"
+      },
+      {
+        "ja": "太もも",
+        "en": "thigh"
+      },
+      {
+        "ja": "内腿",
+        "en": "inner thigh"
+      },
+      {
+        "ja": "腋",
+        "en": "armpit"
+      },
+      {
+        "ja": "脇の下",
+        "en": "armpit"
+      },
+      {
+        "ja": "陰毛",
+        "en": "pubic hair"
+      },
+      {
+        "ja": "剃毛",
+        "en": "shaving"
+      },
+      {
+        "ja": "パイパン",
+        "en": "shaved pubic area"
+      },
+      {
+        "ja": "体毛",
+        "en": "body hair"
+      },
+      {
+        "ja": "唾液",
+        "en": "saliva"
+      },
+      {
+        "ja": "汗",
+        "en": "sweat"
+      },
+      {
+        "ja": "体液",
+        "en": "bodily fluids"
+      },
+      {
+        "ja": "尿",
+        "en": "urine"
+      },
+      {
+        "ja": "排尿",
+        "en": "urination"
+      },
+      {
+        "ja": "おしっこ",
+        "en": "pee"
+      },
+      {
+        "ja": "放尿",
+        "en": "urination"
+      },
+      {
+        "ja": "スカトロ",
+        "en": "scat play"
+      },
+      {
+        "ja": "浣腸",
+        "en": "enema"
+      },
+      {
+        "ja": "濡れている",
+        "en": "wet"
+      },
+      {
+        "ja": "びしょ濡れ",
+        "en": "soaking wet"
+      },
+      {
+        "ja": "ぐっしょり",
+        "en": "soaking wet"
+      },
+      {
+        "ja": "ヌルヌル",
+        "en": "slippery"
+      },
+      {
+        "ja": "ベタベタ",
+        "en": "sticky"
+      },
+      {
+        "ja": "敏感",
+        "en": "sensitive"
+      },
+      {
+        "ja": "感じやすい",
+        "en": "highly sensitive"
+      },
+      {
+        "ja": "気持ちよすぎる",
+        "en": "it feels too good"
+      },
+      {
+        "ja": "我慢できない",
+        "en": "I can't hold back"
+      },
+      {
+        "ja": "イキそう",
+        "en": "I'm about to come"
+      },
+      {
+        "ja": "イっちゃう",
+        "en": "I'm going to come"
+      },
+      {
+        "ja": "イクよ",
+        "en": "I'm coming"
+      },
+      {
+        "ja": "イった",
+        "en": "I came"
+      },
+      {
+        "ja": "何度もイく",
+        "en": "come again and again"
+      },
+      {
+        "ja": "締まりがいい",
+        "en": "tight"
+      },
+      {
+        "ja": "締め付けが強い",
+        "en": "tight grip"
+      },
+      {
+        "ja": "痙攣",
+        "en": "spasm"
+      },
+      {
+        "ja": "ビクビクする",
+        "en": "twitch"
+      },
+      {
+        "ja": "ピクピク",
+        "en": "twitching"
+      },
+      {
+        "ja": "喘ぐ",
+        "en": "moan"
+      },
+      {
+        "ja": "喘ぎ声",
+        "en": "moaning"
+      },
+      {
+        "ja": "あえぎ声",
+        "en": "moaning"
+      },
+      {
+        "ja": "嬌声",
+        "en": "moan"
+      },
+      {
+        "ja": "吐息",
+        "en": "breath"
+      },
+      {
+        "ja": "息遣い",
+        "en": "breathing"
+      },
+      {
+        "ja": "息が荒い",
+        "en": "breathing heavily"
+      },
+      {
+        "ja": "息切れ",
+        "en": "out of breath"
+      },
+      {
+        "ja": "息を呑む",
+        "en": "gasp"
+      },
+      {
+        "ja": "絶叫",
+        "en": "scream"
+      },
+      {
+        "ja": "悲鳴",
+        "en": "scream"
+      },
+      {
+        "ja": "呻き声",
+        "en": "groan"
+      },
+      {
+        "ja": "うめき声",
+        "en": "groan"
+      },
+      {
+        "ja": "悶える",
+        "en": "writhe"
+      },
+      {
+        "ja": "悶絶",
+        "en": "agony",
+        "notes": "Interpret from scene context; it may describe overwhelming agony or pleasure."
+      },
+      {
+        "ja": "失禁",
+        "en": "incontinence"
+      },
+      {
+        "ja": "失神",
+        "en": "loss of consciousness"
+      },
+      {
+        "ja": "放心状態",
+        "en": "stunned state"
+      },
+      {
+        "ja": "恍惚",
+        "en": "ecstasy"
+      },
+      {
+        "ja": "恍惚状態",
+        "en": "state of ecstasy"
+      },
+      {
+        "ja": "ディープキス",
+        "en": "French kiss"
+      },
+      {
+        "ja": "濃厚なキス",
+        "en": "passionate kiss"
+      },
+      {
+        "ja": "接吻",
+        "en": "kiss"
+      },
+      {
+        "ja": "口づけ",
+        "en": "kiss"
+      },
+      {
+        "ja": "舌を絡める",
+        "en": "entwine tongues"
+      },
+      {
+        "ja": "キスマーク",
+        "en": "hickey"
+      },
+      {
+        "ja": "甘噛み",
+        "en": "gentle bite"
+      },
+      {
+        "ja": "耳舐め",
+        "en": "ear licking"
+      },
+      {
+        "ja": "乳首舐め",
+        "en": "nipple licking"
+      },
+      {
+        "ja": "乳首責め",
+        "en": "nipple stimulation"
+      },
+      {
+        "ja": "乳首攻め",
+        "en": "nipple stimulation"
+      },
+      {
+        "ja": "乳揉み",
+        "en": "breast fondling"
+      },
+      {
+        "ja": "胸揉み",
+        "en": "breast fondling"
+      },
+      {
+        "ja": "尻揉み",
+        "en": "ass fondling"
+      },
+      {
+        "ja": "尻叩き",
+        "en": "ass spanking"
+      },
+      {
+        "ja": "股間責め",
+        "en": "crotch stimulation"
+      },
+      {
+        "ja": "亀頭責め",
+        "en": "glans stimulation"
+      },
+      {
+        "ja": "金玉責め",
+        "en": "testicle stimulation"
+      },
+      {
+        "ja": "睾丸責め",
+        "en": "testicle stimulation"
+      },
+      {
+        "ja": "アナル責め",
+        "en": "anal stimulation"
+      },
+      {
+        "ja": "クリ責め",
+        "en": "clitoral stimulation"
+      },
+      {
+        "ja": "指責め",
+        "en": "finger stimulation"
+      },
+      {
+        "ja": "舌技",
+        "en": "tongue technique"
+      },
+      {
+        "ja": "エロい",
+        "en": "sexy"
+      },
+      {
+        "ja": "いやらしい",
+        "en": "lewd"
+      },
+      {
+        "ja": "淫ら",
+        "en": "lewd"
+      },
+      {
+        "ja": "卑猥",
+        "en": "obscene"
+      },
+      {
+        "ja": "猥褻",
+        "en": "obscene"
+      },
+      {
+        "ja": "淫乱",
+        "en": "promiscuous"
+      },
+      {
+        "ja": "好色",
+        "en": "lustful"
+      },
+      {
+        "ja": "色情狂",
+        "en": "sex maniac"
+      },
+      {
+        "ja": "スケベ",
+        "en": "pervert"
+      },
+      {
+        "ja": "助平",
+        "en": "pervert"
+      },
+      {
+        "ja": "変態",
+        "en": "pervert"
+      },
+      {
+        "ja": "ド変態",
+        "en": "complete pervert"
+      },
+      {
+        "ja": "露出狂",
+        "en": "exhibitionist"
+      },
+      {
+        "ja": "痴漢",
+        "en": "molester"
+      },
+      {
+        "ja": "痴女",
+        "en": "female sexual aggressor"
+      },
+      {
+        "ja": "ビッチ",
+        "en": "bitch"
+      },
+      {
+        "ja": "淫売",
+        "en": "whore"
+      },
+      {
+        "ja": "売女",
+        "en": "whore"
+      },
+      {
+        "ja": "娼婦",
+        "en": "prostitute"
+      },
+      {
+        "ja": "雌犬",
+        "en": "bitch"
+      },
+      {
+        "ja": "メス犬",
+        "en": "bitch"
+      },
+      {
+        "ja": "雌豚",
+        "en": "sow"
+      },
+      {
+        "ja": "メス豚",
+        "en": "sow"
+      },
+      {
+        "ja": "肉便器",
+        "en": "human sex toy"
+      },
+      {
+        "ja": "肉奴隷",
+        "en": "sex slave"
+      },
+      {
+        "ja": "性奴隷",
+        "en": "sex slave"
+      },
+      {
+        "ja": "性玩具",
+        "en": "sex toy"
+      },
+      {
+        "ja": "変態野郎",
+        "en": "perverted bastard"
+      },
+      {
+        "ja": "エロ親父",
+        "en": "dirty old man"
+      },
+      {
+        "ja": "色情魔",
+        "en": "sex fiend"
+      },
+      {
+        "ja": "淫獣",
+        "en": "lustful beast"
+      },
+      {
+        "ja": "SM",
+        "en": "BDSM"
+      },
+      {
+        "ja": "ＳＭ",
+        "en": "BDSM"
+      },
+      {
+        "ja": "BDSM",
+        "en": "BDSM"
+      },
+      {
+        "ja": "サディスト",
+        "en": "sadist"
+      },
+      {
+        "ja": "マゾヒスト",
+        "en": "masochist"
+      },
+      {
+        "ja": "サド",
+        "en": "sadist"
+      },
+      {
+        "ja": "マゾ",
+        "en": "masochist"
+      },
+      {
+        "ja": "ドS",
+        "en": "extreme sadist"
+      },
+      {
+        "ja": "ドＭ",
+        "en": "extreme masochist"
+      },
+      {
+        "ja": "ドM",
+        "en": "extreme masochist"
+      },
+      {
+        "ja": "緊縛",
+        "en": "bondage"
+      },
+      {
+        "ja": "縄責め",
+        "en": "rope bondage"
+      },
+      {
+        "ja": "亀甲縛り",
+        "en": "tortoiseshell bondage"
+      },
+      {
+        "ja": "後ろ手縛り",
+        "en": "hands tied behind the back"
+      },
+      {
+        "ja": "拘束",
+        "en": "restraint"
+      },
+      {
+        "ja": "拘束具",
+        "en": "restraints"
+      },
+      {
+        "ja": "拘束台",
+        "en": "restraint table"
+      },
+      {
+        "ja": "拘束椅子",
+        "en": "restraint chair"
+      },
+      {
+        "ja": "拘束ベッド",
+        "en": "restraint bed"
+      },
+      {
+        "ja": "磔",
+        "en": "crucifixion restraint"
+      },
+      {
+        "ja": "逆さ吊り",
+        "en": "upside-down suspension"
+      },
+      {
+        "ja": "吊り下げ",
+        "en": "suspension"
+      },
+      {
+        "ja": "縄",
+        "en": "rope"
+      },
+      {
+        "ja": "手錠",
+        "en": "handcuffs"
+      },
+      {
+        "ja": "手枷",
+        "en": "shackles"
+      },
+      {
+        "ja": "足枷",
+        "en": "leg shackles"
+      },
+      {
+        "ja": "革手錠",
+        "en": "leather cuffs"
+      },
+      {
+        "ja": "目隠し",
+        "en": "blindfold"
+      },
+      {
+        "ja": "猿轡",
+        "en": "gag"
+      },
+      {
+        "ja": "ボールギャグ",
+        "en": "ball gag"
+      },
+      {
+        "ja": "口枷",
+        "en": "gag"
+      },
+      {
+        "ja": "首輪",
+        "en": "collar"
+      },
+      {
+        "ja": "リード",
+        "en": "leash"
+      },
+      {
+        "ja": "鎖",
+        "en": "chain"
+      },
+      {
+        "ja": "鞭",
+        "en": "whip"
+      },
+      {
+        "ja": "乗馬鞭",
+        "en": "riding crop"
+      },
+      {
+        "ja": "鞭打ち",
+        "en": "whipping"
+      },
+      {
+        "ja": "スパンキング",
+        "en": "spanking"
+      },
+      {
+        "ja": "蝋燭責め",
+        "en": "hot-wax play"
+      },
+      {
+        "ja": "蝋責め",
+        "en": "hot-wax play"
+      },
+      {
+        "ja": "電気責め",
+        "en": "electric torture"
+      },
+      {
+        "ja": "電撃責め",
+        "en": "electric-shock torture"
+      },
+      {
+        "ja": "水責め",
+        "en": "water torture"
+      },
+      {
+        "ja": "くすぐり責め",
+        "en": "tickling torture"
+      },
+      {
+        "ja": "乳首クリップ",
+        "en": "nipple clamps"
+      },
+      {
+        "ja": "洗濯ばさみ",
+        "en": "clothespin"
+      },
+      {
+        "ja": "調教",
+        "en": "training"
+      },
+      {
+        "ja": "性奴隷調教",
+        "en": "sex-slave training"
+      },
+      {
+        "ja": "奴隷",
+        "en": "slave"
+      },
+      {
+        "ja": "ご主人様",
+        "en": "Master",
+        "notes": "Use the BDSM honorific reading in relevant scenes; it can also address a husband or owner."
+      },
+      {
+        "ja": "女王様",
+        "en": "Mistress",
+        "notes": "Use the BDSM title in relevant scenes; it can also literally mean queen."
+      },
+      {
+        "ja": "支配者",
+        "en": "dominator"
+      },
+      {
+        "ja": "被虐",
+        "en": "masochism"
+      },
+      {
+        "ja": "加虐",
+        "en": "sadism"
+      },
+      {
+        "ja": "羞恥",
+        "en": "humiliation"
+      },
+      {
+        "ja": "羞恥プレイ",
+        "en": "humiliation play"
+      },
+      {
+        "ja": "露出プレイ",
+        "en": "exhibitionism play"
+      },
+      {
+        "ja": "公開羞恥",
+        "en": "public humiliation"
+      },
+      {
+        "ja": "言葉責め",
+        "en": "verbal humiliation"
+      },
+      {
+        "ja": "辱め",
+        "en": "humiliation"
+      },
+      {
+        "ja": "屈辱",
+        "en": "humiliation"
+      },
+      {
+        "ja": "服従",
+        "en": "submission"
+      },
+      {
+        "ja": "絶対服従",
+        "en": "absolute obedience"
+      },
+      {
+        "ja": "命令",
+        "en": "command"
+      },
+      {
+        "ja": "命令に従え",
+        "en": "obey my command"
+      },
+      {
+        "ja": "跪け",
+        "en": "kneel"
+      },
+      {
+        "ja": "這いつくばれ",
+        "en": "get down on all fours"
+      },
+      {
+        "ja": "奴隷契約",
+        "en": "slave contract"
+      },
+      {
+        "ja": "ローション",
+        "en": "lube"
+      },
+      {
+        "ja": "潤滑剤",
+        "en": "lubricant"
+      },
+      {
+        "ja": "媚薬",
+        "en": "aphrodisiac"
+      },
+      {
+        "ja": "媚薬入り",
+        "en": "aphrodisiac-laced"
+      },
+      {
+        "ja": "催淫剤",
+        "en": "aphrodisiac"
+      },
+      {
+        "ja": "精力剤",
+        "en": "sexual stimulant"
+      },
+      {
+        "ja": "コンドーム",
+        "en": "condom"
+      },
+      {
+        "ja": "避妊",
+        "en": "contraception"
+      },
+      {
+        "ja": "避妊具",
+        "en": "contraceptive"
+      },
+      {
+        "ja": "避妊薬",
+        "en": "contraceptive drug"
+      },
+      {
+        "ja": "低用量ピル",
+        "en": "birth-control pill"
+      },
+      {
+        "ja": "アフターピル",
+        "en": "emergency contraceptive pill"
+      },
+      {
+        "ja": "妊娠",
+        "en": "pregnancy"
+      },
+      {
+        "ja": "妊娠する",
+        "en": "become pregnant"
+      },
+      {
+        "ja": "孕ませる",
+        "en": "impregnate"
+      },
+      {
+        "ja": "孕ませ",
+        "en": "impregnation"
+      },
+      {
+        "ja": "種付け",
+        "en": "breeding",
+        "notes": "Adult breeding terminology here; it is also used for animal breeding."
+      },
+      {
+        "ja": "種付けプレス",
+        "en": "breeding press"
+      },
+      {
+        "ja": "受精",
+        "en": "fertilization"
+      },
+      {
+        "ja": "排卵",
+        "en": "ovulation"
+      },
+      {
+        "ja": "排卵日",
+        "en": "ovulation day"
+      },
+      {
+        "ja": "危険日",
+        "en": "fertile day"
+      },
+      {
+        "ja": "安全日",
+        "en": "low-fertility day"
+      },
+      {
+        "ja": "妊娠検査薬",
+        "en": "pregnancy test"
+      },
+      {
+        "ja": "大人のおもちゃ",
+        "en": "sex toy"
+      },
+      {
+        "ja": "アダルトグッズ",
+        "en": "adult toy"
+      },
+      {
+        "ja": "バイブ",
+        "en": "vibrator"
+      },
+      {
+        "ja": "バイブレーター",
+        "en": "vibrator"
+      },
+      {
+        "ja": "ディルド",
+        "en": "dildo"
+      },
+      {
+        "ja": "ローター",
+        "en": "bullet vibrator",
+        "notes": "Adult-toy meaning here; it can also mean a mechanical rotor."
+      },
+      {
+        "ja": "電マ",
+        "en": "magic wand vibrator",
+        "notes": "Adult-toy meaning here; literally an electric massager."
+      },
+      {
+        "ja": "電動マッサージ器",
+        "en": "wand vibrator"
+      },
+      {
+        "ja": "アナルプラグ",
+        "en": "anal plug"
+      },
+      {
+        "ja": "ペニスバンド",
+        "en": "cock ring"
+      },
+      {
+        "ja": "貞操帯",
+        "en": "chastity belt"
+      },
+      {
+        "ja": "男性用貞操器具",
+        "en": "male chastity device"
+      },
+      {
+        "ja": "オナホ",
+        "en": "male masturbator"
+      },
+      {
+        "ja": "オナホール",
+        "en": "male masturbator"
+      },
+      {
+        "ja": "ダッチワイフ",
+        "en": "sex doll"
+      },
+      {
+        "ja": "ラブドール",
+        "en": "sex doll"
+      },
+      {
+        "ja": "責め具",
+        "en": "BDSM toy"
+      },
+      {
+        "ja": "拡張器",
+        "en": "dilator"
+      },
+      {
+        "ja": "膣鏡",
+        "en": "vaginal speculum"
+      },
+      {
+        "ja": "浣腸器",
+        "en": "enema device"
+      },
+      {
+        "ja": "吸引器",
+        "en": "suction device"
+      },
+      {
+        "ja": "搾乳器",
+        "en": "breast pump"
+      },
+      {
+        "ja": "搾精器",
+        "en": "semen extraction device"
+      },
+      {
+        "ja": "合意",
+        "en": "consent"
+      },
+      {
+        "ja": "同意",
+        "en": "consent"
+      },
+      {
+        "ja": "性的同意",
+        "en": "sexual consent"
+      },
+      {
+        "ja": "合意の上で",
+        "en": "by mutual consent"
+      },
+      {
+        "ja": "同意なし",
+        "en": "without consent"
+      },
+      {
+        "ja": "不同意",
+        "en": "non-consensual"
+      },
+      {
+        "ja": "不同意性交",
+        "en": "non-consensual intercourse"
+      },
+      {
+        "ja": "拒否",
+        "en": "refusal"
+      },
+      {
+        "ja": "拒絶",
+        "en": "rejection"
+      },
+      {
+        "ja": "抵抗",
+        "en": "resistance"
+      },
+      {
+        "ja": "無抵抗",
+        "en": "no resistance"
+      },
+      {
+        "ja": "抵抗する",
+        "en": "resist"
+      },
+      {
+        "ja": "無理やり",
+        "en": "by force"
+      },
+      {
+        "ja": "強制",
+        "en": "coercion"
+      },
+      {
+        "ja": "強要",
+        "en": "coercion"
+      },
+      {
+        "ja": "脅迫",
+        "en": "threat"
+      },
+      {
+        "ja": "脅す",
+        "en": "threaten"
+      },
+      {
+        "ja": "犯す",
+        "en": "rape"
+      },
+      {
+        "ja": "強姦",
+        "en": "rape"
+      },
+      {
+        "ja": "レイプ",
+        "en": "rape"
+      },
+      {
+        "ja": "集団強姦",
+        "en": "gang rape"
+      },
+      {
+        "ja": "性的暴行",
+        "en": "sexual assault"
+      },
+      {
+        "ja": "わいせつ行為",
+        "en": "indecent act"
+      },
+      {
+        "ja": "強制わいせつ",
+        "en": "forcible indecency"
+      },
+      {
+        "ja": "痴漢行為",
+        "en": "molestation"
+      },
+      {
+        "ja": "盗撮",
+        "en": "voyeuristic filming"
+      },
+      {
+        "ja": "のぞき",
+        "en": "voyeurism"
+      },
+      {
+        "ja": "睡眠姦",
+        "en": "sleep assault"
+      },
+      {
+        "ja": "酔わせる",
+        "en": "get someone drunk"
+      },
+      {
+        "ja": "薬を盛る",
+        "en": "drug someone"
+      },
+      {
+        "ja": "意識不明",
+        "en": "unconscious"
+      },
+      {
+        "ja": "意識を失う",
+        "en": "lose consciousness"
+      },
+      {
+        "ja": "押さえつける",
+        "en": "pin down"
+      },
+      {
+        "ja": "拘束する",
+        "en": "restrain"
+      },
+      {
+        "ja": "縛り上げる",
+        "en": "tie up"
+      },
+      {
+        "ja": "口を塞ぐ",
+        "en": "cover the mouth"
+      },
+      {
+        "ja": "助けを呼ぶ",
+        "en": "call for help"
+      },
+      {
+        "ja": "助けて",
+        "en": "help me"
+      },
+      {
+        "ja": "助けてください",
+        "en": "please help me"
+      },
+      {
+        "ja": "離して",
+        "en": "let go of me"
+      },
+      {
+        "ja": "離せ",
+        "en": "let go"
+      },
+      {
+        "ja": "触らないで",
+        "en": "don't touch me"
+      },
+      {
+        "ja": "やめてください",
+        "en": "please stop"
+      },
+      {
+        "ja": "警察を呼ぶ",
+        "en": "call the police"
+      },
+      {
+        "ja": "通報する",
+        "en": "report to the police"
+      },
+      {
+        "ja": "くそ",
+        "en": "damn"
+      },
+      {
+        "ja": "クソ",
+        "en": "shit"
+      },
+      {
+        "ja": "ちくしょう",
+        "en": "damn it"
+      },
+      {
+        "ja": "畜生",
+        "en": "damn it"
+      },
+      {
+        "ja": "ふざけるな",
+        "en": "don't fuck with me"
+      },
+      {
+        "ja": "ふざけんな",
+        "en": "don't fuck with me"
+      },
+      {
+        "ja": "なめるな",
+        "en": "don't underestimate me"
+      },
+      {
+        "ja": "てめえ",
+        "en": "you bastard"
+      },
+      {
+        "ja": "貴様",
+        "en": "you bastard"
+      },
+      {
+        "ja": "この野郎",
+        "en": "you bastard"
+      },
+      {
+        "ja": "野郎",
+        "en": "bastard"
+      },
+      {
+        "ja": "馬鹿",
+        "en": "idiot"
+      },
+      {
+        "ja": "バカ",
+        "en": "idiot"
+      },
+      {
+        "ja": "アホ",
+        "en": "idiot"
+      },
+      {
+        "ja": "間抜け",
+        "en": "moron"
+      },
+      {
+        "ja": "クズ",
+        "en": "scumbag"
+      },
+      {
+        "ja": "ゲス",
+        "en": "scumbag"
+      },
+      {
+        "ja": "外道",
+        "en": "brute"
+      },
+      {
+        "ja": "卑怯者",
+        "en": "coward"
+      },
+      {
+        "ja": "腰抜け",
+        "en": "coward"
+      },
+      {
+        "ja": "臆病者",
+        "en": "coward"
+      },
+      {
+        "ja": "役立たず",
+        "en": "good-for-nothing"
+      },
+      {
+        "ja": "能無し",
+        "en": "incompetent fool"
+      },
+      {
+        "ja": "雑魚",
+        "en": "small fry"
+      },
+      {
+        "ja": "虫けら",
+        "en": "vermin"
+      },
+      {
+        "ja": "化け物",
+        "en": "monster"
+      },
+      {
+        "ja": "悪党",
+        "en": "villain"
+      },
+      {
+        "ja": "人でなし",
+        "en": "inhuman bastard"
+      },
+      {
+        "ja": "裏切り者",
+        "en": "traitor"
+      },
+      {
+        "ja": "偽善者",
+        "en": "hypocrite"
+      },
+      {
+        "ja": "変態め",
+        "en": "you pervert"
+      },
+      {
+        "ja": "クソ野郎",
+        "en": "piece of shit"
+      },
+      {
+        "ja": "馬鹿野郎",
+        "en": "damn fool"
+      },
+      {
+        "ja": "傷",
+        "en": "wound"
+      },
+      {
+        "ja": "傷跡",
+        "en": "scar"
+      },
+      {
+        "ja": "切り傷",
+        "en": "cut"
+      },
+      {
+        "ja": "擦り傷",
+        "en": "scrape"
+      },
+      {
+        "ja": "裂傷",
+        "en": "laceration"
+      },
+      {
+        "ja": "刺し傷",
+        "en": "stab wound"
+      },
+      {
+        "ja": "銃創",
+        "en": "gunshot wound"
+      },
+      {
+        "ja": "火傷",
+        "en": "burn"
+      },
+      {
+        "ja": "痣",
+        "en": "bruise"
+      },
+      {
+        "ja": "青あざ",
+        "en": "bruise"
+      },
+      {
+        "ja": "出血",
+        "en": "bleeding"
+      },
+      {
+        "ja": "流血",
+        "en": "bleeding"
+      },
+      {
+        "ja": "大量出血",
+        "en": "severe bleeding"
+      },
+      {
+        "ja": "内出血",
+        "en": "internal bleeding"
+      },
+      {
+        "ja": "骨折",
+        "en": "fracture"
+      },
+      {
+        "ja": "脱臼",
+        "en": "dislocation"
+      },
+      {
+        "ja": "捻挫",
+        "en": "sprain"
+      },
+      {
+        "ja": "打撲",
+        "en": "contusion"
+      },
+      {
+        "ja": "脳震盪",
+        "en": "concussion"
+      },
+      {
+        "ja": "重傷",
+        "en": "serious injury"
+      },
+      {
+        "ja": "軽傷",
+        "en": "minor injury"
+      },
+      {
+        "ja": "致命傷",
+        "en": "fatal wound"
+      },
+      {
+        "ja": "急所",
+        "en": "vital point"
+      },
+      {
+        "ja": "急所攻撃",
+        "en": "attack on a vital point"
+      },
+      {
+        "ja": "弱点",
+        "en": "weakness"
+      },
+      {
+        "ja": "弱点を突く",
+        "en": "exploit a weakness"
+      },
+      {
+        "ja": "ダメージ",
+        "en": "damage"
+      },
+      {
+        "ja": "大ダメージ",
+        "en": "heavy damage"
+      },
+      {
+        "ja": "蓄積ダメージ",
+        "en": "accumulated damage"
+      },
+      {
+        "ja": "回復",
+        "en": "recovery"
+      },
+      {
+        "ja": "治療",
+        "en": "treatment"
+      },
+      {
+        "ja": "応急処置",
+        "en": "first aid"
+      },
+      {
+        "ja": "蘇生",
+        "en": "resuscitation"
+      },
+      {
+        "ja": "足音",
+        "en": "footsteps"
+      },
+      {
+        "ja": "笑い声",
+        "en": "laughter"
+      },
+      {
+        "ja": "すすり泣き",
+        "en": "sobbing"
+      },
+      {
+        "ja": "泣き声",
+        "en": "crying"
+      },
+      {
+        "ja": "拍手",
+        "en": "applause"
+      }
+    ],
+    "jav": [
+      {
+        "ja": "AV",
+        "en": "adult video",
+        "notes": "Adult-video meaning in the JAV profile; elsewhere AV can mean audiovisual."
+      },
+      {
+        "ja": "アダルトビデオ",
+        "en": "adult video"
+      },
+      {
+        "ja": "AV女優",
+        "en": "adult video actress"
+      },
+      {
+        "ja": "AV男優",
+        "en": "adult video actor"
+      },
+      {
+        "ja": "セクシー女優",
+        "en": "adult video actress"
+      },
+      {
+        "ja": "女優",
+        "en": "actress",
+        "notes": "AV-production context may imply an adult-video actress; the preferred mapping remains 'actress'."
+      },
+      {
+        "ja": "男優",
+        "en": "male performer",
+        "notes": "AV-production context may imply an adult performer; follow the preferred mapping."
+      },
+      {
+        "ja": "企画女優",
+        "en": "featured adult video actress"
+      },
+      {
+        "ja": "単体女優",
+        "en": "exclusive adult video actress"
+      },
+      {
+        "ja": "専属女優",
+        "en": "exclusive adult video actress"
+      },
+      {
+        "ja": "素人",
+        "en": "amateur"
+      },
+      {
+        "ja": "素人企画",
+        "en": "amateur production"
+      },
+      {
+        "ja": "企画物",
+        "en": "concept video"
+      },
+      {
+        "ja": "本番行為",
+        "en": "actual sex"
+      },
+      {
+        "ja": "疑似本番",
+        "en": "simulated sex"
+      },
+      {
+        "ja": "絡み",
+        "en": "sex scene",
+        "notes": "Use the AV-production meaning in this profile; elsewhere it can mean involvement or entanglement."
+      },
+      {
+        "ja": "濡れ場",
+        "en": "sex scene"
+      },
+      {
+        "ja": "撮影",
+        "en": "filming"
+      },
+      {
+        "ja": "撮影現場",
+        "en": "filming set"
+      },
+      {
+        "ja": "撮影開始",
+        "en": "start filming"
+      },
+      {
+        "ja": "撮影終了",
+        "en": "end filming"
+      },
+      {
+        "ja": "収録",
+        "en": "recording"
+      },
+      {
+        "ja": "収録現場",
+        "en": "recording set"
+      },
+      {
+        "ja": "テイク",
+        "en": "take"
+      },
+      {
+        "ja": "ワンテイク",
+        "en": "single take"
+      },
+      {
+        "ja": "カット",
+        "en": "cut"
+      },
+      {
+        "ja": "カット割り",
+        "en": "shot breakdown"
+      },
+      {
+        "ja": "撮り直し",
+        "en": "reshoot"
+      },
+      {
+        "ja": "リテイク",
+        "en": "retake"
+      },
+      {
+        "ja": "長回し",
+        "en": "long take"
+      },
+      {
+        "ja": "生撮り",
+        "en": "live recording"
+      },
+      {
+        "ja": "撮影後",
+        "en": "after filming"
+      },
+      {
+        "ja": "監督",
+        "en": "director"
+      },
+      {
+        "ja": "助監督",
+        "en": "assistant director"
+      },
+      {
+        "ja": "プロデューサー",
+        "en": "producer"
+      },
+      {
+        "ja": "カメラマン",
+        "en": "camera operator"
+      },
+      {
+        "ja": "撮影スタッフ",
+        "en": "film crew"
+      },
+      {
+        "ja": "スタッフ",
+        "en": "staff"
+      },
+      {
+        "ja": "照明",
+        "en": "lighting"
+      },
+      {
+        "ja": "音声",
+        "en": "audio"
+      },
+      {
+        "ja": "メイク",
+        "en": "makeup"
+      },
+      {
+        "ja": "メイク直し",
+        "en": "makeup touch-up"
+      },
+      {
+        "ja": "衣装",
+        "en": "costume"
+      },
+      {
+        "ja": "衣装合わせ",
+        "en": "costume fitting"
+      },
+      {
+        "ja": "台本",
+        "en": "script"
+      },
+      {
+        "ja": "台詞",
+        "en": "line"
+      },
+      {
+        "ja": "セリフ",
+        "en": "line"
+      },
+      {
+        "ja": "演技",
+        "en": "acting"
+      },
+      {
+        "ja": "演出",
+        "en": "direction"
+      },
+      {
+        "ja": "アドリブ",
+        "en": "ad-lib"
+      },
+      {
+        "ja": "段取り",
+        "en": "rehearsal blocking"
+      },
+      {
+        "ja": "リハーサル",
+        "en": "rehearsal"
+      },
+      {
+        "ja": "インタビュー",
+        "en": "interview"
+      },
+      {
+        "ja": "作品",
+        "en": "production",
+        "notes": "Use the audiovisual-production reading in the JAV profile; generally this can mean a work or piece."
+      },
+      {
+        "ja": "新作",
+        "en": "new release"
+      },
+      {
+        "ja": "発売日",
+        "en": "release date"
+      },
+      {
+        "ja": "品番",
+        "en": "product code"
+      },
+      {
+        "ja": "メーカー",
+        "en": "studio",
+        "notes": "Use the studio reading in the JAV profile; generally this can mean manufacturer."
+      },
+      {
+        "ja": "レーベル",
+        "en": "label"
+      },
+      {
+        "ja": "シリーズ",
+        "en": "series"
+      },
+      {
+        "ja": "企画",
+        "en": "concept"
+      },
+      {
+        "ja": "出演",
+        "en": "appearance"
+      },
+      {
+        "ja": "出演者",
+        "en": "performer"
+      },
+      {
+        "ja": "共演",
+        "en": "co-starring"
+      },
+      {
+        "ja": "デビュー",
+        "en": "debut"
+      },
+      {
+        "ja": "引退作",
+        "en": "retirement release"
+      },
+      {
+        "ja": "復帰作",
+        "en": "comeback release"
+      },
+      {
+        "ja": "無修正",
+        "en": "uncensored"
+      },
+      {
+        "ja": "修正済み",
+        "en": "censored"
+      },
+      {
+        "ja": "モザイク",
+        "en": "mosaic censorship"
+      },
+      {
+        "ja": "モザイク処理",
+        "en": "mosaic censorship"
+      },
+      {
+        "ja": "モザイクなし",
+        "en": "uncensored"
+      },
+      {
+        "ja": "顔出し",
+        "en": "face shown"
+      },
+      {
+        "ja": "顔出しNG",
+        "en": "no face reveal"
+      },
+      {
+        "ja": "身バレ",
+        "en": "identity exposure"
+      },
+      {
+        "ja": "カメラ目線",
+        "en": "look at the camera"
+      },
+      {
+        "ja": "主観映像",
+        "en": "point-of-view footage"
+      },
+      {
+        "ja": "主観撮影",
+        "en": "point-of-view filming"
+      },
+      {
+        "ja": "ハメ撮り撮影",
+        "en": "point-of-view sex filming"
+      },
+      {
+        "ja": "隠し撮り",
+        "en": "hidden-camera filming"
+      },
+      {
+        "ja": "固定カメラ",
+        "en": "fixed camera"
+      },
+      {
+        "ja": "手持ちカメラ",
+        "en": "handheld camera"
+      },
+      {
+        "ja": "顔アップ",
+        "en": "facial close-up"
+      },
+      {
+        "ja": "局部アップ",
+        "en": "genital close-up"
+      },
+      {
+        "ja": "発射シーン",
+        "en": "ejaculation scene"
+      },
+      {
+        "ja": "抜きどころ",
+        "en": "climax scene"
+      },
+      {
+        "ja": "メイキング",
+        "en": "behind-the-scenes footage"
+      },
+      {
+        "ja": "特典映像",
+        "en": "bonus footage"
+      },
+      {
+        "ja": "オフショット",
+        "en": "candid footage"
+      },
+      {
+        "ja": "バックステージ",
+        "en": "backstage"
+      },
+      {
+        "ja": "控室",
+        "en": "green room"
+      },
+      {
+        "ja": "楽屋",
+        "en": "dressing room"
+      },
+      {
+        "ja": "撮影会",
+        "en": "photo session"
+      },
+      {
+        "ja": "グラビア",
+        "en": "glamour modeling"
+      },
+      {
+        "ja": "イメージビデオ",
+        "en": "glamour video"
+      },
+      {
+        "ja": "ヌード",
+        "en": "nude"
+      },
+      {
+        "ja": "全裸",
+        "en": "fully nude"
+      },
+      {
+        "ja": "半裸",
+        "en": "half-naked"
+      },
+      {
+        "ja": "着衣",
+        "en": "clothed"
+      },
+      {
+        "ja": "着衣セックス",
+        "en": "clothed sex"
+      },
+      {
+        "ja": "着衣プレイ",
+        "en": "clothed play"
+      },
+      {
+        "ja": "脱衣",
+        "en": "undressing"
+      },
+      {
+        "ja": "ストリップ",
+        "en": "striptease"
+      },
+      {
+        "ja": "パンチラ",
+        "en": "panty shot"
+      },
+      {
+        "ja": "胸チラ",
+        "en": "cleavage flash"
+      },
+      {
+        "ja": "ポロリ",
+        "en": "accidental exposure",
+        "notes": "Use the exposure meaning in adult-production context; generally it can describe something slipping or falling out."
+      },
+      {
+        "ja": "ラブホテル",
+        "en": "love hotel"
+      },
+      {
+        "ja": "ラブホ",
+        "en": "love hotel"
+      },
+      {
+        "ja": "風俗",
+        "en": "sex industry"
+      },
+      {
+        "ja": "風俗店",
+        "en": "adult entertainment establishment"
+      },
+      {
+        "ja": "風俗嬢",
+        "en": "sex worker"
+      },
+      {
+        "ja": "デリヘル",
+        "en": "delivery health service"
+      },
+      {
+        "ja": "ホテヘル",
+        "en": "hotel health service"
+      },
+      {
+        "ja": "ソープランド",
+        "en": "soapland"
+      },
+      {
+        "ja": "ソープ嬢",
+        "en": "soapland worker"
+      },
+      {
+        "ja": "ピンサロ",
+        "en": "pink salon"
+      },
+      {
+        "ja": "イメクラ",
+        "en": "role-play adult service"
+      },
+      {
+        "ja": "キャバクラ",
+        "en": "hostess club"
+      },
+      {
+        "ja": "キャバ嬢",
+        "en": "hostess"
+      },
+      {
+        "ja": "ホストクラブ",
+        "en": "host club"
+      },
+      {
+        "ja": "ホスト",
+        "en": "male host"
+      },
+      {
+        "ja": "援助交際",
+        "en": "compensated dating"
+      },
+      {
+        "ja": "パパ活",
+        "en": "sugar dating"
+      },
+      {
+        "ja": "売春",
+        "en": "prostitution"
+      },
+      {
+        "ja": "買春",
+        "en": "buying sex"
+      },
+      {
+        "ja": "愛人契約",
+        "en": "mistress arrangement"
+      },
+      {
+        "ja": "人妻",
+        "en": "married woman"
+      },
+      {
+        "ja": "熟女",
+        "en": "mature woman"
+      },
+      {
+        "ja": "未亡人",
+        "en": "widow"
+      },
+      {
+        "ja": "愛人",
+        "en": "mistress"
+      },
+      {
+        "ja": "不倫",
+        "en": "adultery"
+      },
+      {
+        "ja": "浮気",
+        "en": "cheating"
+      },
+      {
+        "ja": "寝取られ",
+        "en": "cuckoldry"
+      },
+      {
+        "ja": "NTR",
+        "en": "cuckoldry"
+      },
+      {
+        "ja": "寝取り",
+        "en": "cuckolding"
+      },
+      {
+        "ja": "寝取らせ",
+        "en": "cuckold arrangement"
+      },
+      {
+        "ja": "夫婦交換",
+        "en": "spouse swapping"
+      },
+      {
+        "ja": "スワッピング",
+        "en": "partner swapping"
+      },
+      {
+        "ja": "ナンパ",
+        "en": "pickup"
+      },
+      {
+        "ja": "逆ナン",
+        "en": "reverse pickup"
+      },
+      {
+        "ja": "出会い系",
+        "en": "dating site"
+      },
+      {
+        "ja": "マッチングアプリ",
+        "en": "dating app"
+      },
+      {
+        "ja": "オフ会",
+        "en": "offline meetup"
+      },
+      {
+        "ja": "個人撮影",
+        "en": "private filming"
+      },
+      {
+        "ja": "裏垢",
+        "en": "anonymous adult account",
+        "notes": "Use the adult-social-media reading in the JAV profile; generally this means an anonymous alternate account."
+      },
+      {
+        "ja": "配信",
+        "en": "streaming"
+      },
+      {
+        "ja": "生配信",
+        "en": "live stream"
+      },
+      {
+        "ja": "ライブチャット",
+        "en": "live video chat"
+      },
+      {
+        "ja": "チャットレディ",
+        "en": "live-chat performer"
+      },
+      {
+        "ja": "同人AV",
+        "en": "independent adult video"
+      },
+      {
+        "ja": "自主制作",
+        "en": "independent production"
+      }
+    ],
+    "giga": [
+      {
+        "ja": "戦闘",
+        "en": "combat"
+      },
+      {
+        "ja": "戦闘開始",
+        "en": "commence combat"
+      },
+      {
+        "ja": "戦闘態勢",
+        "en": "combat stance"
+      },
+      {
+        "ja": "格闘",
+        "en": "hand-to-hand combat"
+      },
+      {
+        "ja": "格闘戦",
+        "en": "close combat"
+      },
+      {
+        "ja": "格闘技",
+        "en": "martial arts"
+      },
+      {
+        "ja": "喧嘩",
+        "en": "brawl"
+      },
+      {
+        "ja": "殴り合い",
+        "en": "fistfight"
+      },
+      {
+        "ja": "攻撃",
+        "en": "attack"
+      },
+      {
+        "ja": "連続攻撃",
+        "en": "consecutive attacks"
+      },
+      {
+        "ja": "一斉攻撃",
+        "en": "all-out attack"
+      },
+      {
+        "ja": "集中攻撃",
+        "en": "concentrated attack"
+      },
+      {
+        "ja": "奇襲",
+        "en": "surprise attack"
+      },
+      {
+        "ja": "不意打ち",
+        "en": "ambush"
+      },
+      {
+        "ja": "先制攻撃",
+        "en": "preemptive strike"
+      },
+      {
+        "ja": "反撃",
+        "en": "counterattack"
+      },
+      {
+        "ja": "反撃開始",
+        "en": "begin the counterattack"
+      },
+      {
+        "ja": "防御",
+        "en": "defense"
+      },
+      {
+        "ja": "完全防御",
+        "en": "absolute defense"
+      },
+      {
+        "ja": "回避",
+        "en": "evasion"
+      },
+      {
+        "ja": "緊急回避",
+        "en": "emergency evasion"
+      },
+      {
+        "ja": "ガード",
+        "en": "guard"
+      },
+      {
+        "ja": "受け身",
+        "en": "breakfall"
+      },
+      {
+        "ja": "拳",
+        "en": "fist"
+      },
+      {
+        "ja": "パンチ",
+        "en": "punch"
+      },
+      {
+        "ja": "ジャブ",
+        "en": "jab"
+      },
+      {
+        "ja": "ストレート",
+        "en": "straight punch"
+      },
+      {
+        "ja": "フック",
+        "en": "hook"
+      },
+      {
+        "ja": "アッパー",
+        "en": "uppercut"
+      },
+      {
+        "ja": "ボディブロー",
+        "en": "body blow"
+      },
+      {
+        "ja": "肘打ち",
+        "en": "elbow strike"
+      },
+      {
+        "ja": "膝蹴り",
+        "en": "knee strike"
+      },
+      {
+        "ja": "キック",
+        "en": "kick"
+      },
+      {
+        "ja": "前蹴り",
+        "en": "front kick"
+      },
+      {
+        "ja": "横蹴り",
+        "en": "side kick"
+      },
+      {
+        "ja": "後ろ蹴り",
+        "en": "back kick"
+      },
+      {
+        "ja": "回し蹴り",
+        "en": "roundhouse kick"
+      },
+      {
+        "ja": "飛び蹴り",
+        "en": "flying kick"
+      },
+      {
+        "ja": "二段蹴り",
+        "en": "double kick"
+      },
+      {
+        "ja": "かかと落とし",
+        "en": "axe kick"
+      },
+      {
+        "ja": "ローキック",
+        "en": "low kick"
+      },
+      {
+        "ja": "ミドルキック",
+        "en": "middle kick"
+      },
+      {
+        "ja": "ハイキック",
+        "en": "high kick"
+      },
+      {
+        "ja": "投げ技",
+        "en": "throwing technique"
+      },
+      {
+        "ja": "背負い投げ",
+        "en": "shoulder throw"
+      },
+      {
+        "ja": "一本背負い",
+        "en": "one-arm shoulder throw"
+      },
+      {
+        "ja": "巴投げ",
+        "en": "tomoe nage"
+      },
+      {
+        "ja": "締め技",
+        "en": "chokehold"
+      },
+      {
+        "ja": "関節技",
+        "en": "joint lock"
+      },
+      {
+        "ja": "腕ひしぎ",
+        "en": "armbar"
+      },
+      {
+        "ja": "腕ひしぎ十字固め",
+        "en": "cross armbar"
+      },
+      {
+        "ja": "三角絞め",
+        "en": "triangle choke"
+      },
+      {
+        "ja": "裸絞め",
+        "en": "rear naked choke"
+      },
+      {
+        "ja": "ヘッドロック",
+        "en": "headlock"
+      },
+      {
+        "ja": "羽交い締め",
+        "en": "full nelson"
+      },
+      {
+        "ja": "組み技",
+        "en": "grappling technique"
+      },
+      {
+        "ja": "寝技",
+        "en": "ground grappling"
+      },
+      {
+        "ja": "馬乗り",
+        "en": "mounted position"
+      },
+      {
+        "ja": "押し倒す",
+        "en": "push down"
+      },
+      {
+        "ja": "組み伏せる",
+        "en": "pin down"
+      },
+      {
+        "ja": "叩きつける",
+        "en": "slam down"
+      },
+      {
+        "ja": "壁に叩きつける",
+        "en": "slam against the wall"
+      },
+      {
+        "ja": "床に叩きつける",
+        "en": "slam onto the floor"
+      },
+      {
+        "ja": "投げ飛ばす",
+        "en": "hurl away"
+      },
+      {
+        "ja": "吹き飛ばす",
+        "en": "send flying"
+      },
+      {
+        "ja": "弾き飛ばす",
+        "en": "knock away"
+      },
+      {
+        "ja": "殴り飛ばす",
+        "en": "punch away"
+      },
+      {
+        "ja": "蹴り飛ばす",
+        "en": "kick away"
+      },
+      {
+        "ja": "平手打ち",
+        "en": "slap"
+      },
+      {
+        "ja": "ビンタ",
+        "en": "slap"
+      },
+      {
+        "ja": "往復ビンタ",
+        "en": "repeated slaps"
+      },
+      {
+        "ja": "張り手",
+        "en": "open-hand strike"
+      },
+      {
+        "ja": "頭突き",
+        "en": "headbutt"
+      },
+      {
+        "ja": "首を絞める",
+        "en": "choke"
+      },
+      {
+        "ja": "絞殺",
+        "en": "strangulation"
+      },
+      {
+        "ja": "噛みつく",
+        "en": "bite"
+      },
+      {
+        "ja": "引っ掻く",
+        "en": "scratch"
+      },
+      {
+        "ja": "体当たり",
+        "en": "body slam"
+      },
+      {
+        "ja": "タックル",
+        "en": "tackle"
+      },
+      {
+        "ja": "突進",
+        "en": "charge"
+      },
+      {
+        "ja": "受け止める",
+        "en": "catch the attack"
+      },
+      {
+        "ja": "跳ね返す",
+        "en": "repel"
+      },
+      {
+        "ja": "気絶",
+        "en": "knockout"
+      },
+      {
+        "ja": "失神する",
+        "en": "lose consciousness"
+      },
+      {
+        "ja": "昏倒",
+        "en": "knockout"
+      },
+      {
+        "ja": "戦闘不能",
+        "en": "incapacitated"
+      },
+      {
+        "ja": "再起不能",
+        "en": "unable to fight again"
+      },
+      {
+        "ja": "降参",
+        "en": "surrender"
+      },
+      {
+        "ja": "降伏",
+        "en": "surrender"
+      },
+      {
+        "ja": "敗北",
+        "en": "defeat"
+      },
+      {
+        "ja": "勝利",
+        "en": "victory"
+      },
+      {
+        "ja": "圧勝",
+        "en": "overwhelming victory"
+      },
+      {
+        "ja": "完敗",
+        "en": "total defeat"
+      },
+      {
+        "ja": "相打ち",
+        "en": "mutual defeat"
+      },
+      {
+        "ja": "決着",
+        "en": "decisive conclusion"
+      },
+      {
+        "ja": "一騎打ち",
+        "en": "single combat"
+      },
+      {
+        "ja": "決闘",
+        "en": "duel"
+      },
+      {
+        "ja": "死闘",
+        "en": "death match"
+      },
+      {
+        "ja": "覚悟しろ",
+        "en": "prepare yourself"
+      },
+      {
+        "ja": "かかってこい",
+        "en": "come at me"
+      },
+      {
+        "ja": "勝負だ",
+        "en": "let's settle this"
+      },
+      {
+        "ja": "殺す",
+        "en": "kill"
+      },
+      {
+        "ja": "ぶっ殺す",
+        "en": "I'll fucking kill you"
+      },
+      {
+        "ja": "抹殺",
+        "en": "elimination"
+      },
+      {
+        "ja": "始末する",
+        "en": "eliminate"
+      },
+      {
+        "ja": "処刑",
+        "en": "execution"
+      },
+      {
+        "ja": "公開処刑",
+        "en": "public execution"
+      },
+      {
+        "ja": "暗殺",
+        "en": "assassination"
+      },
+      {
+        "ja": "殺害",
+        "en": "murder"
+      },
+      {
+        "ja": "惨殺",
+        "en": "brutal murder"
+      },
+      {
+        "ja": "命乞い",
+        "en": "begging for one's life"
+      },
+      {
+        "ja": "拷問",
+        "en": "torture"
+      },
+      {
+        "ja": "拷問器具",
+        "en": "torture device"
+      },
+      {
+        "ja": "処刑台",
+        "en": "scaffold"
+      },
+      {
+        "ja": "捕虜",
+        "en": "prisoner of war"
+      },
+      {
+        "ja": "囚人",
+        "en": "prisoner"
+      },
+      {
+        "ja": "人質",
+        "en": "hostage"
+      },
+      {
+        "ja": "監禁",
+        "en": "confinement"
+      },
+      {
+        "ja": "幽閉",
+        "en": "imprisonment"
+      },
+      {
+        "ja": "軟禁",
+        "en": "house arrest"
+      },
+      {
+        "ja": "拉致",
+        "en": "abduction"
+      },
+      {
+        "ja": "誘拐",
+        "en": "kidnapping"
+      },
+      {
+        "ja": "捕獲",
+        "en": "capture"
+      },
+      {
+        "ja": "捕縛",
+        "en": "apprehension"
+      },
+      {
+        "ja": "逮捕",
+        "en": "arrest"
+      },
+      {
+        "ja": "拘留",
+        "en": "detention"
+      },
+      {
+        "ja": "投獄",
+        "en": "imprisonment"
+      },
+      {
+        "ja": "囚われの身",
+        "en": "captive"
+      },
+      {
+        "ja": "脱出",
+        "en": "escape"
+      },
+      {
+        "ja": "脱走",
+        "en": "escape from custody"
+      },
+      {
+        "ja": "脱獄",
+        "en": "prison break"
+      },
+      {
+        "ja": "救出",
+        "en": "rescue"
+      },
+      {
+        "ja": "救助",
+        "en": "rescue"
+      },
+      {
+        "ja": "解放",
+        "en": "liberation"
+      },
+      {
+        "ja": "尋問",
+        "en": "interrogation"
+      },
+      {
+        "ja": "尋問室",
+        "en": "interrogation room"
+      },
+      {
+        "ja": "取り調べ",
+        "en": "questioning"
+      },
+      {
+        "ja": "自白",
+        "en": "confession"
+      },
+      {
+        "ja": "自白剤",
+        "en": "truth serum"
+      },
+      {
+        "ja": "情報を吐け",
+        "en": "tell me what you know"
+      },
+      {
+        "ja": "口を割る",
+        "en": "confess under pressure"
+      },
+      {
+        "ja": "秘密を話せ",
+        "en": "reveal the secret"
+      },
+      {
+        "ja": "黙秘",
+        "en": "remain silent"
+      },
+      {
+        "ja": "拷問に耐える",
+        "en": "withstand torture"
+      },
+      {
+        "ja": "口封じ",
+        "en": "silencing"
+      },
+      {
+        "ja": "証拠隠滅",
+        "en": "destruction of evidence"
+      },
+      {
+        "ja": "監視",
+        "en": "surveillance"
+      },
+      {
+        "ja": "監視カメラ",
+        "en": "security camera"
+      },
+      {
+        "ja": "盗聴",
+        "en": "wiretapping"
+      },
+      {
+        "ja": "発信機",
+        "en": "tracking device"
+      },
+      {
+        "ja": "追跡装置",
+        "en": "tracking device"
+      },
+      {
+        "ja": "罠",
+        "en": "trap"
+      },
+      {
+        "ja": "罠にかかる",
+        "en": "get caught in a trap"
+      },
+      {
+        "ja": "落とし穴",
+        "en": "pitfall"
+      },
+      {
+        "ja": "待ち伏せ",
+        "en": "ambush"
+      },
+      {
+        "ja": "包囲",
+        "en": "encirclement"
+      },
+      {
+        "ja": "包囲網",
+        "en": "encirclement"
+      },
+      {
+        "ja": "追跡",
+        "en": "pursuit"
+      },
+      {
+        "ja": "尾行",
+        "en": "tailing"
+      },
+      {
+        "ja": "逃走",
+        "en": "flight"
+      },
+      {
+        "ja": "逃亡",
+        "en": "fugitive escape"
+      },
+      {
+        "ja": "潜伏",
+        "en": "hiding"
+      },
+      {
+        "ja": "潜入",
+        "en": "infiltration"
+      },
+      {
+        "ja": "潜入捜査",
+        "en": "undercover investigation"
+      },
+      {
+        "ja": "偵察",
+        "en": "reconnaissance"
+      },
+      {
+        "ja": "諜報",
+        "en": "espionage"
+      },
+      {
+        "ja": "スパイ活動",
+        "en": "espionage"
+      },
+      {
+        "ja": "救援",
+        "en": "reinforcements"
+      },
+      {
+        "ja": "援軍",
+        "en": "reinforcements"
+      },
+      {
+        "ja": "増援",
+        "en": "reinforcements"
+      },
+      {
+        "ja": "変身",
+        "en": "transformation"
+      },
+      {
+        "ja": "変身する",
+        "en": "transform"
+      },
+      {
+        "ja": "変身解除",
+        "en": "de-transformation"
+      },
+      {
+        "ja": "強制変身解除",
+        "en": "forced de-transformation"
+      },
+      {
+        "ja": "変身シーン",
+        "en": "transformation scene"
+      },
+      {
+        "ja": "変身ヒロイン",
+        "en": "transforming heroine"
+      },
+      {
+        "ja": "変身ヒーロー",
+        "en": "transforming hero"
+      },
+      {
+        "ja": "変身アイテム",
+        "en": "transformation device"
+      },
+      {
+        "ja": "変身ベルト",
+        "en": "transformation belt"
+      },
+      {
+        "ja": "変身装置",
+        "en": "transformation device"
+      },
+      {
+        "ja": "変身ブレスレット",
+        "en": "transformation bracelet"
+      },
+      {
+        "ja": "変身コンパクト",
+        "en": "transformation compact"
+      },
+      {
+        "ja": "変身能力",
+        "en": "transformation ability"
+      },
+      {
+        "ja": "変身ポーズ",
+        "en": "transformation pose"
+      },
+      {
+        "ja": "変身完了",
+        "en": "transformation complete"
+      },
+      {
+        "ja": "変身不能",
+        "en": "unable to transform"
+      },
+      {
+        "ja": "変身失敗",
+        "en": "transformation failed"
+      },
+      {
+        "ja": "変身前",
+        "en": "before transformation"
+      },
+      {
+        "ja": "変身後",
+        "en": "after transformation"
+      },
+      {
+        "ja": "変身形態",
+        "en": "transformed form"
+      },
+      {
+        "ja": "変身者",
+        "en": "transformer"
+      },
+      {
+        "ja": "正体",
+        "en": "true identity"
+      },
+      {
+        "ja": "正体を現す",
+        "en": "reveal one's true identity"
+      },
+      {
+        "ja": "正体がばれる",
+        "en": "identity is exposed"
+      },
+      {
+        "ja": "素顔",
+        "en": "unmasked face"
+      },
+      {
+        "ja": "マスクオフ",
+        "en": "unmasking"
+      },
+      {
+        "ja": "名乗り",
+        "en": "hero introduction"
+      },
+      {
+        "ja": "決め台詞",
+        "en": "catchphrase"
+      },
+      {
+        "ja": "決めポーズ",
+        "en": "signature pose"
+      },
+      {
+        "ja": "ヒロイン",
+        "en": "heroine"
+      },
+      {
+        "ja": "ヒーロー",
+        "en": "hero"
+      },
+      {
+        "ja": "戦士",
+        "en": "warrior"
+      },
+      {
+        "ja": "女戦士",
+        "en": "female warrior"
+      },
+      {
+        "ja": "美少女戦士",
+        "en": "pretty guardian"
+      },
+      {
+        "ja": "魔法少女",
+        "en": "magical girl"
+      },
+      {
+        "ja": "魔法戦士",
+        "en": "magical warrior"
+      },
+      {
+        "ja": "正義の味方",
+        "en": "champion of justice"
+      },
+      {
+        "ja": "守護者",
+        "en": "guardian"
+      },
+      {
+        "ja": "守護戦士",
+        "en": "guardian warrior"
+      },
+      {
+        "ja": "超戦士",
+        "en": "super warrior"
+      },
+      {
+        "ja": "光の戦士",
+        "en": "warrior of light"
+      },
+      {
+        "ja": "選ばれし戦士",
+        "en": "chosen warrior"
+      },
+      {
+        "ja": "戦隊",
+        "en": "hero squadron"
+      },
+      {
+        "ja": "戦隊ヒロイン",
+        "en": "squadron heroine"
+      },
+      {
+        "ja": "隊員",
+        "en": "squad member"
+      },
+      {
+        "ja": "追加戦士",
+        "en": "additional warrior"
+      },
+      {
+        "ja": "戦闘員",
+        "en": "grunt"
+      },
+      {
+        "ja": "怪人",
+        "en": "monster operative"
+      },
+      {
+        "ja": "改造怪人",
+        "en": "modified monster"
+      },
+      {
+        "ja": "怪物",
+        "en": "monster"
+      },
+      {
+        "ja": "魔物",
+        "en": "demon beast"
+      },
+      {
+        "ja": "魔人",
+        "en": "demon warrior"
+      },
+      {
+        "ja": "悪魔",
+        "en": "demon"
+      },
+      {
+        "ja": "妖怪",
+        "en": "yokai"
+      },
+      {
+        "ja": "怪獣",
+        "en": "kaiju"
+      },
+      {
+        "ja": "巨大怪獣",
+        "en": "giant kaiju"
+      },
+      {
+        "ja": "宇宙怪獣",
+        "en": "space kaiju"
+      },
+      {
+        "ja": "宇宙人",
+        "en": "alien"
+      },
+      {
+        "ja": "異星人",
+        "en": "alien"
+      },
+      {
+        "ja": "侵略者",
+        "en": "invader"
+      },
+      {
+        "ja": "敵",
+        "en": "enemy"
+      },
+      {
+        "ja": "宿敵",
+        "en": "archenemy"
+      },
+      {
+        "ja": "強敵",
+        "en": "formidable enemy"
+      },
+      {
+        "ja": "幹部",
+        "en": "commander"
+      },
+      {
+        "ja": "敵幹部",
+        "en": "enemy commander"
+      },
+      {
+        "ja": "女幹部",
+        "en": "female commander"
+      },
+      {
+        "ja": "首領",
+        "en": "leader"
+      },
+      {
+        "ja": "総統",
+        "en": "supreme leader"
+      },
+      {
+        "ja": "大首領",
+        "en": "supreme overlord"
+      },
+      {
+        "ja": "魔王",
+        "en": "demon king"
+      },
+      {
+        "ja": "女王",
+        "en": "queen"
+      },
+      {
+        "ja": "皇帝",
+        "en": "emperor"
+      },
+      {
+        "ja": "帝王",
+        "en": "emperor"
+      },
+      {
+        "ja": "ボス",
+        "en": "boss"
+      },
+      {
+        "ja": "ラスボス",
+        "en": "final boss"
+      },
+      {
+        "ja": "悪の組織",
+        "en": "evil organization"
+      },
+      {
+        "ja": "秘密結社",
+        "en": "secret society"
+      },
+      {
+        "ja": "怪人軍団",
+        "en": "monster army"
+      },
+      {
+        "ja": "戦闘員軍団",
+        "en": "grunt army"
+      },
+      {
+        "ja": "基地",
+        "en": "base"
+      },
+      {
+        "ja": "秘密基地",
+        "en": "secret base"
+      },
+      {
+        "ja": "地下基地",
+        "en": "underground base"
+      },
+      {
+        "ja": "アジト",
+        "en": "hideout"
+      },
+      {
+        "ja": "本拠地",
+        "en": "headquarters"
+      },
+      {
+        "ja": "司令室",
+        "en": "command room"
+      },
+      {
+        "ja": "研究所",
+        "en": "laboratory"
+      },
+      {
+        "ja": "実験室",
+        "en": "laboratory"
+      },
+      {
+        "ja": "牢獄",
+        "en": "dungeon"
+      },
+      {
+        "ja": "牢屋",
+        "en": "cell"
+      },
+      {
+        "ja": "必殺技",
+        "en": "finishing move"
+      },
+      {
+        "ja": "必殺攻撃",
+        "en": "finishing attack"
+      },
+      {
+        "ja": "必殺光線",
+        "en": "finishing beam"
+      },
+      {
+        "ja": "特殊攻撃",
+        "en": "special attack"
+      },
+      {
+        "ja": "特殊能力",
+        "en": "special ability"
+      },
+      {
+        "ja": "超能力",
+        "en": "superpower"
+      },
+      {
+        "ja": "能力",
+        "en": "ability"
+      },
+      {
+        "ja": "超人",
+        "en": "superhuman"
+      },
+      {
+        "ja": "怪力",
+        "en": "superhuman strength"
+      },
+      {
+        "ja": "飛行能力",
+        "en": "flight ability"
+      },
+      {
+        "ja": "透視能力",
+        "en": "x-ray vision"
+      },
+      {
+        "ja": "念動力",
+        "en": "telekinesis"
+      },
+      {
+        "ja": "瞬間移動",
+        "en": "teleportation"
+      },
+      {
+        "ja": "分身",
+        "en": "duplication"
+      },
+      {
+        "ja": "分身の術",
+        "en": "duplication technique"
+      },
+      {
+        "ja": "透明化",
+        "en": "invisibility"
+      },
+      {
+        "ja": "巨大化",
+        "en": "gigantification"
+      },
+      {
+        "ja": "縮小化",
+        "en": "miniaturization"
+      },
+      {
+        "ja": "強化",
+        "en": "enhancement"
+      },
+      {
+        "ja": "強化形態",
+        "en": "powered-up form"
+      },
+      {
+        "ja": "最終形態",
+        "en": "final form"
+      },
+      {
+        "ja": "究極形態",
+        "en": "ultimate form"
+      },
+      {
+        "ja": "覚醒",
+        "en": "awakening"
+      },
+      {
+        "ja": "覚醒形態",
+        "en": "awakened form"
+      },
+      {
+        "ja": "暴走",
+        "en": "rampage"
+      },
+      {
+        "ja": "暴走状態",
+        "en": "berserk state"
+      },
+      {
+        "ja": "限界突破",
+        "en": "limit break"
+      },
+      {
+        "ja": "パワーアップ",
+        "en": "power-up"
+      },
+      {
+        "ja": "エネルギー",
+        "en": "energy"
+      },
+      {
+        "ja": "エネルギー切れ",
+        "en": "out of energy"
+      },
+      {
+        "ja": "エネルギー吸収",
+        "en": "energy absorption"
+      },
+      {
+        "ja": "エネルギー放出",
+        "en": "energy discharge"
+      },
+      {
+        "ja": "生命エネルギー",
+        "en": "life energy"
+      },
+      {
+        "ja": "戦闘エネルギー",
+        "en": "combat energy"
+      },
+      {
+        "ja": "体力",
+        "en": "stamina"
+      },
+      {
+        "ja": "体力切れ",
+        "en": "exhaustion"
+      },
+      {
+        "ja": "限界",
+        "en": "limit"
+      },
+      {
+        "ja": "力が入らない",
+        "en": "unable to muster strength"
+      },
+      {
+        "ja": "能力封印",
+        "en": "power sealing"
+      },
+      {
+        "ja": "能力無効化",
+        "en": "power nullification"
+      },
+      {
+        "ja": "変身封じ",
+        "en": "transformation sealing"
+      },
+      {
+        "ja": "必殺技封じ",
+        "en": "finishing-move sealing"
+      },
+      {
+        "ja": "光線",
+        "en": "beam"
+      },
+      {
+        "ja": "光線技",
+        "en": "beam attack"
+      },
+      {
+        "ja": "レーザー",
+        "en": "laser"
+      },
+      {
+        "ja": "ビーム",
+        "en": "beam"
+      },
+      {
+        "ja": "光弾",
+        "en": "energy blast"
+      },
+      {
+        "ja": "エネルギー弾",
+        "en": "energy blast"
+      },
+      {
+        "ja": "衝撃波",
+        "en": "shockwave"
+      },
+      {
+        "ja": "衝撃",
+        "en": "impact"
+      },
+      {
+        "ja": "爆発",
+        "en": "explosion"
+      },
+      {
+        "ja": "大爆発",
+        "en": "massive explosion"
+      },
+      {
+        "ja": "爆破",
+        "en": "detonation"
+      },
+      {
+        "ja": "爆弾",
+        "en": "bomb"
+      },
+      {
+        "ja": "時限爆弾",
+        "en": "time bomb"
+      },
+      {
+        "ja": "電撃",
+        "en": "electric shock"
+      },
+      {
+        "ja": "雷撃",
+        "en": "lightning attack"
+      },
+      {
+        "ja": "高圧電流",
+        "en": "high-voltage current"
+      },
+      {
+        "ja": "火炎",
+        "en": "flames"
+      },
+      {
+        "ja": "火炎攻撃",
+        "en": "flame attack"
+      },
+      {
+        "ja": "火球",
+        "en": "fireball"
+      },
+      {
+        "ja": "冷凍",
+        "en": "freezing"
+      },
+      {
+        "ja": "冷凍光線",
+        "en": "freezing beam"
+      },
+      {
+        "ja": "凍結",
+        "en": "freezing"
+      },
+      {
+        "ja": "氷結",
+        "en": "ice entrapment"
+      },
+      {
+        "ja": "毒",
+        "en": "poison"
+      },
+      {
+        "ja": "毒液",
+        "en": "venom"
+      },
+      {
+        "ja": "毒ガス",
+        "en": "poison gas"
+      },
+      {
+        "ja": "麻痺",
+        "en": "paralysis"
+      },
+      {
+        "ja": "麻痺毒",
+        "en": "paralyzing poison"
+      },
+      {
+        "ja": "催眠",
+        "en": "hypnosis"
+      },
+      {
+        "ja": "催眠術",
+        "en": "hypnotism"
+      },
+      {
+        "ja": "洗脳",
+        "en": "brainwashing"
+      },
+      {
+        "ja": "精神操作",
+        "en": "mind control"
+      },
+      {
+        "ja": "精神攻撃",
+        "en": "psychic attack"
+      },
+      {
+        "ja": "幻覚",
+        "en": "hallucination"
+      },
+      {
+        "ja": "幻術",
+        "en": "illusion"
+      },
+      {
+        "ja": "呪縛",
+        "en": "magical binding"
+      },
+      {
+        "ja": "石化",
+        "en": "petrification"
+      },
+      {
+        "ja": "吸収",
+        "en": "absorption"
+      },
+      {
+        "ja": "融合",
+        "en": "fusion"
+      },
+      {
+        "ja": "分裂",
+        "en": "division"
+      },
+      {
+        "ja": "再生",
+        "en": "regeneration"
+      },
+      {
+        "ja": "不死身",
+        "en": "invulnerable"
+      },
+      {
+        "ja": "無敵",
+        "en": "invincible"
+      },
+      {
+        "ja": "バリア",
+        "en": "barrier"
+      },
+      {
+        "ja": "防御壁",
+        "en": "defensive barrier"
+      },
+      {
+        "ja": "結界",
+        "en": "magical barrier"
+      },
+      {
+        "ja": "シールド",
+        "en": "shield"
+      },
+      {
+        "ja": "剣",
+        "en": "sword"
+      },
+      {
+        "ja": "刀",
+        "en": "blade"
+      },
+      {
+        "ja": "日本刀",
+        "en": "katana"
+      },
+      {
+        "ja": "短剣",
+        "en": "dagger"
+      },
+      {
+        "ja": "大剣",
+        "en": "greatsword"
+      },
+      {
+        "ja": "双剣",
+        "en": "dual swords"
+      },
+      {
+        "ja": "槍",
+        "en": "spear"
+      },
+      {
+        "ja": "薙刀",
+        "en": "naginata"
+      },
+      {
+        "ja": "斧",
+        "en": "axe"
+      },
+      {
+        "ja": "戦斧",
+        "en": "battle axe"
+      },
+      {
+        "ja": "鎌",
+        "en": "scythe"
+      },
+      {
+        "ja": "大鎌",
+        "en": "great scythe"
+      },
+      {
+        "ja": "棍棒",
+        "en": "club"
+      },
+      {
+        "ja": "鉄棒",
+        "en": "iron bar"
+      },
+      {
+        "ja": "鞭状武器",
+        "en": "whip weapon"
+      },
+      {
+        "ja": "弓",
+        "en": "bow"
+      },
+      {
+        "ja": "矢",
+        "en": "arrow"
+      },
+      {
+        "ja": "弓矢",
+        "en": "bow and arrow"
+      },
+      {
+        "ja": "銃",
+        "en": "gun"
+      },
+      {
+        "ja": "拳銃",
+        "en": "handgun"
+      },
+      {
+        "ja": "ライフル",
+        "en": "rifle"
+      },
+      {
+        "ja": "散弾銃",
+        "en": "shotgun"
+      },
+      {
+        "ja": "機関銃",
+        "en": "machine gun"
+      },
+      {
+        "ja": "狙撃銃",
+        "en": "sniper rifle"
+      },
+      {
+        "ja": "光線銃",
+        "en": "ray gun"
+      },
+      {
+        "ja": "レーザー銃",
+        "en": "laser gun"
+      },
+      {
+        "ja": "弾丸",
+        "en": "bullet"
+      },
+      {
+        "ja": "弾薬",
+        "en": "ammunition"
+      },
+      {
+        "ja": "武器",
+        "en": "weapon"
+      },
+      {
+        "ja": "兵器",
+        "en": "weapon system"
+      },
+      {
+        "ja": "秘密兵器",
+        "en": "secret weapon"
+      },
+      {
+        "ja": "最終兵器",
+        "en": "ultimate weapon"
+      },
+      {
+        "ja": "生物兵器",
+        "en": "bioweapon"
+      },
+      {
+        "ja": "化学兵器",
+        "en": "chemical weapon"
+      },
+      {
+        "ja": "武装",
+        "en": "armament"
+      },
+      {
+        "ja": "装備",
+        "en": "equipment"
+      },
+      {
+        "ja": "防具",
+        "en": "armor"
+      },
+      {
+        "ja": "鎧",
+        "en": "armor"
+      },
+      {
+        "ja": "胸当て",
+        "en": "breastplate"
+      },
+      {
+        "ja": "肩当て",
+        "en": "shoulder armor"
+      },
+      {
+        "ja": "腕当て",
+        "en": "bracer"
+      },
+      {
+        "ja": "すね当て",
+        "en": "greave"
+      },
+      {
+        "ja": "盾",
+        "en": "shield"
+      },
+      {
+        "ja": "戦闘スーツ",
+        "en": "combat suit"
+      },
+      {
+        "ja": "強化スーツ",
+        "en": "powered suit"
+      },
+      {
+        "ja": "パワードスーツ",
+        "en": "powered suit"
+      },
+      {
+        "ja": "ボディスーツ",
+        "en": "bodysuit"
+      },
+      {
+        "ja": "全身タイツ",
+        "en": "full-body tights"
+      },
+      {
+        "ja": "レオタード",
+        "en": "leotard"
+      },
+      {
+        "ja": "ラバースーツ",
+        "en": "rubber suit"
+      },
+      {
+        "ja": "ラテックススーツ",
+        "en": "latex suit"
+      },
+      {
+        "ja": "メタリックスーツ",
+        "en": "metallic bodysuit"
+      },
+      {
+        "ja": "バトルスーツ",
+        "en": "battle suit"
+      },
+      {
+        "ja": "ヒロインスーツ",
+        "en": "heroine suit"
+      },
+      {
+        "ja": "戦隊スーツ",
+        "en": "squadron suit"
+      },
+      {
+        "ja": "変身スーツ",
+        "en": "transformation suit"
+      },
+      {
+        "ja": "スーツアクター",
+        "en": "suit performer"
+      },
+      {
+        "ja": "マスク",
+        "en": "mask"
+      },
+      {
+        "ja": "仮面",
+        "en": "mask"
+      },
+      {
+        "ja": "ヘルメット",
+        "en": "helmet"
+      },
+      {
+        "ja": "バイザー",
+        "en": "visor"
+      },
+      {
+        "ja": "ゴーグル",
+        "en": "goggles"
+      },
+      {
+        "ja": "ブーツ",
+        "en": "boots"
+      },
+      {
+        "ja": "ロングブーツ",
+        "en": "knee-high boots"
+      },
+      {
+        "ja": "手袋",
+        "en": "gloves"
+      },
+      {
+        "ja": "長手袋",
+        "en": "opera gloves"
+      },
+      {
+        "ja": "マント",
+        "en": "cape"
+      },
+      {
+        "ja": "ベルト",
+        "en": "belt"
+      },
+      {
+        "ja": "ブレスレット",
+        "en": "bracelet"
+      },
+      {
+        "ja": "アーマー",
+        "en": "armor"
+      },
+      {
+        "ja": "装甲",
+        "en": "armor plating"
+      },
+      {
+        "ja": "コスチューム",
+        "en": "costume"
+      },
+      {
+        "ja": "コスプレ",
+        "en": "cosplay"
+      },
+      {
+        "ja": "着ぐるみ",
+        "en": "costume suit"
+      },
+      {
+        "ja": "着ぐるみ怪人",
+        "en": "costumed monster"
+      },
+      {
+        "ja": "スーツ破壊",
+        "en": "suit destruction"
+      },
+      {
+        "ja": "マスク破壊",
+        "en": "mask destruction"
+      },
+      {
+        "ja": "装甲破壊",
+        "en": "armor break"
+      },
+      {
+        "ja": "変身アイテム破壊",
+        "en": "transformation-device destruction"
+      },
+      {
+        "ja": "衣装破壊",
+        "en": "costume destruction"
+      },
+      {
+        "ja": "スーツ剥ぎ",
+        "en": "suit stripping"
+      },
+      {
+        "ja": "マスク剥ぎ",
+        "en": "unmasking by force"
+      },
+      {
+        "ja": "変身解除攻撃",
+        "en": "de-transformation attack"
+      },
+      {
+        "ja": "敗れる",
+        "en": "be defeated"
+      },
+      {
+        "ja": "倒される",
+        "en": "be defeated"
+      },
+      {
+        "ja": "捕まる",
+        "en": "get captured"
+      },
+      {
+        "ja": "拘束される",
+        "en": "be restrained"
+      },
+      {
+        "ja": "捕らわれる",
+        "en": "be captured"
+      },
+      {
+        "ja": "追い詰められる",
+        "en": "be cornered"
+      },
+      {
+        "ja": "追い詰める",
+        "en": "corner"
+      },
+      {
+        "ja": "包囲される",
+        "en": "be surrounded"
+      },
+      {
+        "ja": "奇襲を受ける",
+        "en": "be ambushed"
+      },
+      {
+        "ja": "罠に落ちる",
+        "en": "fall into a trap"
+      },
+      {
+        "ja": "基地に潜入する",
+        "en": "infiltrate the base"
+      },
+      {
+        "ja": "脱出経路",
+        "en": "escape route"
+      },
+      {
+        "ja": "救出作戦",
+        "en": "rescue operation"
+      },
+      {
+        "ja": "人質救出",
+        "en": "hostage rescue"
+      },
+      {
+        "ja": "単独行動",
+        "en": "solo operation"
+      },
+      {
+        "ja": "単独潜入",
+        "en": "solo infiltration"
+      },
+      {
+        "ja": "秘密任務",
+        "en": "secret mission"
+      },
+      {
+        "ja": "極秘任務",
+        "en": "top-secret mission"
+      },
+      {
+        "ja": "潜入任務",
+        "en": "infiltration mission"
+      },
+      {
+        "ja": "護衛任務",
+        "en": "escort mission"
+      },
+      {
+        "ja": "捜索任務",
+        "en": "search mission"
+      },
+      {
+        "ja": "討伐任務",
+        "en": "subjugation mission"
+      },
+      {
+        "ja": "復讐",
+        "en": "revenge"
+      },
+      {
+        "ja": "敵討ち",
+        "en": "revenge"
+      },
+      {
+        "ja": "裏切り",
+        "en": "betrayal"
+      },
+      {
+        "ja": "洗脳される",
+        "en": "be brainwashed"
+      },
+      {
+        "ja": "操られる",
+        "en": "be controlled"
+      },
+      {
+        "ja": "精神支配",
+        "en": "mind control"
+      },
+      {
+        "ja": "完全支配",
+        "en": "total domination"
+      },
+      {
+        "ja": "支配",
+        "en": "domination"
+      },
+      {
+        "ja": "屈服",
+        "en": "submission"
+      },
+      {
+        "ja": "服従させる",
+        "en": "force into submission"
+      },
+      {
+        "ja": "洗脳装置",
+        "en": "brainwashing device"
+      },
+      {
+        "ja": "催眠装置",
+        "en": "hypnosis device"
+      },
+      {
+        "ja": "精神操作装置",
+        "en": "mind-control device"
+      },
+      {
+        "ja": "記憶操作",
+        "en": "memory manipulation"
+      },
+      {
+        "ja": "記憶消去",
+        "en": "memory erasure"
+      },
+      {
+        "ja": "記憶改変",
+        "en": "memory alteration"
+      },
+      {
+        "ja": "人格改造",
+        "en": "personality modification"
+      },
+      {
+        "ja": "闇堕ち",
+        "en": "corruption to evil"
+      },
+      {
+        "ja": "悪堕ち",
+        "en": "corruption to evil"
+      },
+      {
+        "ja": "快楽堕ち",
+        "en": "corruption through pleasure"
+      },
+      {
+        "ja": "洗脳堕ち",
+        "en": "brainwashed corruption"
+      },
+      {
+        "ja": "改造",
+        "en": "modification"
+      },
+      {
+        "ja": "人体改造",
+        "en": "human modification"
+      },
+      {
+        "ja": "人体実験",
+        "en": "human experimentation"
+      },
+      {
+        "ja": "生体実験",
+        "en": "biological experimentation"
+      },
+      {
+        "ja": "実験体",
+        "en": "test subject"
+      },
+      {
+        "ja": "被験者",
+        "en": "test subject"
+      },
+      {
+        "ja": "検体",
+        "en": "specimen"
+      },
+      {
+        "ja": "改造人間",
+        "en": "modified human"
+      },
+      {
+        "ja": "強化人間",
+        "en": "enhanced human"
+      },
+      {
+        "ja": "超人化",
+        "en": "superhuman transformation"
+      },
+      {
+        "ja": "怪人化",
+        "en": "monster transformation"
+      },
+      {
+        "ja": "獣人化",
+        "en": "beast transformation"
+      },
+      {
+        "ja": "機械化",
+        "en": "mechanization"
+      },
+      {
+        "ja": "クローン",
+        "en": "clone"
+      },
+      {
+        "ja": "複製体",
+        "en": "duplicate body"
+      },
+      {
+        "ja": "人造人間",
+        "en": "artificial human"
+      },
+      {
+        "ja": "アンドロイド",
+        "en": "android"
+      },
+      {
+        "ja": "サイボーグ",
+        "en": "cyborg"
+      },
+      {
+        "ja": "ロボット",
+        "en": "robot"
+      },
+      {
+        "ja": "機械人間",
+        "en": "cyborg"
+      },
+      {
+        "ja": "生体兵器",
+        "en": "bioweapon"
+      },
+      {
+        "ja": "戦闘兵器",
+        "en": "combat weapon"
+      },
+      {
+        "ja": "殺人兵器",
+        "en": "killing machine"
+      },
+      {
+        "ja": "魔法",
+        "en": "magic"
+      },
+      {
+        "ja": "魔力",
+        "en": "magic power"
+      },
+      {
+        "ja": "魔法陣",
+        "en": "magic circle"
+      },
+      {
+        "ja": "魔法杖",
+        "en": "magic wand"
+      },
+      {
+        "ja": "魔法の杖",
+        "en": "magic wand"
+      },
+      {
+        "ja": "呪い",
+        "en": "curse"
+      },
+      {
+        "ja": "呪文",
+        "en": "spell"
+      },
+      {
+        "ja": "魔術",
+        "en": "sorcery"
+      },
+      {
+        "ja": "魔導",
+        "en": "sorcery"
+      },
+      {
+        "ja": "召喚",
+        "en": "summoning"
+      },
+      {
+        "ja": "召喚する",
+        "en": "summon"
+      },
+      {
+        "ja": "召喚獣",
+        "en": "summoned beast"
+      },
+      {
+        "ja": "使い魔",
+        "en": "familiar"
+      },
+      {
+        "ja": "封印",
+        "en": "seal"
+      },
+      {
+        "ja": "封印する",
+        "en": "seal away"
+      },
+      {
+        "ja": "封印解除",
+        "en": "unseal"
+      },
+      {
+        "ja": "封印術",
+        "en": "sealing magic"
+      },
+      {
+        "ja": "結界魔法",
+        "en": "barrier magic"
+      },
+      {
+        "ja": "回復魔法",
+        "en": "healing magic"
+      },
+      {
+        "ja": "攻撃魔法",
+        "en": "offensive magic"
+      },
+      {
+        "ja": "防御魔法",
+        "en": "defensive magic"
+      },
+      {
+        "ja": "禁断の魔法",
+        "en": "forbidden magic"
+      },
+      {
+        "ja": "黒魔術",
+        "en": "black magic"
+      },
+      {
+        "ja": "白魔術",
+        "en": "white magic"
+      },
+      {
+        "ja": "魔界",
+        "en": "demon realm"
+      },
+      {
+        "ja": "異世界",
+        "en": "another world"
+      },
+      {
+        "ja": "異次元",
+        "en": "another dimension"
+      },
+      {
+        "ja": "異空間",
+        "en": "alternate space"
+      },
+      {
+        "ja": "時空",
+        "en": "space-time"
+      },
+      {
+        "ja": "時空間",
+        "en": "space-time continuum"
+      },
+      {
+        "ja": "次元の裂け目",
+        "en": "dimensional rift"
+      },
+      {
+        "ja": "転移",
+        "en": "teleportation",
+        "notes": "Use the sci-fi/fantasy teleportation reading in GIGA material; other domains use this word differently."
+      },
+      {
+        "ja": "転送",
+        "en": "transport"
+      },
+      {
+        "ja": "異世界転移",
+        "en": "transportation to another world"
+      },
+      {
+        "ja": "転生",
+        "en": "reincarnation"
+      },
+      {
+        "ja": "聖剣",
+        "en": "holy sword"
+      },
+      {
+        "ja": "魔剣",
+        "en": "demonic sword"
+      },
+      {
+        "ja": "神器",
+        "en": "divine artifact"
+      },
+      {
+        "ja": "聖なる力",
+        "en": "holy power"
+      },
+      {
+        "ja": "闇の力",
+        "en": "power of darkness"
+      },
+      {
+        "ja": "光の力",
+        "en": "power of light"
+      },
+      {
+        "ja": "魔族",
+        "en": "demon race"
+      },
+      {
+        "ja": "獣人",
+        "en": "beastman"
+      },
+      {
+        "ja": "吸血鬼",
+        "en": "vampire"
+      },
+      {
+        "ja": "狼男",
+        "en": "werewolf"
+      },
+      {
+        "ja": "悪霊",
+        "en": "evil spirit"
+      },
+      {
+        "ja": "怨霊",
+        "en": "vengeful spirit"
+      },
+      {
+        "ja": "幽霊",
+        "en": "ghost"
+      },
+      {
+        "ja": "精霊",
+        "en": "spirit"
+      },
+      {
+        "ja": "妖精",
+        "en": "fairy"
+      },
+      {
+        "ja": "天使",
+        "en": "angel"
+      },
+      {
+        "ja": "堕天使",
+        "en": "fallen angel"
+      },
+      {
+        "ja": "女神",
+        "en": "goddess"
+      },
+      {
+        "ja": "邪神",
+        "en": "evil god"
+      },
+      {
+        "ja": "宇宙",
+        "en": "outer space"
+      },
+      {
+        "ja": "宇宙船",
+        "en": "spaceship"
+      },
+      {
+        "ja": "宇宙基地",
+        "en": "space base"
+      },
+      {
+        "ja": "宇宙ステーション",
+        "en": "space station"
+      },
+      {
+        "ja": "母艦",
+        "en": "mothership"
+      },
+      {
+        "ja": "戦闘機",
+        "en": "fighter craft"
+      },
+      {
+        "ja": "宇宙戦闘機",
+        "en": "space fighter"
+      },
+      {
+        "ja": "未確認飛行物体",
+        "en": "unidentified flying object"
+      },
+      {
+        "ja": "UFO",
+        "en": "UFO"
+      },
+      {
+        "ja": "惑星",
+        "en": "planet"
+      },
+      {
+        "ja": "母星",
+        "en": "home planet"
+      },
+      {
+        "ja": "地球",
+        "en": "Earth"
+      },
+      {
+        "ja": "地球人",
+        "en": "Earthling"
+      },
+      {
+        "ja": "人類",
+        "en": "humanity"
+      },
+      {
+        "ja": "銀河",
+        "en": "galaxy"
+      },
+      {
+        "ja": "銀河系",
+        "en": "Milky Way galaxy"
+      },
+      {
+        "ja": "宇宙帝国",
+        "en": "space empire"
+      },
+      {
+        "ja": "侵略宇宙人",
+        "en": "alien invader"
+      },
+      {
+        "ja": "異星文明",
+        "en": "alien civilization"
+      },
+      {
+        "ja": "超古代文明",
+        "en": "ultra-ancient civilization"
+      },
+      {
+        "ja": "古代兵器",
+        "en": "ancient weapon"
+      },
+      {
+        "ja": "人工知能",
+        "en": "artificial intelligence"
+      },
+      {
+        "ja": "AI",
+        "en": "AI"
+      },
+      {
+        "ja": "電脳",
+        "en": "cyberspace"
+      },
+      {
+        "ja": "仮想空間",
+        "en": "virtual space"
+      },
+      {
+        "ja": "仮想現実",
+        "en": "virtual reality"
+      },
+      {
+        "ja": "電脳世界",
+        "en": "cyber world"
+      },
+      {
+        "ja": "制御装置",
+        "en": "control device"
+      },
+      {
+        "ja": "動力炉",
+        "en": "power reactor"
+      },
+      {
+        "ja": "反応炉",
+        "en": "reactor"
+      },
+      {
+        "ja": "エネルギー炉",
+        "en": "energy reactor"
+      },
+      {
+        "ja": "自爆装置",
+        "en": "self-destruct device"
+      },
+      {
+        "ja": "自爆",
+        "en": "self-destruct"
+      },
+      {
+        "ja": "起爆装置",
+        "en": "detonator"
+      },
+      {
+        "ja": "遠隔操作",
+        "en": "remote control"
+      },
+      {
+        "ja": "転送装置",
+        "en": "teleporter"
+      },
+      {
+        "ja": "瞬間移動装置",
+        "en": "teleportation device"
+      },
+      {
+        "ja": "冷凍睡眠",
+        "en": "cryogenic sleep"
+      },
+      {
+        "ja": "生命維持装置",
+        "en": "life-support system"
+      },
+      {
+        "ja": "培養槽",
+        "en": "cultivation tank"
+      },
+      {
+        "ja": "カプセル",
+        "en": "capsule"
+      },
+      {
+        "ja": "秘密",
+        "en": "secret"
+      },
+      {
+        "ja": "使命",
+        "en": "mission"
+      },
+      {
+        "ja": "任務",
+        "en": "mission"
+      },
+      {
+        "ja": "作戦",
+        "en": "operation"
+      },
+      {
+        "ja": "作戦開始",
+        "en": "begin the operation"
+      },
+      {
+        "ja": "作戦完了",
+        "en": "operation complete"
+      },
+      {
+        "ja": "任務完了",
+        "en": "mission complete"
+      },
+      {
+        "ja": "任務失敗",
+        "en": "mission failed"
+      },
+      {
+        "ja": "作戦失敗",
+        "en": "operation failed"
+      },
+      {
+        "ja": "作戦中止",
+        "en": "abort the operation"
+      },
+      {
+        "ja": "撤退",
+        "en": "retreat"
+      },
+      {
+        "ja": "撤退命令",
+        "en": "order to retreat"
+      },
+      {
+        "ja": "緊急脱出",
+        "en": "emergency escape"
+      },
+      {
+        "ja": "警戒",
+        "en": "alert"
+      },
+      {
+        "ja": "厳戒態勢",
+        "en": "state of high alert"
+      },
+      {
+        "ja": "警報",
+        "en": "alarm"
+      },
+      {
+        "ja": "非常警報",
+        "en": "emergency alarm"
+      },
+      {
+        "ja": "緊急事態",
+        "en": "emergency"
+      },
+      {
+        "ja": "非常事態",
+        "en": "state of emergency"
+      },
+      {
+        "ja": "侵入者",
+        "en": "intruder"
+      },
+      {
+        "ja": "侵入",
+        "en": "intrusion"
+      },
+      {
+        "ja": "不法侵入",
+        "en": "unauthorized entry"
+      },
+      {
+        "ja": "侵略",
+        "en": "invasion"
+      },
+      {
+        "ja": "征服",
+        "en": "conquest"
+      },
+      {
+        "ja": "世界征服",
+        "en": "world domination"
+      },
+      {
+        "ja": "地球征服",
+        "en": "conquest of Earth"
+      },
+      {
+        "ja": "殲滅",
+        "en": "annihilation"
+      },
+      {
+        "ja": "全滅",
+        "en": "total annihilation"
+      },
+      {
+        "ja": "壊滅",
+        "en": "devastation"
+      },
+      {
+        "ja": "破壊",
+        "en": "destruction"
+      },
+      {
+        "ja": "破壊工作",
+        "en": "sabotage"
+      },
+      {
+        "ja": "基地破壊",
+        "en": "base destruction"
+      },
+      {
+        "ja": "都市破壊",
+        "en": "city destruction"
+      },
+      {
+        "ja": "人類滅亡",
+        "en": "extinction of humanity"
+      },
+      {
+        "ja": "世界滅亡",
+        "en": "end of the world"
+      },
+      {
+        "ja": "地球滅亡",
+        "en": "destruction of Earth"
+      },
+      {
+        "ja": "隊長",
+        "en": "captain"
+      },
+      {
+        "ja": "副隊長",
+        "en": "vice-captain"
+      },
+      {
+        "ja": "司令官",
+        "en": "commander"
+      },
+      {
+        "ja": "司令",
+        "en": "commander",
+        "notes": "Use as a command-role title when referring to a person; it can also mean an order or command."
+      },
+      {
+        "ja": "総司令",
+        "en": "commander-in-chief"
+      },
+      {
+        "ja": "最高司令官",
+        "en": "supreme commander"
+      },
+      {
+        "ja": "長官",
+        "en": "chief"
+      },
+      {
+        "ja": "博士",
+        "en": "doctor",
+        "notes": "Use the character-title reading in GIGA material; it may also denote a doctorate or scholar."
+      },
+      {
+        "ja": "教授",
+        "en": "professor"
+      },
+      {
+        "ja": "研究員",
+        "en": "researcher"
+      },
+      {
+        "ja": "科学者",
+        "en": "scientist"
+      },
+      {
+        "ja": "主任研究員",
+        "en": "lead researcher"
+      },
+      {
+        "ja": "技術者",
+        "en": "engineer"
+      },
+      {
+        "ja": "整備士",
+        "en": "mechanic"
+      },
+      {
+        "ja": "兵士",
+        "en": "soldier"
+      },
+      {
+        "ja": "傭兵",
+        "en": "mercenary"
+      },
+      {
+        "ja": "暗殺者",
+        "en": "assassin"
+      },
+      {
+        "ja": "殺し屋",
+        "en": "hitman"
+      },
+      {
+        "ja": "エージェント",
+        "en": "agent"
+      },
+      {
+        "ja": "諜報員",
+        "en": "intelligence agent"
+      },
+      {
+        "ja": "スパイ",
+        "en": "spy"
+      },
+      {
+        "ja": "捜査官",
+        "en": "investigator"
+      },
+      {
+        "ja": "刑事",
+        "en": "detective"
+      },
+      {
+        "ja": "警官",
+        "en": "police officer"
+      },
+      {
+        "ja": "警備員",
+        "en": "security guard"
+      },
+      {
+        "ja": "特殊部隊",
+        "en": "special forces"
+      },
+      {
+        "ja": "防衛隊",
+        "en": "defense force"
+      },
+      {
+        "ja": "地球防衛隊",
+        "en": "Earth Defense Force"
+      },
+      {
+        "ja": "秘密部隊",
+        "en": "covert unit"
+      },
+      {
+        "ja": "精鋭部隊",
+        "en": "elite unit"
+      },
+      {
+        "ja": "親衛隊",
+        "en": "imperial guard"
+      },
+      {
+        "ja": "反乱軍",
+        "en": "rebel army"
+      },
+      {
+        "ja": "抵抗組織",
+        "en": "resistance organization"
+      },
+      {
+        "ja": "レジスタンス",
+        "en": "resistance"
+      },
+      {
+        "ja": "変身音",
+        "en": "transformation sound"
+      },
+      {
+        "ja": "変身エフェクト",
+        "en": "transformation effect"
+      },
+      {
+        "ja": "爆発音",
+        "en": "explosion sound"
+      },
+      {
+        "ja": "銃声",
+        "en": "gunshot"
+      },
+      {
+        "ja": "発砲音",
+        "en": "gunfire"
+      },
+      {
+        "ja": "斬撃音",
+        "en": "slashing sound"
+      },
+      {
+        "ja": "打撃音",
+        "en": "impact sound"
+      },
+      {
+        "ja": "衝突音",
+        "en": "collision sound"
+      },
+      {
+        "ja": "破壊音",
+        "en": "crashing sound"
+      },
+      {
+        "ja": "警報音",
+        "en": "alarm sound"
+      },
+      {
+        "ja": "雄叫び",
+        "en": "battle roar"
+      },
+      {
+        "ja": "咆哮",
+        "en": "roar"
+      },
+      {
+        "ja": "うなり声",
+        "en": "growl"
+      },
+      {
+        "ja": "高笑い",
+        "en": "evil laughter"
+      },
+      {
+        "ja": "爆音",
+        "en": "deafening blast"
+      },
+      {
+        "ja": "轟音",
+        "en": "thunderous roar"
+      },
+      {
+        "ja": "金属音",
+        "en": "metallic sound"
+      },
+      {
+        "ja": "電子音",
+        "en": "electronic beep"
+      },
+      {
+        "ja": "ノイズ",
+        "en": "static noise"
+      },
+      {
+        "ja": "無線",
+        "en": "radio communication"
+      },
+      {
+        "ja": "通信",
+        "en": "communications"
+      },
+      {
+        "ja": "通信機",
+        "en": "communicator"
+      },
+      {
+        "ja": "通信障害",
+        "en": "communications failure"
+      },
+      {
+        "ja": "通信不能",
+        "en": "communications unavailable"
+      }
+    ]
+  },
+  "title_or_series_overrides": [],
+  "import_rules": {
+    "apply_global": true,
+    "apply_resolved_profile": true,
+    "profile_resolution": "standard loads global only; jav loads global+jav; giga loads global+giga",
+    "do_not_feed_english_mappings_to_asr": true,
+    "translation_only": true,
+    "context_aware": true
+  }
+}

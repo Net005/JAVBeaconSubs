@@ -1,6 +1,7 @@
 package server
 
 import (
+	"archive/zip"
 	"crypto/rand"
 	"crypto/subtle"
 	"embed"
@@ -17,11 +18,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"javbeaconsubs/internal/auth"
 	"javbeaconsubs/internal/config"
 	"javbeaconsubs/internal/engine"
 	"javbeaconsubs/internal/jobs"
+	"javbeaconsubs/internal/models"
+	profilecatalog "javbeaconsubs/internal/profile"
 )
 
 //go:embed web/*
@@ -37,15 +41,19 @@ type Server struct {
 	post     *jobs.PostProcessor
 	settings SettingsStore
 	log      *slog.Logger
+	models   *models.Registry
 }
 
 type SettingsStore interface {
 	SaveTranslation(config.TranslationConfig) error
 	SavePostProcessing(config.PostProcessingConfig) error
+	SaveProfiles(config.ProfilesConfig) error
+	SaveRecognitionVocabulary(profilecatalog.RecognitionVocabulary) error
+	SaveTranslationGlossary(profilecatalog.TranslationGlossary) error
 }
 
 func New(cfg config.Config, manager *jobs.Manager, runner *engine.Runner, authManager *auth.Manager, post *jobs.PostProcessor, settings SettingsStore, log *slog.Logger) *Server {
-	return &Server{cfg: cfg, jobs: manager, runner: runner, auth: authManager, post: post, settings: settings, log: log}
+	return &Server{cfg: cfg, jobs: manager, runner: runner, auth: authManager, post: post, settings: settings, log: log, models: models.New(cfg)}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -63,11 +71,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/health", s.health)
 	mux.HandleFunc("GET /api/v1/settings", s.getSettings)
 	mux.HandleFunc("PUT /api/v1/settings", s.updateSettings)
+	mux.HandleFunc("GET /api/v1/profiles", s.getProfiles)
+	mux.HandleFunc("PUT /api/v1/profiles", s.updateProfiles)
+	mux.HandleFunc("GET /api/v1/profiles/catalogs", s.getCatalogs)
+	mux.HandleFunc("PUT /api/v1/profiles/catalogs", s.updateCatalogs)
+	mux.HandleFunc("GET /api/v1/models", s.listModels)
+	mux.HandleFunc("POST /api/v1/models/{id}/check", s.checkModel)
 	mux.HandleFunc("GET /api/v1/jobs", s.listJobs)
 	mux.HandleFunc("POST /api/v1/jobs", s.createJob)
 	mux.HandleFunc("POST /api/v1/jobs/upload", s.uploadJob)
 	mux.HandleFunc("GET /api/v1/jobs/{id}", s.getJob)
 	mux.HandleFunc("GET /api/v1/jobs/{id}/outputs/{index}/{language}", s.downloadOutput)
+	mux.HandleFunc("POST /api/v1/jobs/export", s.exportJobs)
 	mux.HandleFunc("DELETE /api/v1/jobs/{id}", s.cancelJob)
 	mux.HandleFunc("GET /api/v1/events", s.events)
 	return s.middleware(mux)
@@ -120,6 +135,7 @@ type postProcessingSettingsRequest struct {
 type settingsRequest struct {
 	Translation    translationSettingsRequest    `json:"translation"`
 	PostProcessing postProcessingSettingsRequest `json:"post_processing"`
+	Profiles       *config.ProfilesConfig        `json:"profiles,omitempty"`
 }
 
 func settingsResponse(value config.TranslationConfig) translationSettingsResponse {
@@ -128,7 +144,88 @@ func settingsResponse(value config.TranslationConfig) translationSettingsRespons
 
 func (s *Server) getSettings(w http.ResponseWriter, _ *http.Request) {
 	post := s.post.Config()
-	writeJSON(w, 200, map[string]any{"translation": settingsResponse(s.runner.Translation()), "post_processing": postProcessingSettingsResponse{Mode: post.Mode, ShellScript: post.ShellScript, WebhookURL: post.WebhookURL, TimeoutSec: post.TimeoutSec, BearerTokenSet: post.WebhookBearerToken != ""}})
+	writeJSON(w, 200, map[string]any{"translation": settingsResponse(s.runner.Translation()), "post_processing": postProcessingSettingsResponse{Mode: post.Mode, ShellScript: post.ShellScript, WebhookURL: post.WebhookURL, TimeoutSec: post.TimeoutSec, BearerTokenSet: post.WebhookBearerToken != ""}, "profiles": s.profileSettings()})
+}
+
+func (s *Server) profileSettings() config.ProfilesConfig {
+	if s.jobs != nil {
+		return s.jobs.Profiles()
+	}
+	return s.cfg.Profiles
+}
+
+func (s *Server) getProfiles(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, 200, s.profileSettings())
+}
+
+func (s *Server) updateProfiles(w http.ResponseWriter, r *http.Request) {
+	var value config.ProfilesConfig
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&value); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid profile settings: " + err.Error()})
+		return
+	}
+	if err := config.NormalizeProfiles(&value); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := s.settings.SaveProfiles(value); err != nil {
+		writeJSON(w, 500, map[string]string{"error": "could not save profile settings"})
+		return
+	}
+	s.jobs.UpdateProfiles(value)
+	writeJSON(w, 200, value)
+}
+
+func (s *Server) getCatalogs(w http.ResponseWriter, _ *http.Request) {
+	recognition, glossary := s.runner.Catalogs()
+	writeJSON(w, 200, map[string]any{"recognition_vocabulary": recognition, "translation_glossary": glossary})
+}
+
+type catalogsRequest struct {
+	RecognitionVocabulary profilecatalog.RecognitionVocabulary `json:"recognition_vocabulary"`
+	TranslationGlossary   profilecatalog.TranslationGlossary   `json:"translation_glossary"`
+}
+
+func (s *Server) updateCatalogs(w http.ResponseWriter, r *http.Request) {
+	var value catalogsRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxSettingsBodyBytes))
+	if err := decoder.Decode(&value); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid catalog data: " + err.Error()})
+		return
+	}
+	if err := profilecatalog.ValidateRecognition(value.RecognitionVocabulary); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := profilecatalog.ValidateTranslationGlossary(value.TranslationGlossary); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := s.settings.SaveRecognitionVocabulary(value.RecognitionVocabulary); err != nil {
+		writeJSON(w, 500, map[string]string{"error": "could not save recognition vocabulary"})
+		return
+	}
+	if err := s.settings.SaveTranslationGlossary(value.TranslationGlossary); err != nil {
+		writeJSON(w, 500, map[string]string{"error": "could not save translation glossary"})
+		return
+	}
+	s.runner.UpdateCatalogs(&value.RecognitionVocabulary, &value.TranslationGlossary)
+	s.getCatalogs(w, r)
+}
+
+func (s *Server) listModels(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, 200, map[string]any{"models": s.models.List()})
+}
+
+func (s *Server) checkModel(w http.ResponseWriter, r *http.Request) {
+	value, err := s.models.Check(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, value)
 }
 
 func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
@@ -177,9 +274,25 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 500, map[string]string{"error": "could not save post-processing settings"})
 		return
 	}
+	profilesValue := s.profileSettings()
+	if request.Profiles != nil {
+		profilesValue = *request.Profiles
+		if err := config.NormalizeProfiles(&profilesValue); err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := s.settings.SaveProfiles(profilesValue); err != nil {
+			s.log.Error("save profile settings", "error", err)
+			writeJSON(w, 500, map[string]string{"error": "could not save profile settings"})
+			return
+		}
+		if s.jobs != nil {
+			s.jobs.UpdateProfiles(profilesValue)
+		}
+	}
 	s.runner.UpdateTranslation(value)
 	s.post.Update(postValue)
-	writeJSON(w, 200, map[string]any{"translation": settingsResponse(value), "post_processing": postProcessingSettingsResponse{Mode: postValue.Mode, ShellScript: postValue.ShellScript, WebhookURL: postValue.WebhookURL, TimeoutSec: postValue.TimeoutSec, BearerTokenSet: postValue.WebhookBearerToken != ""}})
+	writeJSON(w, 200, map[string]any{"translation": settingsResponse(value), "post_processing": postProcessingSettingsResponse{Mode: postValue.Mode, ShellScript: postValue.ShellScript, WebhookURL: postValue.WebhookURL, TimeoutSec: postValue.TimeoutSec, BearerTokenSet: postValue.WebhookBearerToken != ""}, "profiles": profilesValue})
 }
 
 func (s *Server) middleware(next http.Handler) http.Handler {
@@ -286,8 +399,16 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	status["max_upload_gb"] = s.cfg.MaxUploadGB
 	writeJSON(w, 200, status)
 }
-func (s *Server) listJobs(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, 200, map[string]any{"jobs": s.jobs.List()})
+func (s *Server) listJobs(w http.ResponseWriter, r *http.Request) {
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	pageSize, _ := strconv.Atoi(r.URL.Query().Get("page_size"))
+	result, err := s.jobs.ListPage(page, pageSize, r.URL.Query().Get("filter"))
+	if err != nil {
+		s.log.Error("list jobs", "error", err)
+		writeJSON(w, 500, map[string]string{"error": "could not list jobs"})
+		return
+	}
+	writeJSON(w, 200, result)
 }
 func (s *Server) getJob(w http.ResponseWriter, r *http.Request) {
 	job, ok := s.jobs.Get(r.PathValue("id"))
@@ -369,7 +490,7 @@ func (s *Server) uploadJob(w http.ResponseWriter, r *http.Request) {
 		Overwrite:    r.FormValue("overwrite") == "true",
 		KeepJapanese: keepJapanese,
 		ASRMode:      r.FormValue("asr_mode"),
-		ASRProfile:   r.FormValue("asr_profile"),
+		ASRProfile:   firstNonEmpty(r.FormValue("profile"), r.FormValue("asr_profile")),
 		DebugMode:    r.FormValue("debug_mode") == "true",
 		ExternalID:   strings.TrimSpace(r.FormValue("external_id")),
 		CallbackURL:  strings.TrimSpace(r.FormValue("callback_url")),
@@ -381,6 +502,15 @@ func (s *Server) uploadJob(w http.ResponseWriter, r *http.Request) {
 	removeOnError = false
 	w.Header().Set("Location", "/api/v1/jobs/"+job.ID)
 	writeJSON(w, 202, job)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func optionalFormBool(value string) (*bool, error) {
@@ -427,6 +557,153 @@ func (s *Server) downloadOutput(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filepath.Base(path)}))
 	http.ServeFile(w, r, path)
+}
+
+type bulkExportRequest struct {
+	JobIDs  []string `json:"job_ids"`
+	Content string   `json:"content"`
+}
+
+func (s *Server) exportJobs(w http.ResponseWriter, r *http.Request) {
+	var request bulkExportRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid export request: " + err.Error()})
+		return
+	}
+	if len(request.JobIDs) == 0 || len(request.JobIDs) > 500 {
+		writeJSON(w, 400, map[string]string{"error": "select between 1 and 500 jobs"})
+		return
+	}
+	if request.Content == "" {
+		request.Content = "subtitles_diagnostics"
+	}
+	validContent := map[string]bool{"all": true, "japanese": true, "english": true, "diagnostics": true, "subtitles_diagnostics": true}
+	if !validContent[request.Content] {
+		writeJSON(w, 400, map[string]string{"error": "invalid export content selection"})
+		return
+	}
+	selected := make([]*jobs.Job, 0, len(request.JobIDs))
+	seen := map[string]bool{}
+	for _, id := range request.JobIDs {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		job, ok := s.jobs.Get(id)
+		if !ok {
+			writeJSON(w, 404, map[string]string{"error": "job not found: " + id})
+			return
+		}
+		selected = append(selected, job)
+	}
+	stamp := time.Now().UTC().Format("20060102-150405")
+	root := "javbeaconsubs-export-" + stamp
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": root + ".zip"}))
+	archive := zip.NewWriter(w)
+	manifest := map[string]any{"format": "javbeaconsubs-diagnostic-export", "version": 1, "created_at": time.Now().UTC(), "content": request.Content, "jobs": []any{}, "warnings": []string{}}
+	manifestJobs := make([]any, 0, len(selected))
+	warnings := make([]string, 0)
+	for _, job := range selected {
+		name := exportName(job)
+		artifacts := make([]string, 0)
+		for _, result := range job.Results {
+			paths := exportArtifactPaths(result, request.Content)
+			for _, path := range paths {
+				if path == "" {
+					continue
+				}
+				info, err := os.Stat(path)
+				if err != nil || !info.Mode().IsRegular() {
+					warnings = append(warnings, fmt.Sprintf("job %s: missing artifact %s", job.ID, filepath.Base(path)))
+					continue
+				}
+				entry := root + "/" + name + "/" + safeArchivePart(filepath.Base(path))
+				writer, err := archive.CreateHeader(&zip.FileHeader{Name: entry, Method: zip.Deflate})
+				if err != nil {
+					warnings = append(warnings, fmt.Sprintf("job %s: archive entry failed for %s", job.ID, filepath.Base(path)))
+					continue
+				}
+				file, err := os.Open(path)
+				if err != nil {
+					warnings = append(warnings, fmt.Sprintf("job %s: could not open %s", job.ID, filepath.Base(path)))
+					continue
+				}
+				_, copyErr := io.Copy(writer, file)
+				_ = file.Close()
+				if copyErr != nil {
+					warnings = append(warnings, fmt.Sprintf("job %s: incomplete artifact %s", job.ID, filepath.Base(path)))
+					continue
+				}
+				artifacts = append(artifacts, filepath.Base(path))
+			}
+		}
+		manifestJobs = append(manifestJobs, map[string]any{
+			"job_id": job.ID, "job_name": job.ExternalID, "source_files": job.Files, "created_at": job.CreatedAt,
+			"started_at": job.StartedAt, "completed_at": job.FinishedAt, "status": job.Status, "profile": job.ASRProfile,
+			"profile_source": job.ProfileSource, "asr_mode": job.ASRMode, "asr_mode_source": job.ASRModeSource,
+			"results": job.Results, "artifacts": artifacts,
+		})
+	}
+	manifest["jobs"], manifest["warnings"] = manifestJobs, warnings
+	if writer, err := archive.Create(root + "/manifest.json"); err == nil {
+		encoder := json.NewEncoder(writer)
+		encoder.SetIndent("", "  ")
+		_ = encoder.Encode(manifest)
+	}
+	if err := archive.Close(); err != nil {
+		s.log.Error("finish bulk export", "error", err)
+	}
+}
+
+func exportArtifactPaths(result engine.Result, content string) []string {
+	var paths []string
+	if content == "all" || content == "japanese" || content == "subtitles_diagnostics" {
+		paths = append(paths, result.JapaneseSRT)
+		if content == "all" {
+			paths = append(paths, result.JapaneseASS)
+		}
+	}
+	if content == "all" || content == "english" || content == "subtitles_diagnostics" {
+		paths = append(paths, result.EnglishSRT)
+		if content == "all" {
+			paths = append(paths, result.EnglishASS)
+		}
+	}
+	if content == "all" || content == "diagnostics" || content == "subtitles_diagnostics" {
+		paths = append(paths, result.ProjectJSON)
+	}
+	return paths
+}
+
+func exportName(job *jobs.Job) string {
+	name := strings.TrimSpace(job.ExternalID)
+	if name == "" && len(job.Files) > 0 {
+		name = strings.TrimSuffix(filepath.Base(job.Files[0]), filepath.Ext(job.Files[0]))
+	}
+	if name == "" {
+		name = "job"
+	}
+	return safeArchivePart(name) + "__job-" + safeArchivePart(job.ID)
+}
+
+func safeArchivePart(value string) string {
+	value = strings.TrimSpace(value)
+	var output strings.Builder
+	for _, r := range value {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("._-", r) {
+			output.WriteRune(r)
+		} else {
+			output.WriteByte('_')
+		}
+	}
+	clean := strings.Trim(output.String(), ".")
+	if clean == "" {
+		return "item"
+	}
+	return clean
 }
 func (s *Server) cancelJob(w http.ResponseWriter, r *http.Request) {
 	if !s.jobs.Cancel(r.PathValue("id")) {

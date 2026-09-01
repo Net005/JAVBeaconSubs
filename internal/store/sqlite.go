@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"javbeaconsubs/internal/auth"
 	"javbeaconsubs/internal/config"
 	"javbeaconsubs/internal/jobs"
+	profilecatalog "javbeaconsubs/internal/profile"
 	_ "modernc.org/sqlite"
 )
 
@@ -115,6 +117,99 @@ func (s *SQLite) Load() ([]*jobs.Job, error) {
 	return result, rows.Err()
 }
 
+func (s *SQLite) ListPage(page, pageSize int, filter string) ([]*jobs.Job, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize != 25 && pageSize != 50 && pageSize != 100 {
+		pageSize = 50
+	}
+	where, args := "", []any{}
+	if strings.TrimSpace(filter) != "" {
+		where = ` WHERE lower(replace(id || ' ' || external_id || ' ' || coalesce(json_extract(payload,'$.current_file'),'') || ' ' || coalesce(json_extract(payload,'$.current_path'),'') || ' ' || coalesce((SELECT group_concat(value,' ') FROM json_each(payload,'$.files')),''),'\','/')) LIKE ? ESCAPE '\'`
+		args = append(args, wildcardLike(filter))
+	}
+	var total int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM jobs`+where, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count jobs: %w", err)
+	}
+	queryArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
+	rows, err := s.db.Query(`SELECT payload,callback_url,overwrite_existing FROM jobs`+where+` ORDER BY created_at DESC LIMIT ? OFFSET ?`, queryArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list jobs: %w", err)
+	}
+	defer rows.Close()
+	result, err := decodeJobs(rows)
+	return result, total, err
+}
+
+func (s *SQLite) GetJob(id string) (*jobs.Job, bool, error) {
+	var payload []byte
+	var callbackURL string
+	var overwrite bool
+	err := s.db.QueryRow(`SELECT payload,callback_url,overwrite_existing FROM jobs WHERE id = ?`, id).Scan(&payload, &callbackURL, &overwrite)
+	if err == sql.ErrNoRows {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	var job jobs.Job
+	if err := json.Unmarshal(payload, &job); err != nil {
+		return nil, false, fmt.Errorf("decode stored job: %w", err)
+	}
+	job.CallbackURL, job.Overwrite = callbackURL, overwrite
+	return &job, true, nil
+}
+
+func wildcardLike(value string) string {
+	value = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(value), "\\", "/"))
+	var output strings.Builder
+	if !strings.Contains(value, "*") {
+		output.WriteByte('%')
+	}
+	for _, r := range value {
+		switch r {
+		case '*':
+			output.WriteByte('%')
+		case '%', '_', '\\':
+			output.WriteByte('\\')
+			output.WriteRune(r)
+		default:
+			output.WriteRune(r)
+		}
+	}
+	if !strings.Contains(value, "*") {
+		output.WriteByte('%')
+	}
+	return output.String()
+}
+
+type rowScanner interface {
+	Next() bool
+	Scan(...any) error
+	Err() error
+}
+
+func decodeJobs(rows rowScanner) ([]*jobs.Job, error) {
+	var result []*jobs.Job
+	for rows.Next() {
+		var payload []byte
+		var callbackURL string
+		var overwrite bool
+		if err := rows.Scan(&payload, &callbackURL, &overwrite); err != nil {
+			return nil, err
+		}
+		var job jobs.Job
+		if err := json.Unmarshal(payload, &job); err != nil {
+			return nil, fmt.Errorf("decode stored job: %w", err)
+		}
+		job.CallbackURL, job.Overwrite = callbackURL, overwrite
+		result = append(result, &job)
+	}
+	return result, rows.Err()
+}
+
 func (s *SQLite) Close() error { return s.db.Close() }
 
 func (s *SQLite) LoadTranslation() (config.TranslationConfig, bool, error) {
@@ -145,6 +240,36 @@ func (s *SQLite) LoadPostProcessing() (config.PostProcessingConfig, bool, error)
 
 func (s *SQLite) SavePostProcessing(value config.PostProcessingConfig) error {
 	return s.saveSetting("post_processing", value)
+}
+
+func (s *SQLite) LoadProfiles() (config.ProfilesConfig, bool, error) {
+	var value config.ProfilesConfig
+	ok, err := s.loadSetting("profiles", &value)
+	return value, ok, err
+}
+
+func (s *SQLite) SaveProfiles(value config.ProfilesConfig) error {
+	return s.saveSetting("profiles", value)
+}
+
+func (s *SQLite) LoadRecognitionVocabulary() (profilecatalog.RecognitionVocabulary, bool, error) {
+	var value profilecatalog.RecognitionVocabulary
+	ok, err := s.loadSetting("recognition_vocabulary", &value)
+	return value, ok, err
+}
+
+func (s *SQLite) SaveRecognitionVocabulary(value profilecatalog.RecognitionVocabulary) error {
+	return s.saveSetting("recognition_vocabulary", value)
+}
+
+func (s *SQLite) LoadTranslationGlossary() (profilecatalog.TranslationGlossary, bool, error) {
+	var value profilecatalog.TranslationGlossary
+	ok, err := s.loadSetting("translation_glossary_v2", &value)
+	return value, ok, err
+}
+
+func (s *SQLite) SaveTranslationGlossary(value profilecatalog.TranslationGlossary) error {
+	return s.saveSetting("translation_glossary_v2", value)
 }
 
 func (s *SQLite) LoadWebAuth() (auth.Record, bool, error) {

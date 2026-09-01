@@ -10,18 +10,36 @@ import (
 )
 
 type Config struct {
-	Listen         string               `json:"listen"`
-	APIToken       string               `json:"api_token"`
-	WebUsername    string               `json:"web_username"`
-	WebPassword    string               `json:"web_password"`
-	DatabasePath   string               `json:"database_path"`
-	UploadDir      string               `json:"upload_dir"`
-	MaxUploadGB    int64                `json:"max_upload_gb"`
-	Whisper        WhisperConfig        `json:"whisper"`
-	Translation    TranslationConfig    `json:"translation"`
-	PostProcessing PostProcessingConfig `json:"post_processing"`
-	Output         OutputConfig         `json:"output"`
-	Workers        int                  `json:"workers"`
+	Listen                    string               `json:"listen"`
+	APIToken                  string               `json:"api_token"`
+	WebUsername               string               `json:"web_username"`
+	WebPassword               string               `json:"web_password"`
+	DatabasePath              string               `json:"database_path"`
+	UploadDir                 string               `json:"upload_dir"`
+	MaxUploadGB               int64                `json:"max_upload_gb"`
+	Whisper                   WhisperConfig        `json:"whisper"`
+	Translation               TranslationConfig    `json:"translation"`
+	PostProcessing            PostProcessingConfig `json:"post_processing"`
+	Output                    OutputConfig         `json:"output"`
+	RecognitionVocabularyPath string               `json:"recognition_vocabulary_path"`
+	TranslationGlossaryPath   string               `json:"translation_glossary_path"`
+	Profiles                  ProfilesConfig       `json:"profiles"`
+	Workers                   int                  `json:"workers"`
+}
+
+type ProfilesConfig struct {
+	DefaultProfile string        `json:"default_profile"`
+	DefaultASRMode string        `json:"default_asr_mode"`
+	PathMappings   []PathMapping `json:"path_mappings"`
+}
+
+type PathMapping struct {
+	ID       string `json:"id,omitempty"`
+	Path     string `json:"path"`
+	Profile  string `json:"profile,omitempty"`
+	ASRMode  string `json:"asr_mode,omitempty"`
+	Enabled  bool   `json:"enabled"`
+	Priority int    `json:"priority,omitempty"`
 }
 
 type WhisperConfig struct {
@@ -109,6 +127,9 @@ func defaults() Config {
 	return Config{
 		Listen: "127.0.0.1:8097", DatabasePath: "./data/javbeaconsubs.db",
 		UploadDir: "./data/uploads", MaxUploadGB: 30,
+		RecognitionVocabularyPath: "./vocabulary/javbeaconsubs_japanese_recognition_vocabulary_v1.json",
+		TranslationGlossaryPath:   "./javbeaconsubs_translation_glossary_v2.json",
+		Profiles:                  ProfilesConfig{DefaultProfile: "jav", DefaultASRMode: "balanced"},
 		Whisper: WhisperConfig{
 			Backend: "qwen", Mode: "balanced", Profile: "jav", Binary: "whisper-cli", Language: "ja", Threads: 8, UseGPU: true,
 			QwenPython: "python3", QwenScript: "./asr/qwen_pipeline.py", QwenModel: "Qwen/Qwen3-ASR-1.7B", AlignerModel: "Qwen/Qwen3-ForcedAligner-0.6B",
@@ -157,6 +178,12 @@ func Load(path string) (Config, error) {
 	}
 	if value := os.Getenv("JAVBEACONSUBS_UPLOAD_DIR"); value != "" {
 		cfg.UploadDir = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_RECOGNITION_VOCABULARY"); value != "" {
+		cfg.RecognitionVocabularyPath = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_TRANSLATION_GLOSSARY"); value != "" {
+		cfg.TranslationGlossaryPath = value
 	}
 	if value := os.Getenv("JAVBEACONSUBS_WHISPER_BINARY"); value != "" {
 		cfg.Whisper.Binary = value
@@ -274,12 +301,12 @@ func Load(path string) (Config, error) {
 	if cfg.Whisper.Mode != "fast" && cfg.Whisper.Mode != "balanced" && cfg.Whisper.Mode != "high_accuracy" {
 		return cfg, errors.New("whisper.mode must be fast, balanced, or high_accuracy")
 	}
-	cfg.Whisper.Profile = strings.ToLower(strings.TrimSpace(cfg.Whisper.Profile))
+	cfg.Whisper.Profile = NormalizeProfile(cfg.Whisper.Profile)
 	if cfg.Whisper.Profile == "" {
 		cfg.Whisper.Profile = "jav"
 	}
-	if cfg.Whisper.Profile != "standard" && cfg.Whisper.Profile != "jav" && cfg.Whisper.Profile != "tokusatsu" && cfg.Whisper.Profile != "akiba" {
-		return cfg, errors.New("whisper.profile must be standard, jav, tokusatsu, or akiba")
+	if cfg.Whisper.Profile != "standard" && cfg.Whisper.Profile != "jav" && cfg.Whisper.Profile != "giga" {
+		return cfg, errors.New("whisper.profile must be standard, jav, or giga")
 	}
 	if cfg.Whisper.ASRBatchSize < 1 {
 		cfg.Whisper.ASRBatchSize = 4
@@ -299,6 +326,15 @@ func Load(path string) (Config, error) {
 	if cfg.Whisper.MaxSegmentSec < 1 {
 		cfg.Whisper.MaxSegmentSec = 60
 	}
+	if cfg.Profiles.DefaultProfile == "" {
+		cfg.Profiles.DefaultProfile = cfg.Whisper.Profile
+	}
+	if cfg.Profiles.DefaultASRMode == "" {
+		cfg.Profiles.DefaultASRMode = cfg.Whisper.Mode
+	}
+	if err := NormalizeProfiles(&cfg.Profiles); err != nil {
+		return cfg, err
+	}
 	if err := NormalizeTranslation(&cfg.Translation); err != nil {
 		return cfg, err
 	}
@@ -313,6 +349,54 @@ func Load(path string) (Config, error) {
 		*value = filepath.Clean(absolute)
 	}
 	return cfg, nil
+}
+
+func NormalizeASRMode(value string) string { return strings.ToLower(strings.TrimSpace(value)) }
+
+func NormalizeProfiles(value *ProfilesConfig) error {
+	value.DefaultProfile = NormalizeProfile(value.DefaultProfile)
+	if value.DefaultProfile == "" {
+		value.DefaultProfile = "jav"
+	}
+	if value.DefaultProfile != "standard" && value.DefaultProfile != "jav" && value.DefaultProfile != "giga" {
+		return errors.New("default profile must be standard, jav, or giga")
+	}
+	value.DefaultASRMode = NormalizeASRMode(value.DefaultASRMode)
+	if value.DefaultASRMode == "" {
+		value.DefaultASRMode = "balanced"
+	}
+	if value.DefaultASRMode != "fast" && value.DefaultASRMode != "balanced" && value.DefaultASRMode != "high_accuracy" {
+		return errors.New("default recognition accuracy must be fast, balanced, or high_accuracy")
+	}
+	for index := range value.PathMappings {
+		mapping := &value.PathMappings[index]
+		mapping.Path = strings.TrimSpace(mapping.Path)
+		mapping.Profile = NormalizeProfile(mapping.Profile)
+		mapping.ASRMode = NormalizeASRMode(mapping.ASRMode)
+		if mapping.Path == "" {
+			return fmt.Errorf("path mapping %d requires a path", index+1)
+		}
+		if mapping.Profile != "" && mapping.Profile != "standard" && mapping.Profile != "jav" && mapping.Profile != "giga" {
+			return fmt.Errorf("path mapping %d has invalid profile", index+1)
+		}
+		if mapping.ASRMode != "" && mapping.ASRMode != "fast" && mapping.ASRMode != "balanced" && mapping.ASRMode != "high_accuracy" {
+			return fmt.Errorf("path mapping %d has invalid asr_mode", index+1)
+		}
+		if mapping.Profile == "" && mapping.ASRMode == "" {
+			return fmt.Errorf("path mapping %d must set profile or asr_mode", index+1)
+		}
+	}
+	return nil
+}
+
+// NormalizeProfile accepts historical API/config aliases but always returns a
+// canonical value suitable for persistence and responses.
+func NormalizeProfile(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "tokusatsu" || value == "akiba" {
+		return "giga"
+	}
+	return value
 }
 
 func NormalizePostProcessing(value *PostProcessingConfig) error {

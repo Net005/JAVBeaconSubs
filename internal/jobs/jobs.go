@@ -18,6 +18,7 @@ import (
 
 	"javbeaconsubs/internal/config"
 	"javbeaconsubs/internal/engine"
+	profiles "javbeaconsubs/internal/profile"
 )
 
 var videoExtensions = map[string]bool{".mp4": true, ".mkv": true, ".avi": true, ".mov": true, ".wmv": true, ".flv": true, ".webm": true, ".ts": true, ".m4v": true, ".mp3": true, ".wav": true, ".m4a": true, ".flac": true}
@@ -29,38 +30,43 @@ type Request struct {
 	KeepJapanese *bool    `json:"keep_japanese,omitempty"`
 	ASRMode      string   `json:"asr_mode,omitempty"`
 	ASRProfile   string   `json:"asr_profile,omitempty"`
+	Profile      string   `json:"profile,omitempty"`
 	DebugMode    bool     `json:"debug_mode,omitempty"`
 	ExternalID   string   `json:"external_id,omitempty"`
 	CallbackURL  string   `json:"callback_url,omitempty"`
 }
 
 type Job struct {
-	ID                   string          `json:"id"`
-	ExternalID           string          `json:"external_id,omitempty"`
-	Status               string          `json:"status"`
-	Phase                string          `json:"phase,omitempty"`
-	Progress             int             `json:"progress"`
-	Message              string          `json:"message,omitempty"`
-	CurrentPath          string          `json:"current_path,omitempty"`
-	CurrentFile          string          `json:"current_file,omitempty"`
-	CurrentFileNumber    int             `json:"current_file_number,omitempty"`
-	ETASeconds           int64           `json:"eta_seconds,omitempty"`
-	EstimatedFinishAt    *time.Time      `json:"estimated_finish_at,omitempty"`
-	Inputs               []string        `json:"inputs"`
-	Files                []string        `json:"files"`
-	Results              []engine.Result `json:"results,omitempty"`
-	Error                string          `json:"error,omitempty"`
-	CallbackURL          string          `json:"-"`
-	Overwrite            bool            `json:"-"`
-	KeepJapanese         bool            `json:"keep_japanese"`
-	ASRMode              string          `json:"asr_mode"`
-	ASRProfile           string          `json:"asr_profile"`
-	DebugMode            bool            `json:"debug_mode,omitempty"`
-	CreatedAt            time.Time       `json:"created_at"`
-	StartedAt            *time.Time      `json:"started_at,omitempty"`
-	FinishedAt           *time.Time      `json:"finished_at,omitempty"`
-	PostProcessingStatus string          `json:"post_processing_status,omitempty"`
-	PostProcessingError  string          `json:"post_processing_error,omitempty"`
+	ID                   string                         `json:"id"`
+	ExternalID           string                         `json:"external_id,omitempty"`
+	Status               string                         `json:"status"`
+	Phase                string                         `json:"phase,omitempty"`
+	Progress             int                            `json:"progress"`
+	Message              string                         `json:"message,omitempty"`
+	CurrentPath          string                         `json:"current_path,omitempty"`
+	CurrentFile          string                         `json:"current_file,omitempty"`
+	CurrentFileNumber    int                            `json:"current_file_number,omitempty"`
+	ETASeconds           int64                          `json:"eta_seconds,omitempty"`
+	EstimatedFinishAt    *time.Time                     `json:"estimated_finish_at,omitempty"`
+	Inputs               []string                       `json:"inputs"`
+	Files                []string                       `json:"files"`
+	Results              []engine.Result                `json:"results,omitempty"`
+	Error                string                         `json:"error,omitempty"`
+	CallbackURL          string                         `json:"-"`
+	Overwrite            bool                           `json:"-"`
+	KeepJapanese         bool                           `json:"keep_japanese"`
+	ASRMode              string                         `json:"asr_mode"`
+	ASRProfile           string                         `json:"asr_profile"`
+	Profile              string                         `json:"profile"`
+	ProfileSource        string                         `json:"profile_source,omitempty"`
+	ASRModeSource        string                         `json:"asr_mode_source,omitempty"`
+	FileSettings         map[string]profiles.Resolution `json:"file_settings,omitempty"`
+	DebugMode            bool                           `json:"debug_mode,omitempty"`
+	CreatedAt            time.Time                      `json:"created_at"`
+	StartedAt            *time.Time                     `json:"started_at,omitempty"`
+	FinishedAt           *time.Time                     `json:"finished_at,omitempty"`
+	PostProcessingStatus string                         `json:"post_processing_status,omitempty"`
+	PostProcessingError  string                         `json:"post_processing_error,omitempty"`
 	cancel               context.CancelFunc
 }
 
@@ -88,6 +94,17 @@ func New(cfg config.Config, runner *engine.Runner, persistence Persistence, post
 		return nil, err
 	}
 	for _, job := range stored {
+		job.ASRProfile = config.NormalizeProfile(job.ASRProfile)
+		if job.ASRProfile == "" {
+			job.ASRProfile = cfg.Profiles.DefaultProfile
+		}
+		job.Profile = job.ASRProfile
+		if job.ProfileSource == "" {
+			job.ProfileSource = "legacy"
+		}
+		if job.ASRModeSource == "" {
+			job.ASRModeSource = "legacy"
+		}
 		if job.Status == "queued" || job.Status == "running" {
 			job.Status = "failed"
 			job.Error = "Service restarted before this job completed"
@@ -119,31 +136,28 @@ func (m *Manager) Create(req Request) (*Job, error) {
 	if len(files) == 0 {
 		return nil, fmt.Errorf("no supported media files found")
 	}
-	req.ASRMode = strings.ToLower(strings.TrimSpace(req.ASRMode))
-	if req.ASRMode == "" {
-		req.ASRMode = m.cfg.Whisper.Mode
-	}
-	if req.ASRMode == "" {
-		req.ASRMode = "balanced"
-	}
-	if req.ASRMode != "fast" && req.ASRMode != "balanced" && req.ASRMode != "high_accuracy" {
+	req.ASRMode = config.NormalizeASRMode(req.ASRMode)
+	if req.ASRMode != "" && req.ASRMode != "fast" && req.ASRMode != "balanced" && req.ASRMode != "high_accuracy" {
 		return nil, fmt.Errorf("asr_mode must be fast, balanced, or high_accuracy")
 	}
-	req.ASRProfile = strings.ToLower(strings.TrimSpace(req.ASRProfile))
-	if req.ASRProfile == "" {
-		req.ASRProfile = m.cfg.Whisper.Profile
+	if strings.TrimSpace(req.Profile) != "" {
+		req.ASRProfile = req.Profile
 	}
-	if req.ASRProfile == "" {
-		req.ASRProfile = "jav"
+	req.ASRProfile = config.NormalizeProfile(req.ASRProfile)
+	if req.ASRProfile != "" && req.ASRProfile != "standard" && req.ASRProfile != "jav" && req.ASRProfile != "giga" {
+		return nil, fmt.Errorf("profile must be standard, jav, or giga")
 	}
-	if req.ASRProfile != "standard" && req.ASRProfile != "jav" && req.ASRProfile != "tokusatsu" && req.ASRProfile != "akiba" {
-		return nil, fmt.Errorf("asr_profile must be standard, jav, tokusatsu, or akiba")
+	fileSettings := make(map[string]profiles.Resolution, len(files))
+	profileSettings := m.Profiles()
+	for _, file := range files {
+		fileSettings[file] = profiles.Resolve(profileSettings, file, req.ASRProfile, req.ASRMode)
 	}
+	firstResolution := fileSettings[files[0]]
 	keepJapanese := m.cfg.Output.KeepJapanese
 	if req.KeepJapanese != nil {
 		keepJapanese = *req.KeepJapanese
 	}
-	job := &Job{ID: newID(), ExternalID: req.ExternalID, Status: "queued", Progress: 0, Message: "Waiting for subtitle worker", Inputs: req.Inputs, Files: files, CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, KeepJapanese: keepJapanese, ASRMode: req.ASRMode, ASRProfile: req.ASRProfile, DebugMode: req.DebugMode, CreatedAt: time.Now().UTC()}
+	job := &Job{ID: newID(), ExternalID: req.ExternalID, Status: "queued", Progress: 0, Message: "Waiting for subtitle worker", Inputs: req.Inputs, Files: files, CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, KeepJapanese: keepJapanese, ASRMode: firstResolution.ASRMode, ASRProfile: firstResolution.Profile, Profile: firstResolution.Profile, ProfileSource: firstResolution.ProfileSource, ASRModeSource: firstResolution.ASRModeSource, FileSettings: fileSettings, DebugMode: req.DebugMode, CreatedAt: time.Now().UTC()}
 	m.mu.Lock()
 	m.jobs[job.ID] = job
 	m.mu.Unlock()
@@ -154,12 +168,32 @@ func (m *Manager) Create(req Request) (*Job, error) {
 
 func (m *Manager) Get(id string) (*Job, bool) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
 	job, ok := m.jobs[id]
-	if !ok {
-		return nil, false
+	if ok {
+		result := clone(job)
+		m.mu.RUnlock()
+		return result, true
 	}
-	return clone(job), true
+	m.mu.RUnlock()
+	if store, supportsGet := m.persistence.(interface {
+		GetJob(string) (*Job, bool, error)
+	}); supportsGet {
+		stored, found, err := store.GetJob(id)
+		return stored, found && err == nil
+	}
+	return nil, false
+}
+
+func (m *Manager) Profiles() config.ProfilesConfig {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.cfg.Profiles
+}
+
+func (m *Manager) UpdateProfiles(value config.ProfilesConfig) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cfg.Profiles = value
 }
 
 func (m *Manager) List() []*Job {
@@ -174,6 +208,37 @@ func (m *Manager) List() []*Job {
 		out = out[:100]
 	}
 	return out
+}
+
+type Page struct {
+	Jobs     []*Job `json:"jobs"`
+	Page     int    `json:"page"`
+	PageSize int    `json:"page_size"`
+	Total    int    `json:"total"`
+	Pages    int    `json:"pages"`
+}
+
+type pagePersistence interface {
+	ListPage(page, pageSize int, filter string) ([]*Job, int, error)
+}
+
+func (m *Manager) ListPage(page, pageSize int, filter string) (Page, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize != 25 && pageSize != 50 && pageSize != 100 {
+		pageSize = 50
+	}
+	if store, ok := m.persistence.(pagePersistence); ok {
+		items, total, err := store.ListPage(page, pageSize, filter)
+		if err != nil {
+			return Page{}, err
+		}
+		pages := (total + pageSize - 1) / pageSize
+		return Page{Jobs: items, Page: page, PageSize: pageSize, Total: total, Pages: pages}, nil
+	}
+	items := m.List()
+	return Page{Jobs: items, Page: 1, PageSize: len(items), Total: len(items), Pages: 1}, nil
 }
 
 func (m *Manager) Cancel(id string) bool {
@@ -235,12 +300,22 @@ func (m *Manager) process(ctx context.Context, id string) {
 	job := clone(m.jobs[id])
 	m.mu.RUnlock()
 	translationMemory := engine.NewTranslationMemory()
+	profileSettings := m.Profiles()
 	for index, file := range job.Files {
+		resolution := job.FileSettings[file]
+		if resolution.Profile == "" {
+			resolution = profiles.Resolve(profileSettings, file, job.ASRProfile, job.ASRMode)
+		}
 		m.mu.Lock()
 		current := m.jobs[id]
 		current.CurrentPath = file
 		current.CurrentFile = filepath.Base(file)
 		current.CurrentFileNumber = index + 1
+		current.ASRProfile = resolution.Profile
+		current.Profile = resolution.Profile
+		current.ASRMode = resolution.ASRMode
+		current.ProfileSource = resolution.ProfileSource
+		current.ASRModeSource = resolution.ASRModeSource
 		startSnapshot := clone(current)
 		m.mu.Unlock()
 		m.publish(startSnapshot)
@@ -265,7 +340,7 @@ func (m *Manager) process(ctx context.Context, id string) {
 				m.mu.Unlock()
 			}
 		}
-		result, err := m.runner.ProcessWithOptions(ctx, file, job.Overwrite, job.KeepJapanese, engine.ProcessOptions{ASRMode: job.ASRMode, ASRProfile: job.ASRProfile, DebugMode: job.DebugMode}, progress, translationMemory)
+		result, err := m.runner.ProcessWithOptions(ctx, file, job.Overwrite, job.KeepJapanese, engine.ProcessOptions{ASRMode: resolution.ASRMode, ASRProfile: resolution.Profile, DebugMode: job.DebugMode, Title: job.ExternalID}, progress, translationMemory)
 		if err != nil {
 			m.finish(id, "failed", err.Error())
 			return

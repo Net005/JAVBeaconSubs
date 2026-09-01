@@ -1,6 +1,7 @@
 package server
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"javbeaconsubs/internal/auth"
 	"javbeaconsubs/internal/config"
@@ -142,6 +144,60 @@ func TestTranslationSettingsArePersistentAndKeyIsWriteOnly(t *testing.T) {
 	saved, ok, err := database.LoadTranslation()
 	if err != nil || !ok || saved.APIKey != "very-secret" || saved.Mode != "contextual" || saved.ContextGapMS != 5000 || !saved.TranslationMemory || saved.StructuredGlossary.Terms["先生"] != "teacher" {
 		t.Fatalf("saved settings: %#v ok=%v err=%v", saved, ok, err)
+	}
+}
+
+func TestBulkExportStreamsCollisionSafeArtifactsAndManifest(t *testing.T) {
+	root := t.TempDir()
+	database, err := store.Open(filepath.Join(root, "export.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	ja := filepath.Join(root, "movie.ja.srt")
+	en := filepath.Join(root, "movie.en.srt")
+	diagnostics := filepath.Join(root, "movie.subtitles.json")
+	for path, content := range map[string]string{ja: "JA", en: "EN", diagnostics: `{}`} {
+		if err := os.WriteFile(path, []byte(content), 0o640); err != nil {
+			t.Fatal(err)
+		}
+	}
+	job := &jobs.Job{ID: "sub_export", ExternalID: "../SPSF-57", Status: "complete", Files: []string{"/media/SPSF-57.mp4"}, Results: []engine.Result{{JapaneseSRT: ja, EnglishSRT: en, ProjectJSON: diagnostics, Profile: "giga", ASRMode: "balanced"}}, ASRProfile: "giga", ASRMode: "balanced", CreatedAt: time.Now().UTC()}
+	if err := database.Save(job); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{APIToken: "token", Profiles: config.ProfilesConfig{DefaultProfile: "jav", DefaultASRMode: "balanced"}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	runner := engine.New(cfg, logger)
+	post := jobs.NewPostProcessor(config.PostProcessingConfig{Mode: "none", TimeoutSec: 60}, logger)
+	manager, err := jobs.New(cfg, runner, database, post, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authManager, _ := auth.New(database, "", "")
+	handler := New(cfg, manager, runner, authManager, post, database, logger).Handler()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/jobs/export", strings.NewReader(`{"job_ids":["sub_export"],"content":"subtitles_diagnostics"}`))
+	request.Header.Set("Authorization", "Bearer token")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "application/zip" {
+		t.Fatalf("status=%d type=%q body=%s", response.Code, response.Header().Get("Content-Type"), response.Body.String())
+	}
+	archive, err := zip.NewReader(bytes.NewReader(response.Body.Bytes()), int64(response.Body.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundManifest, foundJA, foundEN := false, false, false
+	for _, file := range archive.File {
+		if strings.Contains(file.Name, "../") || strings.HasPrefix(file.Name, "/") {
+			t.Fatalf("unsafe ZIP path %q", file.Name)
+		}
+		foundManifest = foundManifest || strings.HasSuffix(file.Name, "/manifest.json")
+		foundJA = foundJA || strings.HasSuffix(file.Name, "/movie.ja.srt")
+		foundEN = foundEN || strings.HasSuffix(file.Name, "/movie.en.srt")
+	}
+	if !foundManifest || !foundJA || !foundEN {
+		t.Fatalf("archive contents manifest=%v ja=%v en=%v", foundManifest, foundJA, foundEN)
 	}
 }
 

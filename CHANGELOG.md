@@ -6,8 +6,13 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ### Added
 
+- Added canonical Standard/JAV/GIGA profiles, independent per-file path-based profile/accuracy resolution, persisted resolution sources, and legacy alias normalization to GIGA.
+- Added Japanese Recognition Vocabulary v1 and hierarchical Translation Glossary v2 validation, scope activation, title override support, persistent import/export controls, and bundled production catalogs.
+- Added prompt-leak diagnostics and one no-context Qwen retry, alignment text-integrity metrics/recovery, grouped Whisper fallback, and expanded ASR timing/fallback observability.
+- Added server-side Activity pagination, case-insensitive wildcard filtering, page selection, and streaming multi-job ZIP exports with collision-safe directories, warnings, and a comparison-friendly manifest.
+- Added a Models tab backed by a centralized four-role registry with installed state, exact active revisions, VRAM guidance, and manual provider update checks.
 - Added a Japanese-forced Qwen3-ASR-1.7B primary pipeline with a separate Qwen3-ForcedAligner-0.6B timing phase.
-- Added Fast, Balanced, and High Accuracy per-job modes plus `standard`, `jav`, `tokusatsu`, and `akiba` recognition profiles in the web/API workflow.
+- Added Fast, Balanced, and High Accuracy per-job modes in the web/API workflow.
 - Added recall-biased configurable dialogue detection, padded 30-second regions, ambiguous-vocalization classification, transcript suspicion heuristics, normalized multi-ASR comparison, confidence/review states, and per-segment failure isolation.
 - Added conditional ReazonSpeech verification and disagreement-only Whisper tie-breaking while retaining existing whole-file compatibility fallback.
 - Added English/Japanese ASS output and a JSON subtitle project containing canonical Japanese/English tracks, model identities, processing metrics, confidence, and optional raw candidate diagnostics.
@@ -26,6 +31,9 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ### Changed
 
+- Replaced verbose English Qwen profile prompts with minimal Japanese-only hints and made `standard`, `jav`, and `giga` the only persisted profile values.
+- Made selected ASR text canonical: forced alignment now supplies timing and cannot silently truncate or replace Japanese dialogue.
+- Tightened Balanced/High Accuracy fallback eligibility so empty candidates and minor disagreement cannot trigger Whisper.
 - Replaced Reazon-first recognition with Qwen-first recognition and forced Japanese by default; Reazon is now secondary and Whisper is tertiary.
 - Changed GPU model lifecycle handling so Qwen ASR, fallback ASR, and forced alignment are released between phases instead of remaining resident together.
 - Replaced the purple interface with JAVBeacon's dark red, charcoal, ivory, and Inter/system-font visual identity.

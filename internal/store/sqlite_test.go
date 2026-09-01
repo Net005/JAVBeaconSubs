@@ -58,3 +58,34 @@ func TestTranslationSettingsRoundTrip(t *testing.T) {
 		t.Fatalf("settings mismatch: %#v", got)
 	}
 }
+
+func TestJobPaginationAndWildcardFiltering(t *testing.T) {
+	database, err := Open(filepath.Join(t.TempDir(), "jobs.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	for index, item := range []struct{ id, name, path string }{
+		{"one", "SPSF-57", `D:\P2P\JH\SPSF-57.mp4`},
+		{"two", "START-611", "/mnt/data/jav/START-611.mkv"},
+		{"three", "Other", "/mnt/data/other/movie.avi"},
+	} {
+		if err := database.Save(&jobs.Job{ID: item.id, ExternalID: item.name, Status: "complete", Files: []string{item.path}, CreatedAt: time.Now().UTC().Add(time.Duration(index) * time.Second)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, filter := range []string{"*spsf*", `*\p2p\jh\*`, "START", "*.AVI"} {
+		items, total, err := database.ListPage(1, 25, filter)
+		if err != nil || total != 1 || len(items) != 1 {
+			t.Fatalf("filter %q: total=%d jobs=%d err=%v", filter, total, len(items), err)
+		}
+	}
+	items, total, err := database.ListPage(2, 25, "")
+	if err != nil || total != 3 || len(items) != 0 {
+		t.Fatalf("page 2: total=%d jobs=%d err=%v", total, len(items), err)
+	}
+	items, total, err = database.ListPage(1, 25, `%' OR 1=1 --`)
+	if err != nil || total != 0 || len(items) != 0 {
+		t.Fatalf("injection-like filter: total=%d jobs=%d err=%v", total, len(items), err)
+	}
+}
