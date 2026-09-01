@@ -27,10 +27,19 @@ const marker = "; generated-by=javbeaconsubs-v1"
 
 type ProgressFunc func(phase string, percent int, message string)
 
+type ProcessOptions struct {
+	ASRMode    string
+	ASRProfile string
+	DebugMode  bool
+}
+
 type Result struct {
 	Input                   string `json:"input"`
 	EnglishSRT              string `json:"english_srt,omitempty"`
 	JapaneseSRT             string `json:"japanese_srt,omitempty"`
+	EnglishASS              string `json:"english_ass,omitempty"`
+	JapaneseASS             string `json:"japanese_ass,omitempty"`
+	ProjectJSON             string `json:"project_json,omitempty"`
 	Segments                int    `json:"segments"`
 	Skipped                 bool   `json:"skipped,omitempty"`
 	TranslationInputTokens  int    `json:"translation_input_tokens,omitempty"`
@@ -70,6 +79,24 @@ func (r *Runner) Check() map[string]any {
 	_, modelErr := os.Stat(r.cfg.Whisper.Model)
 	result := map[string]any{"ready": whisperErr == nil && ffmpegErr == nil && modelErr == nil, "translation_mode": r.cfg.Translation.Mode}
 	result["asr_backend"] = r.cfg.Whisper.Backend
+	if r.cfg.Whisper.Backend == "qwen" {
+		pythonPath, pythonErr := exec.LookPath("python3")
+		_, scriptErr := os.Stat(r.cfg.Whisper.QwenScript)
+		if pythonErr != nil || scriptErr != nil {
+			result["ready"] = false
+		}
+		result["asr_mode"] = r.cfg.Whisper.Mode
+		result["qwen_model"] = r.cfg.Whisper.QwenModel
+		result["aligner_model"] = r.cfg.Whisper.AlignerModel
+		if pythonErr == nil {
+			result["qwen_python"] = pythonPath
+		} else {
+			result["qwen_python_error"] = pythonErr.Error()
+		}
+		if scriptErr != nil {
+			result["qwen_script_error"] = scriptErr.Error()
+		}
+	}
 	if r.cfg.Whisper.Backend == "reazon" {
 		pythonPath, pythonErr := exec.LookPath("python3")
 		_, scriptErr := os.Stat(r.cfg.Whisper.ReazonScript)
@@ -119,9 +146,22 @@ func (r *Runner) Process(ctx context.Context, input string, overwrite bool, prog
 }
 
 func (r *Runner) ProcessWithMemory(ctx context.Context, input string, overwrite, keepJapanese bool, progress ProgressFunc, memory *TranslationMemory) (Result, error) {
+	return r.ProcessWithOptions(ctx, input, overwrite, keepJapanese, ProcessOptions{}, progress, memory)
+}
+
+func (r *Runner) ProcessWithOptions(ctx context.Context, input string, overwrite, keepJapanese bool, options ProcessOptions, progress ProgressFunc, memory *TranslationMemory) (Result, error) {
 	r.mu.RLock()
 	worker := &Runner{cfg: r.cfg, log: r.log, client: r.client}
 	r.mu.RUnlock()
+	if options.ASRMode != "" {
+		worker.cfg.Whisper.Mode = options.ASRMode
+	}
+	if options.ASRProfile != "" {
+		worker.cfg.Whisper.Profile = options.ASRProfile
+	}
+	if options.DebugMode {
+		worker.cfg.Whisper.DebugMode = true
+	}
 	return worker.process(ctx, input, overwrite, keepJapanese, progress, memory)
 }
 
@@ -130,6 +170,9 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 	base := strings.TrimSuffix(input, filepath.Ext(input))
 	englishPath := base + r.cfg.Output.EnglishSuffix
 	japanesePath := base + r.cfg.Output.JapaneseSuffix
+	englishASSPath := base + r.cfg.Output.EnglishASS
+	japaneseASSPath := base + r.cfg.Output.JapaneseASS
+	projectPath := base + r.cfg.Output.ProjectJSON
 	if !overwrite && !r.cfg.Output.Overwrite {
 		if _, err := os.Stat(englishPath); err == nil {
 			result.EnglishSRT = englishPath
@@ -149,13 +192,13 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		return result, fmt.Errorf("extract audio: %w", err)
 	}
 
-	direct := r.cfg.Translation.Mode == "direct"
 	progress("transcription", 15, "Transcribing Japanese speech")
 	useGPU, err := r.prepareGPU(ctx)
 	if err != nil {
 		return result, err
 	}
-	segments, err := r.transcribe(ctx, wav, filepath.Join(tmpDir, "transcript"), direct, useGPU, func(pct int) {
+	transcriptPrefix := filepath.Join(tmpDir, "transcript")
+	segments, err := r.transcribe(ctx, wav, transcriptPrefix, false, useGPU, func(pct int) {
 		progress("transcription", 15+pct*55/100, fmt.Sprintf("Transcribing Japanese speech — %d%%", pct))
 	})
 	if err != nil {
@@ -166,34 +209,28 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		return result, errors.New("no speech segments were recognized")
 	}
 
-	if keepJapanese && direct {
-		progress("transcription", 72, "Transcribing optional Japanese sidecar")
-		japanese, japaneseErr := r.transcribe(ctx, wav, filepath.Join(tmpDir, "transcript-ja"), false, useGPU, func(pct int) {
-			progress("transcription", 72+pct*18/100, fmt.Sprintf("Transcribing Japanese sidecar — %d%%", pct))
-		})
-		if japaneseErr != nil {
-			return result, japaneseErr
-		}
-		japanese = subtitle.Clean(japanese)
-		if len(japanese) == 0 {
-			return result, errors.New("no Japanese speech segments were recognized for the requested sidecar")
-		}
-		if err := atomicWrite(japanesePath, subtitle.RenderSRT(japanese, 30, r.cfg.Output.MaxLines, marker)); err != nil {
-			return result, err
-		}
-		result.JapaneseSRT = japanesePath
-	}
-
-	if keepJapanese && !direct {
+	if keepJapanese {
 		progress("subtitle", 72, "Writing Japanese transcript")
 		if err := atomicWrite(japanesePath, subtitle.RenderSRT(segments, 30, r.cfg.Output.MaxLines, marker)); err != nil {
 			return result, err
 		}
+		if err := atomicWrite(japaneseASSPath, subtitle.RenderASS(segments, 30, r.cfg.Output.MaxLines, filepath.Base(input)+" Japanese")); err != nil {
+			return result, err
+		}
 		result.JapaneseSRT = japanesePath
+		result.JapaneseASS = japaneseASSPath
 	}
 
 	english := segments
 	switch r.cfg.Translation.Mode {
+	case "direct":
+		progress("translation", 74, "Running legacy local speech translation")
+		english, err = r.transcribeWhisper(ctx, wav, filepath.Join(tmpDir, "translation-direct"), true, useGPU, func(pct int) {
+			progress("translation", 74+pct*18/100, fmt.Sprintf("Local translation — %d%%", pct))
+		})
+		if err != nil {
+			return result, err
+		}
 	case "contextual":
 		progress("translation", 74, "Translating with surrounding dialogue context")
 		var usage tokenUsage
@@ -210,7 +247,29 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 			if err := atomicWrite(japanesePath, subtitle.RenderSRT(segments, 30, r.cfg.Output.MaxLines, marker)); err != nil {
 				return result, err
 			}
+			if err := atomicWrite(japaneseASSPath, subtitle.RenderASS(segments, 30, r.cfg.Output.MaxLines, filepath.Base(input)+" Japanese")); err != nil {
+				return result, err
+			}
 		}
+		result.JapaneseASS = japaneseASSPath
+		project := map[string]any{
+			"pipeline_version": "qwen-first-v1", "input": input, "language": "ja", "japanese": segments,
+			"models": map[string]string{"asr_primary": modelIdentity(r.cfg.Whisper.QwenModel, r.cfg.Whisper.QwenRevision), "asr_secondary": r.cfg.Whisper.ReazonModel, "asr_tertiary": r.cfg.Whisper.Model, "aligner": modelIdentity(r.cfg.Whisper.AlignerModel, r.cfg.Whisper.AlignerRevision)},
+		}
+		if raw, readErr := os.ReadFile(transcriptPrefix + ".qwen.json"); readErr == nil {
+			var diagnostics any
+			if json.Unmarshal(raw, &diagnostics) == nil {
+				project["diagnostics"] = diagnostics
+			}
+		}
+		projectJSON, marshalErr := json.MarshalIndent(project, "", "  ")
+		if marshalErr != nil {
+			return result, marshalErr
+		}
+		if err := atomicWrite(projectPath, string(projectJSON)+"\n"); err != nil {
+			return result, err
+		}
+		result.ProjectJSON = projectPath
 		result.Segments = len(segments)
 		return result, nil
 	}
@@ -219,13 +278,54 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 	if err := atomicWrite(englishPath, subtitle.RenderSRT(subtitle.Clean(english), r.cfg.Output.MaxLineChars, r.cfg.Output.MaxLines, marker)); err != nil {
 		return result, err
 	}
+	if err := atomicWrite(englishASSPath, subtitle.RenderASS(subtitle.Clean(english), r.cfg.Output.MaxLineChars, r.cfg.Output.MaxLines, filepath.Base(input)+" English")); err != nil {
+		return result, err
+	}
+	project := map[string]any{
+		"pipeline_version": "qwen-first-v1", "input": input, "language": "ja",
+		"japanese": segments, "english": subtitle.Clean(english),
+		"models": map[string]string{"asr_primary": modelIdentity(r.cfg.Whisper.QwenModel, r.cfg.Whisper.QwenRevision), "asr_secondary": r.cfg.Whisper.ReazonModel, "asr_tertiary": r.cfg.Whisper.Model, "aligner": modelIdentity(r.cfg.Whisper.AlignerModel, r.cfg.Whisper.AlignerRevision), "translator": r.cfg.Translation.Model},
+	}
+	if raw, readErr := os.ReadFile(transcriptPrefix + ".qwen.json"); readErr == nil {
+		var diagnostics any
+		if json.Unmarshal(raw, &diagnostics) == nil {
+			project["diagnostics"] = diagnostics
+		}
+	}
+	projectJSON, err := json.MarshalIndent(project, "", "  ")
+	if err != nil {
+		return result, err
+	}
+	if err := atomicWrite(projectPath, string(projectJSON)+"\n"); err != nil {
+		return result, err
+	}
 	result.EnglishSRT = englishPath
+	result.EnglishASS = englishASSPath
+	result.ProjectJSON = projectPath
 	result.Segments = len(english)
 	progress("complete", 100, "Subtitle generation complete")
 	return result, nil
 }
 
 func (r *Runner) transcribe(ctx context.Context, wav, prefix string, translate, useGPU bool, report func(int)) ([]subtitle.Segment, error) {
+	if r.cfg.Whisper.Backend == "qwen" && !translate {
+		segments, err := r.transcribeQwen(ctx, wav, prefix, useGPU, report)
+		if err == nil {
+			return segments, nil
+		}
+		if r.cfg.Whisper.ReazonEnabled {
+			r.log.Warn("Qwen pipeline failed; trying ReazonSpeech whole-file fallback", "error", err)
+			segments, reazonErr := r.transcribeReazon(ctx, wav, prefix+"-fallback", useGPU, report)
+			if reazonErr == nil {
+				return segments, nil
+			}
+			r.log.Warn("ReazonSpeech whole-file fallback failed", "error", reazonErr)
+		}
+		if !r.cfg.Whisper.FallbackWhisper {
+			return nil, err
+		}
+		r.log.Warn("Qwen pipeline failed; using whole-file compatibility fallback", "error", err)
+	}
 	if r.cfg.Whisper.Backend == "reazon" && !translate {
 		segments, err := r.transcribeReazon(ctx, wav, prefix, useGPU, report)
 		if err == nil {
@@ -237,6 +337,88 @@ func (r *Runner) transcribe(ctx context.Context, wav, prefix string, translate, 
 		r.log.Warn("ReazonSpeech failed; falling back to validated Whisper transcription", "error", err)
 	}
 	return r.transcribeWhisper(ctx, wav, prefix, translate, useGPU, report)
+}
+
+func (r *Runner) transcribeQwen(ctx context.Context, wav, prefix string, useGPU bool, report func(int)) ([]subtitle.Segment, error) {
+	c := r.cfg.Whisper
+	output := prefix + ".qwen.json"
+	device := "cpu"
+	if useGPU {
+		device = "cuda"
+	}
+	args := []string{
+		c.QwenScript, "--input", wav, "--output", output, "--device", device,
+		"--mode", c.Mode, "--profile", c.Profile, "--qwen-model", c.QwenModel,
+		"--qwen-revision", c.QwenRevision,
+		"--context", c.Prompt,
+		"--aligner-model", c.AlignerModel, "--aligner-revision", c.AlignerRevision, "--reazon-model", c.ReazonModel,
+		"--whisper-binary", c.Binary, "--whisper-model", c.Model,
+		"--batch-size", strconv.Itoa(c.ASRBatchSize),
+		"--vad-threshold", fmt.Sprintf("%.3f", c.VADEnergyFactor),
+		"--vad-min-speech-ms", strconv.Itoa(c.MinSpeechMS),
+		"--vad-merge-silence-ms", strconv.Itoa(c.MinSilenceMS),
+		"--vad-pre-roll-ms", strconv.Itoa(c.VADPreRollMS),
+		"--vad-post-roll-ms", strconv.Itoa(c.VADPostRollMS),
+		"--max-segment-seconds", strconv.Itoa(c.MaxSegmentSec),
+	}
+	if !c.ReazonEnabled {
+		args = append(args, "--disable-reazon")
+	}
+	if !c.WhisperEnabled || !c.FallbackWhisper {
+		args = append(args, "--disable-whisper")
+	}
+	if c.DebugMode {
+		args = append(args, "--debug")
+	}
+	err := runWithProgress(ctx, report, "python3", args...)
+	if err != nil && useGPU && c.GPUFallbackCPU {
+		r.log.Warn("Qwen CUDA pipeline failed; retrying this file in CPU mode", "error", err)
+		_ = os.Remove(output)
+		for index := range args {
+			if args[index] == "cuda" && index > 0 && args[index-1] == "--device" {
+				args[index] = "cpu"
+			}
+		}
+		report(0)
+		err = runWithProgress(ctx, report, "python3", args...)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("Qwen Japanese ASR pipeline: %w", err)
+	}
+	r.logGPUStatus(ctx, "after Qwen Japanese ASR pipeline")
+	data, err := os.ReadFile(output)
+	if err != nil {
+		return nil, fmt.Errorf("read Qwen pipeline JSON: %w", err)
+	}
+	var doc qwenDocument
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("decode Qwen pipeline JSON: %w", err)
+	}
+	if doc.Language != "ja" {
+		return nil, fmt.Errorf("Qwen pipeline returned unexpected language %q", doc.Language)
+	}
+	if doc.DurationMS <= 0 || doc.ProcessedMS < doc.DurationMS-1000 {
+		return nil, fmt.Errorf("Qwen pipeline coverage incomplete: processed %dms of %dms", doc.ProcessedMS, doc.DurationMS)
+	}
+	segments := make([]subtitle.Segment, 0, len(doc.Segments))
+	for _, item := range doc.Segments {
+		segments = append(segments, subtitle.Segment{StartMS: item.StartMS, EndMS: item.EndMS, Text: item.Text})
+	}
+	if err := validateSegments(segments, doc.DurationMS, int64(c.MaxSegmentSec)*1000); err != nil {
+		return nil, fmt.Errorf("validate Qwen pipeline output: %w", err)
+	}
+	return segments, nil
+}
+
+type qwenDocument struct {
+	DurationMS  int64  `json:"duration_ms"`
+	ProcessedMS int64  `json:"processed_ms"`
+	Language    string `json:"language"`
+	Segments    []struct {
+		StartMS int64  `json:"start_ms"`
+		EndMS   int64  `json:"end_ms"`
+		Text    string `json:"text"`
+	} `json:"segments"`
 }
 
 func (r *Runner) transcribeReazon(ctx context.Context, wav, prefix string, useGPU bool, report func(int)) ([]subtitle.Segment, error) {
@@ -503,4 +685,11 @@ func atomicWrite(path, content string) error {
 		return err
 	}
 	return nil
+}
+
+func modelIdentity(name, revision string) string {
+	if revision == "" {
+		return name
+	}
+	return name + "@" + revision
 }

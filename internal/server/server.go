@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -49,6 +50,11 @@ func New(cfg config.Config, manager *jobs.Manager, runner *engine.Runner, authMa
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	assetFS, err := fs.Sub(assets, "web/assets")
+	if err != nil {
+		panic(fmt.Sprintf("embedded web assets: %v", err))
+	}
+	mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(assetFS))))
 	mux.HandleFunc("GET /", s.index)
 	mux.HandleFunc("GET /api/v1/session", s.sessionStatus)
 	mux.HandleFunc("POST /api/v1/session", s.login)
@@ -362,6 +368,9 @@ func (s *Server) uploadJob(w http.ResponseWriter, r *http.Request) {
 		Inputs:       []string{destination},
 		Overwrite:    r.FormValue("overwrite") == "true",
 		KeepJapanese: keepJapanese,
+		ASRMode:      r.FormValue("asr_mode"),
+		ASRProfile:   r.FormValue("asr_profile"),
+		DebugMode:    r.FormValue("debug_mode") == "true",
 		ExternalID:   strings.TrimSpace(r.FormValue("external_id")),
 		CallbackURL:  strings.TrimSpace(r.FormValue("callback_url")),
 	})
@@ -402,6 +411,12 @@ func (s *Server) downloadOutput(w http.ResponseWriter, r *http.Request) {
 		path = job.Results[index].EnglishSRT
 	case "ja":
 		path = job.Results[index].JapaneseSRT
+	case "en-ass":
+		path = job.Results[index].EnglishASS
+	case "ja-ass":
+		path = job.Results[index].JapaneseASS
+	case "json":
+		path = job.Results[index].ProjectJSON
 	default:
 		writeJSON(w, 404, map[string]string{"error": "language output not found"})
 		return

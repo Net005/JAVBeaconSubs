@@ -29,3 +29,12 @@ func TestRenderSRT(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderASS(t *testing.T) {
+	got := RenderASS([]Segment{{StartMS: 1234, EndMS: 3661001, Text: "First line\nSecond line"}}, 30, 2, "Example")
+	for _, want := range []string{"[Script Info]", "[V4+ Styles]", "Dialogue: 0,0:00:01.23,1:01:01.00", `First line\NSecond line`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q in %q", want, got)
+		}
+	}
+}

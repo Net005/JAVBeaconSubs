@@ -2,9 +2,9 @@ package config
 
 import "testing"
 
-func TestDefaultASRUsesBoundedReazonSpeech(t *testing.T) {
+func TestDefaultASRUsesQwenWithBoundedFallbacks(t *testing.T) {
 	value := defaults().Whisper
-	if value.Backend != "reazon" || value.ReazonModel == "" || value.ChunkSeconds != 45 || value.OverlapSeconds != 2 || value.MaxSegmentSec != 60 || !value.FallbackWhisper {
+	if value.Backend != "qwen" || value.Mode != "balanced" || value.Profile != "jav" || value.QwenModel == "" || value.QwenRevision == "" || value.AlignerModel == "" || value.AlignerRevision == "" || value.ReazonModel == "" || value.MaxSegmentSec != 30 || !value.ReazonEnabled || !value.WhisperEnabled {
 		t.Fatalf("unexpected ASR defaults: %#v", value)
 	}
 }

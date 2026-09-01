@@ -49,7 +49,29 @@ download_model "${JAVBEACONSUBS_WHISPER_MODEL:-/models/ggml-large-v3.bin}" \
 download_model "${JAVBEACONSUBS_VAD_MODEL:-/models/ggml-silero-v6.2.0.bin}" \
   "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin?download=true"
 
-if [[ "${JAVBEACONSUBS_ASR_BACKEND:-reazon}" == "reazon" ]]; then
+if [[ "${JAVBEACONSUBS_ASR_BACKEND:-qwen}" == "qwen" ]]; then
+  qwen_marker="${JAVBEACONSUBS_QWEN_READY_MARKER:-/models/huggingface/.javbeaconsubs-qwen-ready.json}"
+  qwen_model="${JAVBEACONSUBS_QWEN_MODEL:-Qwen/Qwen3-ASR-1.7B}"
+  qwen_revision="${JAVBEACONSUBS_QWEN_REVISION:-7278e1e70fe206f11671096ffdd38061171dd6e5}"
+  aligner_model="${JAVBEACONSUBS_ALIGNER_MODEL:-Qwen/Qwen3-ForcedAligner-0.6B}"
+  aligner_revision="${JAVBEACONSUBS_ALIGNER_REVISION:-c7cbfc2048c462b0d63a45797104fc9db3ad62b7}"
+  if [[ ! -s "$qwen_marker" ]] || ! grep -Fq "$qwen_model" "$qwen_marker" || ! grep -Fq "$qwen_revision" "$qwen_marker" || ! grep -Fq "$aligner_model" "$qwen_marker" || ! grep -Fq "$aligner_revision" "$qwen_marker"; then
+    if [[ "${JAVBEACONSUBS_DOWNLOAD_MODELS:-true}" != "true" ]]; then
+      echo "Missing cached Qwen ASR and forced-alignment models." >&2
+      exit 1
+    fi
+    echo "Caching Qwen Japanese ASR and forced-alignment models..."
+    python3 "${JAVBEACONSUBS_QWEN_SCRIPT:-/app/asr/qwen_pipeline.py}" \
+      --download-only \
+      --qwen-model "$qwen_model" \
+      --qwen-revision "$qwen_revision" \
+      --aligner-model "$aligner_model" \
+      --aligner-revision "$aligner_revision" \
+      --ready-marker "$qwen_marker"
+  fi
+fi
+
+if [[ "${JAVBEACONSUBS_ASR_BACKEND:-qwen}" == "reazon" ]] || [[ "${JAVBEACONSUBS_REAZON_ENABLED:-true}" == "true" ]]; then
   reazon_model="${JAVBEACONSUBS_REAZON_MODEL:-reazon-research/reazonspeech-nemo-v2}"
   reazon_marker="${JAVBEACONSUBS_REAZON_READY_MARKER:-/models/reazonspeech/.javbeaconsubs-ready}"
   if [[ ! -f "$reazon_marker" ]] || [[ "$(<"$reazon_marker")" != "$reazon_model" ]]; then
@@ -74,7 +96,7 @@ fi
 # Application data and the writable Hugging Face cache are re-owned; media mounts
 # must already permit this UID/GID.
 mkdir -p /data/uploads
-reazon_cache="${HF_HOME:-/models/reazonspeech}"
+reazon_cache="${HF_HOME:-/models/huggingface}"
 mkdir -p "$reazon_cache"
 chown -R "$puid:$pgid" /data "$reazon_cache"
 umask "${UMASK:-0002}"
