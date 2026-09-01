@@ -26,6 +26,17 @@ type Config struct {
 
 type WhisperConfig struct {
 	Backend         string  `json:"backend"`
+	Mode            string  `json:"mode"`
+	Profile         string  `json:"profile"`
+	QwenScript      string  `json:"qwen_script"`
+	QwenModel       string  `json:"qwen_model"`
+	QwenRevision    string  `json:"qwen_revision"`
+	AlignerModel    string  `json:"aligner_model"`
+	AlignerRevision string  `json:"aligner_revision"`
+	ASRBatchSize    int     `json:"asr_batch_size"`
+	ReazonEnabled   bool    `json:"reazon_enabled"`
+	WhisperEnabled  bool    `json:"whisper_enabled"`
+	DebugMode       bool    `json:"debug_mode"`
 	Binary          string  `json:"binary"`
 	Model           string  `json:"model"`
 	ReazonScript    string  `json:"reazon_script"`
@@ -44,6 +55,9 @@ type WhisperConfig struct {
 	MinSpeechMS     int     `json:"vad_min_speech_ms"`
 	MinSilenceMS    int     `json:"vad_min_silence_ms"`
 	SpeechPadMS     int     `json:"vad_speech_pad_ms"`
+	VADPreRollMS    int     `json:"vad_pre_roll_ms"`
+	VADPostRollMS   int     `json:"vad_post_roll_ms"`
+	VADEnergyFactor float64 `json:"vad_energy_factor"`
 	Prompt          string  `json:"prompt"`
 	GPUPreflight    bool    `json:"gpu_preflight"`
 	GPUAutoReset    bool    `json:"gpu_auto_reset"`
@@ -79,6 +93,9 @@ type PostProcessingConfig struct {
 type OutputConfig struct {
 	EnglishSuffix  string `json:"english_suffix"`
 	JapaneseSuffix string `json:"japanese_suffix"`
+	EnglishASS     string `json:"english_ass_suffix"`
+	JapaneseASS    string `json:"japanese_ass_suffix"`
+	ProjectJSON    string `json:"project_json_suffix"`
 	KeepJapanese   bool   `json:"keep_japanese"`
 	Overwrite      bool   `json:"overwrite"`
 	MaxLineChars   int    `json:"max_line_chars"`
@@ -90,17 +107,20 @@ func defaults() Config {
 		Listen: "127.0.0.1:8097", DatabasePath: "./data/javbeaconsubs.db",
 		UploadDir: "./data/uploads", MaxUploadGB: 30,
 		Whisper: WhisperConfig{
-			Backend: "reazon", Binary: "whisper-cli", Language: "ja", Threads: 8, UseGPU: true,
+			Backend: "qwen", Mode: "balanced", Profile: "jav", Binary: "whisper-cli", Language: "ja", Threads: 8, UseGPU: true,
+			QwenScript: "./asr/qwen_pipeline.py", QwenModel: "Qwen/Qwen3-ASR-1.7B", AlignerModel: "Qwen/Qwen3-ForcedAligner-0.6B",
+			QwenRevision: "7278e1e70fe206f11671096ffdd38061171dd6e5", AlignerRevision: "c7cbfc2048c462b0d63a45797104fc9db3ad62b7",
+			ASRBatchSize: 4, ReazonEnabled: true, WhisperEnabled: true,
 			ReazonScript: "./asr/reazon_worker.py", ReazonModel: "reazon-research/reazonspeech-nemo-v2",
-			ChunkSeconds: 45, OverlapSeconds: 2, MaxSegmentSec: 60, FallbackWhisper: true,
+			ChunkSeconds: 45, OverlapSeconds: 2, MaxSegmentSec: 30, FallbackWhisper: true,
 			BeamSize: 5, VAD: true, VADThreshold: .42, MinSpeechMS: 100,
-			MinSilenceMS: 250, SpeechPadMS: 320, GPUPreflight: true,
+			MinSilenceMS: 500, SpeechPadMS: 320, VADPreRollMS: 350, VADPostRollMS: 600, VADEnergyFactor: 1.45, GPUPreflight: true,
 			GPUFallbackCPU: true,
-			Prompt:         "日本語の会話です。固有名詞、呼び名、短い返事、息遣いも正確に文字起こししてください。",
+			Prompt:         "",
 		},
 		Translation:    TranslationConfig{Mode: "direct", BatchSize: 24, TimeoutSec: 120, ContextGapMS: 8000},
 		PostProcessing: PostProcessingConfig{Mode: "none", TimeoutSec: 60},
-		Output:         OutputConfig{EnglishSuffix: ".en.srt", JapaneseSuffix: ".ja.srt", KeepJapanese: false, MaxLineChars: 42, MaxLines: 2},
+		Output:         OutputConfig{EnglishSuffix: ".en.srt", JapaneseSuffix: ".ja.srt", EnglishASS: ".en.ass", JapaneseASS: ".ja.ass", ProjectJSON: ".subtitles.json", KeepJapanese: false, MaxLineChars: 42, MaxLines: 2},
 		Workers:        1,
 	}
 }
@@ -140,6 +160,36 @@ func Load(path string) (Config, error) {
 	}
 	if value := os.Getenv("JAVBEACONSUBS_ASR_BACKEND"); value != "" {
 		cfg.Whisper.Backend = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_ASR_MODE"); value != "" {
+		cfg.Whisper.Mode = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_ASR_PROFILE"); value != "" {
+		cfg.Whisper.Profile = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_QWEN_SCRIPT"); value != "" {
+		cfg.Whisper.QwenScript = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_QWEN_MODEL"); value != "" {
+		cfg.Whisper.QwenModel = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_QWEN_REVISION"); value != "" {
+		cfg.Whisper.QwenRevision = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_ALIGNER_MODEL"); value != "" {
+		cfg.Whisper.AlignerModel = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_ALIGNER_REVISION"); value != "" {
+		cfg.Whisper.AlignerRevision = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_REAZON_ENABLED"); value != "" {
+		cfg.Whisper.ReazonEnabled = envBool(value)
+	}
+	if value := os.Getenv("JAVBEACONSUBS_WHISPER_ENABLED"); value != "" {
+		cfg.Whisper.WhisperEnabled = envBool(value)
+	}
+	if value := os.Getenv("JAVBEACONSUBS_ASR_DEBUG"); value != "" {
+		cfg.Whisper.DebugMode = envBool(value)
 	}
 	if value := os.Getenv("JAVBEACONSUBS_REAZON_SCRIPT"); value != "" {
 		cfg.Whisper.ReazonScript = value
@@ -186,15 +236,47 @@ func Load(path string) (Config, error) {
 	if cfg.Output.MaxLines < 1 {
 		cfg.Output.MaxLines = 2
 	}
+	if cfg.Output.EnglishASS == "" {
+		cfg.Output.EnglishASS = ".en.ass"
+	}
+	if cfg.Output.JapaneseASS == "" {
+		cfg.Output.JapaneseASS = ".ja.ass"
+	}
+	if cfg.Output.ProjectJSON == "" {
+		cfg.Output.ProjectJSON = ".subtitles.json"
+	}
 	if cfg.Whisper.Language == "" {
 		cfg.Whisper.Language = "ja"
 	}
 	cfg.Whisper.Backend = strings.ToLower(strings.TrimSpace(cfg.Whisper.Backend))
 	if cfg.Whisper.Backend == "" {
-		cfg.Whisper.Backend = "reazon"
+		cfg.Whisper.Backend = "qwen"
 	}
-	if cfg.Whisper.Backend != "reazon" && cfg.Whisper.Backend != "whisper" {
-		return cfg, errors.New("whisper.backend must be reazon or whisper")
+	if cfg.Whisper.Backend != "qwen" && cfg.Whisper.Backend != "reazon" && cfg.Whisper.Backend != "whisper" {
+		return cfg, errors.New("whisper.backend must be qwen, reazon, or whisper")
+	}
+	cfg.Whisper.Mode = strings.ToLower(strings.TrimSpace(cfg.Whisper.Mode))
+	if cfg.Whisper.Mode == "" {
+		cfg.Whisper.Mode = "balanced"
+	}
+	if cfg.Whisper.Mode != "fast" && cfg.Whisper.Mode != "balanced" && cfg.Whisper.Mode != "high_accuracy" {
+		return cfg, errors.New("whisper.mode must be fast, balanced, or high_accuracy")
+	}
+	cfg.Whisper.Profile = strings.ToLower(strings.TrimSpace(cfg.Whisper.Profile))
+	if cfg.Whisper.Profile == "" {
+		cfg.Whisper.Profile = "jav"
+	}
+	if cfg.Whisper.Profile != "standard" && cfg.Whisper.Profile != "jav" && cfg.Whisper.Profile != "tokusatsu" && cfg.Whisper.Profile != "akiba" {
+		return cfg, errors.New("whisper.profile must be standard, jav, tokusatsu, or akiba")
+	}
+	if cfg.Whisper.ASRBatchSize < 1 {
+		cfg.Whisper.ASRBatchSize = 4
+	}
+	if cfg.Whisper.VADPreRollMS < 0 || cfg.Whisper.VADPostRollMS < 0 {
+		return cfg, errors.New("VAD pre/post roll must be non-negative")
+	}
+	if cfg.Whisper.VADEnergyFactor < 1 {
+		cfg.Whisper.VADEnergyFactor = 1.45
 	}
 	if cfg.Whisper.ChunkSeconds < 10 {
 		cfg.Whisper.ChunkSeconds = 45

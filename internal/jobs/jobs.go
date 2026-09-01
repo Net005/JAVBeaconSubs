@@ -27,6 +27,9 @@ type Request struct {
 	Recursive    bool     `json:"recursive"`
 	Overwrite    bool     `json:"overwrite"`
 	KeepJapanese *bool    `json:"keep_japanese,omitempty"`
+	ASRMode      string   `json:"asr_mode,omitempty"`
+	ASRProfile   string   `json:"asr_profile,omitempty"`
+	DebugMode    bool     `json:"debug_mode,omitempty"`
 	ExternalID   string   `json:"external_id,omitempty"`
 	CallbackURL  string   `json:"callback_url,omitempty"`
 }
@@ -50,6 +53,9 @@ type Job struct {
 	CallbackURL          string          `json:"-"`
 	Overwrite            bool            `json:"-"`
 	KeepJapanese         bool            `json:"keep_japanese"`
+	ASRMode              string          `json:"asr_mode"`
+	ASRProfile           string          `json:"asr_profile"`
+	DebugMode            bool            `json:"debug_mode,omitempty"`
 	CreatedAt            time.Time       `json:"created_at"`
 	StartedAt            *time.Time      `json:"started_at,omitempty"`
 	FinishedAt           *time.Time      `json:"finished_at,omitempty"`
@@ -113,11 +119,31 @@ func (m *Manager) Create(req Request) (*Job, error) {
 	if len(files) == 0 {
 		return nil, fmt.Errorf("no supported media files found")
 	}
+	req.ASRMode = strings.ToLower(strings.TrimSpace(req.ASRMode))
+	if req.ASRMode == "" {
+		req.ASRMode = m.cfg.Whisper.Mode
+	}
+	if req.ASRMode == "" {
+		req.ASRMode = "balanced"
+	}
+	if req.ASRMode != "fast" && req.ASRMode != "balanced" && req.ASRMode != "high_accuracy" {
+		return nil, fmt.Errorf("asr_mode must be fast, balanced, or high_accuracy")
+	}
+	req.ASRProfile = strings.ToLower(strings.TrimSpace(req.ASRProfile))
+	if req.ASRProfile == "" {
+		req.ASRProfile = m.cfg.Whisper.Profile
+	}
+	if req.ASRProfile == "" {
+		req.ASRProfile = "jav"
+	}
+	if req.ASRProfile != "standard" && req.ASRProfile != "jav" && req.ASRProfile != "tokusatsu" && req.ASRProfile != "akiba" {
+		return nil, fmt.Errorf("asr_profile must be standard, jav, tokusatsu, or akiba")
+	}
 	keepJapanese := m.cfg.Output.KeepJapanese
 	if req.KeepJapanese != nil {
 		keepJapanese = *req.KeepJapanese
 	}
-	job := &Job{ID: newID(), ExternalID: req.ExternalID, Status: "queued", Progress: 0, Message: "Waiting for subtitle worker", Inputs: req.Inputs, Files: files, CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, KeepJapanese: keepJapanese, CreatedAt: time.Now().UTC()}
+	job := &Job{ID: newID(), ExternalID: req.ExternalID, Status: "queued", Progress: 0, Message: "Waiting for subtitle worker", Inputs: req.Inputs, Files: files, CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, KeepJapanese: keepJapanese, ASRMode: req.ASRMode, ASRProfile: req.ASRProfile, DebugMode: req.DebugMode, CreatedAt: time.Now().UTC()}
 	m.mu.Lock()
 	m.jobs[job.ID] = job
 	m.mu.Unlock()
@@ -239,7 +265,7 @@ func (m *Manager) process(ctx context.Context, id string) {
 				m.mu.Unlock()
 			}
 		}
-		result, err := m.runner.ProcessWithMemory(ctx, file, job.Overwrite, job.KeepJapanese, progress, translationMemory)
+		result, err := m.runner.ProcessWithOptions(ctx, file, job.Overwrite, job.KeepJapanese, engine.ProcessOptions{ASRMode: job.ASRMode, ASRProfile: job.ASRProfile, DebugMode: job.DebugMode}, progress, translationMemory)
 		if err != nil {
 			m.finish(id, "failed", err.Error())
 			return

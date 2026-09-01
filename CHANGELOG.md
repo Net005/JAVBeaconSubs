@@ -6,6 +6,12 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ### Added
 
+- Added a Japanese-forced Qwen3-ASR-1.7B primary pipeline with a separate Qwen3-ForcedAligner-0.6B timing phase.
+- Added Fast, Balanced, and High Accuracy per-job modes plus `standard`, `jav`, `tokusatsu`, and `akiba` recognition profiles in the web/API workflow.
+- Added recall-biased configurable dialogue detection, padded 30-second regions, ambiguous-vocalization classification, transcript suspicion heuristics, normalized multi-ASR comparison, confidence/review states, and per-segment failure isolation.
+- Added conditional ReazonSpeech verification and disagreement-only Whisper tie-breaking while retaining existing whole-file compatibility fallback.
+- Added English/Japanese ASS output and a JSON subtitle project containing canonical Japanese/English tracks, model identities, processing metrics, confidence, and optional raw candidate diagnostics.
+- Added a JAVBeacon-derived subtitle/translation logo, favicon set, and embedded asset route.
 - Added first-run username/password web login with SQLite-backed password hashes and HTTP-only sessions, while retaining bearer-token authentication for external API clients.
 - Added a dedicated Settings tab for translation and persistent Bash/webhook post-processing.
 - Added an in-app Setup tab with recursive folder API, arbitrary mount, and post-processing examples.
@@ -20,6 +26,10 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ### Changed
 
+- Replaced Reazon-first recognition with Qwen-first recognition and forced Japanese by default; Reazon is now secondary and Whisper is tertiary.
+- Changed GPU model lifecycle handling so Qwen ASR, fallback ASR, and forced alignment are released between phases instead of remaining resident together.
+- Replaced the purple interface with JAVBeacon's dark red, charcoal, ivory, and Inter/system-font visual identity.
+- Cached Qwen ASR and aligner snapshots on the persistent models mount and reused unchanged revisions across Docker/GHCR rebuilds.
 - Removed the API-token field from the browser workflow; signed-in users have full web functionality through their session.
 - Clarified that server path jobs accept any path visible to the process or container, not only `/media`.
 - Reduced contextual request overhead without adding model passes, embedding calls, summaries, or more than four external context rows.
