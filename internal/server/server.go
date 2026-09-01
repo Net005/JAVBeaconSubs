@@ -26,6 +26,8 @@ import (
 //go:embed web/*
 var assets embed.FS
 
+const maxSettingsBodyBytes = 32 << 20
+
 type Server struct {
 	cfg      config.Config
 	jobs     *jobs.Manager
@@ -125,7 +127,7 @@ func (s *Server) getSettings(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 	var request settingsRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxSettingsBodyBytes))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
 		writeJSON(w, 400, map[string]string{"error": "invalid settings: " + err.Error()})

@@ -18,3 +18,16 @@ func TestWebUIUsesExplicitExternalIDLookup(t *testing.T) {
 		t.Fatal("web UI does not explicitly resolve the reference input")
 	}
 }
+
+func TestWebUIProvidesValidatedLocalGlossaryImport(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{"translationTermsFile", "importTermFile", "parseTermMappings", "Conflicting translations", "Blank lines and identical duplicates are ignored"} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("web glossary import is missing %q", required)
+		}
+	}
+}

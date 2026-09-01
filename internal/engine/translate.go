@@ -61,6 +61,16 @@ type legacyTranslationRow struct {
 	Japanese  string `json:"japanese"`
 }
 
+type glossaryTermMapping struct {
+	Source string
+	Target string
+}
+
+type structuredGlossaryIndex struct {
+	styles       []string
+	termsByFirst map[rune][]glossaryTermMapping
+}
+
 // TranslationMemory is scoped to one submitted job and shared by every media
 // file in it. It stores only exact, non-ambiguous source text.
 type TranslationMemory struct {
@@ -191,22 +201,44 @@ func fitWindowToLegacyPayloadBudget(window translationWindow, source []subtitle.
 	}
 }
 
+func newStructuredGlossaryIndex(structured *config.StructuredGlossary) structuredGlossaryIndex {
+	index := structuredGlossaryIndex{termsByFirst: make(map[rune][]glossaryTermMapping)}
+	if structured == nil {
+		return index
+	}
+	for _, rule := range structured.Style {
+		if rule = strings.TrimSpace(rule); rule != "" {
+			index.styles = append(index.styles, rule)
+		}
+	}
+	for source, target := range structured.Terms {
+		source, target = strings.TrimSpace(source), strings.TrimSpace(target)
+		if source == "" || target == "" {
+			continue
+		}
+		for _, first := range source {
+			index.termsByFirst[first] = append(index.termsByFirst[first], glossaryTermMapping{Source: source, Target: target})
+			break
+		}
+	}
+	return index
+}
+
 func glossaryInstructions(legacy string, structured *config.StructuredGlossary, rows []translationWindowRow) (string, int) {
+	return glossaryInstructionsIndexed(legacy, newStructuredGlossaryIndex(structured), rows)
+}
+
+func glossaryInstructionsIndexed(legacy string, index structuredGlossaryIndex, rows []translationWindowRow) (string, int) {
 	var sections []string
 	entries := 0
 	if legacy = strings.TrimSpace(legacy); legacy != "" {
 		sections = append(sections, "Required glossary and style notes:\n"+legacy)
 		entries++
 	}
-	if structured == nil {
-		return strings.Join(sections, "\n"), entries
-	}
 	var styles []string
-	for _, rule := range structured.Style {
-		if rule = strings.TrimSpace(rule); rule != "" {
-			styles = append(styles, "- "+rule)
-			entries++
-		}
+	for _, rule := range index.styles {
+		styles = append(styles, "- "+rule)
+		entries++
 	}
 	if len(styles) > 0 {
 		sections = append(sections, "Global style rules:\n"+strings.Join(styles, "\n"))
@@ -217,17 +249,28 @@ func glossaryInstructions(legacy string, structured *config.StructuredGlossary, 
 		dialogue.WriteByte('\n')
 	}
 	dialogueText := dialogue.String()
-	keys := make([]string, 0, len(structured.Terms))
-	for source := range structured.Terms {
+	relevant := make(map[string]string)
+	checked := make(map[string]bool)
+	for _, first := range dialogueText {
+		for _, term := range index.termsByFirst[first] {
+			if checked[term.Source] {
+				continue
+			}
+			checked[term.Source] = true
+			if strings.Contains(dialogueText, term.Source) {
+				relevant[term.Source] = term.Target
+			}
+		}
+	}
+	keys := make([]string, 0, len(relevant))
+	for source := range relevant {
 		keys = append(keys, source)
 	}
 	sort.Strings(keys)
-	var terms []string
+	terms := make([]string, 0, len(keys))
 	for _, source := range keys {
-		if source != "" && strings.Contains(dialogueText, source) {
-			terms = append(terms, "- "+source+" => "+structured.Terms[source])
-			entries++
-		}
+		terms = append(terms, "- "+source+" => "+relevant[source])
+		entries++
 	}
 	if len(terms) > 0 {
 		sections = append(sections, "Relevant term mappings:\n"+strings.Join(terms, "\n"))
@@ -242,6 +285,7 @@ func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progr
 	copy(out, source)
 	var totalUsage tokenUsage
 	batchSize := r.cfg.Translation.BatchSize
+	glossaryIndex := newStructuredGlossaryIndex(r.cfg.Translation.StructuredGlossary)
 	translatedRows, contextRows, reusedRows, glossaryEntries := 0, 0, 0, 0
 	for start := 0; start < len(source); start += batchSize {
 		end := start + batchSize
@@ -273,7 +317,7 @@ func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progr
 		if err != nil {
 			return nil, totalUsage, err
 		}
-		glossary, batchGlossaryEntries := glossaryInstructions(r.cfg.Translation.Glossary, r.cfg.Translation.StructuredGlossary, window.Rows)
+		glossary, batchGlossaryEntries := glossaryInstructionsIndexed(r.cfg.Translation.Glossary, glossaryIndex, window.Rows)
 		system := translationSystemPrompt
 		if glossary != "" {
 			system += "\n" + glossary
