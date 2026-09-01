@@ -13,6 +13,7 @@ All notable changes to JAVBeacon Subtitles are documented here.
 - Added scene-aware translation windows with a configurable silence boundary, compact request rows, relevant structured glossary filtering, and optional job-scoped exact translation memory.
 - Added contextual translation observability for translated, context, reused, and included-glossary rows while preserving provider token totals.
 - Added validated local text-file import for effectively unbounded `Japanese=English` mappings, with blank-line removal and duplicate/conflict handling.
+- Added an optional high-confidence Japanese-to-English base glossary for JAV, GIGA/tokusatsu heroine, and Akiba-web-style adult/action vocabulary.
 
 ### Changed
 
