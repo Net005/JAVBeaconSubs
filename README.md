@@ -18,6 +18,8 @@ Go is the service and orchestration layer. `whisper.cpp` and FFmpeg are native e
 
 The default Compose stack is NVIDIA/CUDA accelerated and uses host GPU device `0` by default. It builds a pinned whisper.cpp release with CUDA VMM disabled for better stability after gaming and sleep/resume, explicitly reserves the NVIDIA device, and enables the `compute` capability for CUDA plus `utility` for `nvidia-smi` health checks. Install the NVIDIA driver and NVIDIA Container Toolkit on the Docker host first.
 
+The CUDA image defaults to architecture targets `75;86` and two compiler workers. `CUDA_ARCHITECTURES` can be changed for a different NVIDIA generation, and `WHISPER_BUILD_JOBS` can be raised on build hosts with more memory. The conservative defaults prevent GitHub-hosted runners from being overwhelmed by simultaneous CUDA compiler processes.
+
 This project already contains the verified `models/ggml-large-v3.bin`; Compose bind-mounts the configurable `JAVBEACONSUBS_MODELS_PATH` at `/models`. The smaller Silero VAD model is downloaded on first startup. `JAVBEACONSUBS_DATA_PATH` is mounted at `/data` for SQLite and uploaded files. Both default to project-local directories, so container replacement does not discard them.
 
 ```sh

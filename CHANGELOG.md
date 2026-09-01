@@ -2,6 +2,14 @@
 
 All notable changes to JAVBeacon Subtitles are documented here.
 
+## [0.2.1] - 2026-09-01
+
+### Fixed
+
+- Limited CUDA compilation parallelism and architecture fan-out so GHCR builds do not exhaust GitHub-hosted runner resources.
+- Made CUDA architecture targets and compiler worker count configurable through Compose build arguments.
+- Removed Whisper source and compiler intermediates from the final runtime image.
+
 ## [0.2.0] - 2026-09-01
 
 ### Added
