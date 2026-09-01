@@ -353,11 +353,17 @@ func (s *Server) uploadJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 500, map[string]string{"error": "store upload: " + copyErr.Error()})
 		return
 	}
+	keepJapanese, err := optionalFormBool(r.FormValue("keep_japanese"))
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
 	job, err := s.jobs.Create(jobs.Request{
-		Inputs:      []string{destination},
-		Overwrite:   r.FormValue("overwrite") == "true",
-		ExternalID:  strings.TrimSpace(r.FormValue("external_id")),
-		CallbackURL: strings.TrimSpace(r.FormValue("callback_url")),
+		Inputs:       []string{destination},
+		Overwrite:    r.FormValue("overwrite") == "true",
+		KeepJapanese: keepJapanese,
+		ExternalID:   strings.TrimSpace(r.FormValue("external_id")),
+		CallbackURL:  strings.TrimSpace(r.FormValue("callback_url")),
 	})
 	if err != nil {
 		writeJSON(w, 400, map[string]string{"error": err.Error()})
@@ -366,6 +372,17 @@ func (s *Server) uploadJob(w http.ResponseWriter, r *http.Request) {
 	removeOnError = false
 	w.Header().Set("Location", "/api/v1/jobs/"+job.ID)
 	writeJSON(w, 202, job)
+}
+
+func optionalFormBool(value string) (*bool, error) {
+	if strings.TrimSpace(value) == "" {
+		return nil, nil
+	}
+	parsed, err := strconv.ParseBool(strings.TrimSpace(value))
+	if err != nil {
+		return nil, fmt.Errorf("keep_japanese must be true or false")
+	}
+	return &parsed, nil
 }
 
 func (s *Server) downloadOutput(w http.ResponseWriter, r *http.Request) {

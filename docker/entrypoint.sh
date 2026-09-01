@@ -49,4 +49,33 @@ download_model "${JAVBEACONSUBS_WHISPER_MODEL:-/models/ggml-large-v3.bin}" \
 download_model "${JAVBEACONSUBS_VAD_MODEL:-/models/ggml-silero-v6.2.0.bin}" \
   "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin?download=true"
 
-exec "$@"
+if [[ "${JAVBEACONSUBS_ASR_BACKEND:-reazon}" == "reazon" ]]; then
+  reazon_model="${JAVBEACONSUBS_REAZON_MODEL:-reazon-research/reazonspeech-nemo-v2}"
+  reazon_marker="${JAVBEACONSUBS_REAZON_READY_MARKER:-/models/reazonspeech/.javbeaconsubs-ready}"
+  if [[ ! -f "$reazon_marker" ]] || [[ "$(<"$reazon_marker")" != "$reazon_model" ]]; then
+    if [[ "${JAVBEACONSUBS_DOWNLOAD_MODELS:-true}" != "true" ]]; then
+      echo "Missing cached ReazonSpeech model: $reazon_model" >&2
+      exit 1
+    fi
+    echo "Caching ReazonSpeech model $reazon_model..."
+    python3 "${JAVBEACONSUBS_REAZON_SCRIPT:-/app/asr/reazon_worker.py}" \
+      --download-only --device cpu --model "$reazon_model" --ready-marker "$reazon_marker"
+  fi
+fi
+
+puid="${PUID:-1000}"
+pgid="${PGID:-${GID:-${GUID:-1000}}}"
+if [[ ! "$puid" =~ ^[0-9]+$ ]] || [[ ! "$pgid" =~ ^[0-9]+$ ]]; then
+  echo "PUID and PGID/GID/GUID must be numeric user and group IDs." >&2
+  exit 1
+fi
+
+# Models are prepared as root, then the long-running service drops privileges.
+# Application data and the writable Hugging Face cache are re-owned; media mounts
+# must already permit this UID/GID.
+mkdir -p /data/uploads
+reazon_cache="${HF_HOME:-/models/reazonspeech}"
+mkdir -p "$reazon_cache"
+chown -R "$puid:$pgid" /data "$reazon_cache"
+umask "${UMASK:-0002}"
+exec setpriv --reuid="$puid" --regid="$pgid" --clear-groups "$@"

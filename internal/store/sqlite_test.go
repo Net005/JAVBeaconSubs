@@ -19,7 +19,7 @@ func TestSQLiteRoundTrip(t *testing.T) {
 	want := &jobs.Job{
 		ID: "sub_test", ExternalID: "movie-7", Status: "complete", Progress: 100,
 		Inputs: []string{"/media/movie.mkv"}, Files: []string{"/media/movie.mkv"},
-		CallbackURL: "http://javbeacon/callback", Overwrite: true, CreatedAt: created,
+		CallbackURL: "http://javbeacon/callback", Overwrite: true, KeepJapanese: true, CreatedAt: created,
 	}
 	if err := database.Save(want); err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestSQLiteRoundTrip(t *testing.T) {
 		t.Fatalf("loaded %d jobs, want 1", len(loaded))
 	}
 	got := loaded[0]
-	if got.ID != want.ID || got.ExternalID != want.ExternalID || got.CallbackURL != want.CallbackURL || !got.Overwrite {
+	if got.ID != want.ID || got.ExternalID != want.ExternalID || got.CallbackURL != want.CallbackURL || !got.Overwrite || !got.KeepJapanese {
 		t.Fatalf("round trip mismatch: %#v", got)
 	}
 }

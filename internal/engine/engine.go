@@ -69,6 +69,24 @@ func (r *Runner) Check() map[string]any {
 	ffmpegPath, ffmpegErr := exec.LookPath("ffmpeg")
 	_, modelErr := os.Stat(r.cfg.Whisper.Model)
 	result := map[string]any{"ready": whisperErr == nil && ffmpegErr == nil && modelErr == nil, "translation_mode": r.cfg.Translation.Mode}
+	result["asr_backend"] = r.cfg.Whisper.Backend
+	if r.cfg.Whisper.Backend == "reazon" {
+		pythonPath, pythonErr := exec.LookPath("python3")
+		_, scriptErr := os.Stat(r.cfg.Whisper.ReazonScript)
+		if pythonErr != nil || scriptErr != nil {
+			result["ready"] = false
+		}
+		if pythonErr == nil {
+			result["reazon_python"] = pythonPath
+		} else {
+			result["reazon_python_error"] = pythonErr.Error()
+		}
+		if scriptErr == nil {
+			result["reazon_model"] = r.cfg.Whisper.ReazonModel
+		} else {
+			result["reazon_script_error"] = scriptErr.Error()
+		}
+	}
 	if whisperErr == nil {
 		result["whisper"] = whisperPath
 	} else {
@@ -94,17 +112,20 @@ func (r *Runner) Check() map[string]any {
 }
 
 func (r *Runner) Process(ctx context.Context, input string, overwrite bool, progress ProgressFunc) (Result, error) {
-	return r.ProcessWithMemory(ctx, input, overwrite, progress, NewTranslationMemory())
+	r.mu.RLock()
+	keepJapanese := r.cfg.Output.KeepJapanese
+	r.mu.RUnlock()
+	return r.ProcessWithMemory(ctx, input, overwrite, keepJapanese, progress, NewTranslationMemory())
 }
 
-func (r *Runner) ProcessWithMemory(ctx context.Context, input string, overwrite bool, progress ProgressFunc, memory *TranslationMemory) (Result, error) {
+func (r *Runner) ProcessWithMemory(ctx context.Context, input string, overwrite, keepJapanese bool, progress ProgressFunc, memory *TranslationMemory) (Result, error) {
 	r.mu.RLock()
 	worker := &Runner{cfg: r.cfg, log: r.log, client: r.client}
 	r.mu.RUnlock()
-	return worker.process(ctx, input, overwrite, progress, memory)
+	return worker.process(ctx, input, overwrite, keepJapanese, progress, memory)
 }
 
-func (r *Runner) process(ctx context.Context, input string, overwrite bool, progress ProgressFunc, memory *TranslationMemory) (Result, error) {
+func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapanese bool, progress ProgressFunc, memory *TranslationMemory) (Result, error) {
 	result := Result{Input: input}
 	base := strings.TrimSuffix(input, filepath.Ext(input))
 	englishPath := base + r.cfg.Output.EnglishSuffix
@@ -145,7 +166,25 @@ func (r *Runner) process(ctx context.Context, input string, overwrite bool, prog
 		return result, errors.New("no speech segments were recognized")
 	}
 
-	if r.cfg.Output.KeepJapanese && !direct {
+	if keepJapanese && direct {
+		progress("transcription", 72, "Transcribing optional Japanese sidecar")
+		japanese, japaneseErr := r.transcribe(ctx, wav, filepath.Join(tmpDir, "transcript-ja"), false, useGPU, func(pct int) {
+			progress("transcription", 72+pct*18/100, fmt.Sprintf("Transcribing Japanese sidecar — %d%%", pct))
+		})
+		if japaneseErr != nil {
+			return result, japaneseErr
+		}
+		japanese = subtitle.Clean(japanese)
+		if len(japanese) == 0 {
+			return result, errors.New("no Japanese speech segments were recognized for the requested sidecar")
+		}
+		if err := atomicWrite(japanesePath, subtitle.RenderSRT(japanese, 30, r.cfg.Output.MaxLines, marker)); err != nil {
+			return result, err
+		}
+		result.JapaneseSRT = japanesePath
+	}
+
+	if keepJapanese && !direct {
 		progress("subtitle", 72, "Writing Japanese transcript")
 		if err := atomicWrite(japanesePath, subtitle.RenderSRT(segments, 30, r.cfg.Output.MaxLines, marker)); err != nil {
 			return result, err
@@ -167,7 +206,7 @@ func (r *Runner) process(ctx context.Context, input string, overwrite bool, prog
 		result.TranslationTotalTokens = usage.TotalTokens
 	case "none":
 		result.JapaneseSRT = japanesePath
-		if !r.cfg.Output.KeepJapanese {
+		if !keepJapanese {
 			if err := atomicWrite(japanesePath, subtitle.RenderSRT(segments, 30, r.cfg.Output.MaxLines, marker)); err != nil {
 				return result, err
 			}
@@ -187,6 +226,75 @@ func (r *Runner) process(ctx context.Context, input string, overwrite bool, prog
 }
 
 func (r *Runner) transcribe(ctx context.Context, wav, prefix string, translate, useGPU bool, report func(int)) ([]subtitle.Segment, error) {
+	if r.cfg.Whisper.Backend == "reazon" && !translate {
+		segments, err := r.transcribeReazon(ctx, wav, prefix, useGPU, report)
+		if err == nil {
+			return segments, nil
+		}
+		if !r.cfg.Whisper.FallbackWhisper {
+			return nil, err
+		}
+		r.log.Warn("ReazonSpeech failed; falling back to validated Whisper transcription", "error", err)
+	}
+	return r.transcribeWhisper(ctx, wav, prefix, translate, useGPU, report)
+}
+
+func (r *Runner) transcribeReazon(ctx context.Context, wav, prefix string, useGPU bool, report func(int)) ([]subtitle.Segment, error) {
+	c := r.cfg.Whisper
+	output := prefix + ".reazon.json"
+	device := "cpu"
+	if useGPU {
+		device = "cuda"
+	}
+	args := reazonArgs(c, wav, output, device)
+	err := runWithProgress(ctx, report, "python3", args...)
+	if err != nil && useGPU && c.GPUFallbackCPU {
+		r.log.Warn("ReazonSpeech CUDA inference failed; retrying this file on CPU", "error", err)
+		_ = os.Remove(output)
+		args = reazonArgs(c, wav, output, "cpu")
+		report(0)
+		err = runWithProgress(ctx, report, "python3", args...)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("ReazonSpeech inference: %w", err)
+	}
+	r.logGPUStatus(ctx, "after ReazonSpeech inference")
+	data, err := os.ReadFile(output)
+	if err != nil {
+		return nil, fmt.Errorf("read ReazonSpeech JSON: %w", err)
+	}
+	var doc reazonDocument
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("decode ReazonSpeech JSON: %w", err)
+	}
+	if doc.DurationMS <= 0 || doc.ProcessedMS < doc.DurationMS-1000 {
+		return nil, fmt.Errorf("ReazonSpeech coverage incomplete: processed %dms of %dms", doc.ProcessedMS, doc.DurationMS)
+	}
+	segments := make([]subtitle.Segment, 0, len(doc.Segments))
+	for _, item := range doc.Segments {
+		segments = append(segments, subtitle.Segment{StartMS: item.StartMS, EndMS: item.EndMS, Text: item.Text})
+	}
+	if err := validateSegments(segments, doc.DurationMS, int64(c.MaxSegmentSec)*1000); err != nil {
+		return nil, fmt.Errorf("validate ReazonSpeech output: %w", err)
+	}
+	return segments, nil
+}
+
+func reazonArgs(c config.WhisperConfig, wav, output, device string) []string {
+	return []string{c.ReazonScript, "--input", wav, "--output", output, "--model", c.ReazonModel, "--device", device, "--chunk-seconds", strconv.Itoa(c.ChunkSeconds), "--overlap-seconds", strconv.Itoa(c.OverlapSeconds), "--max-segment-seconds", strconv.Itoa(c.MaxSegmentSec)}
+}
+
+type reazonDocument struct {
+	DurationMS  int64 `json:"duration_ms"`
+	ProcessedMS int64 `json:"processed_ms"`
+	Segments    []struct {
+		StartMS int64  `json:"start_ms"`
+		EndMS   int64  `json:"end_ms"`
+		Text    string `json:"text"`
+	} `json:"segments"`
+}
+
+func (r *Runner) transcribeWhisper(ctx context.Context, wav, prefix string, translate, useGPU bool, report func(int)) ([]subtitle.Segment, error) {
 	c := r.cfg.Whisper
 	args := []string{"-m", c.Model, "-f", wav, "-l", c.Language, "-ojf", "-of", prefix, "-t", strconv.Itoa(c.Threads), "-bs", strconv.Itoa(c.BeamSize), "-bo", strconv.Itoa(c.BeamSize), "-sow", "-ml", "42", "-sns", "-pp"}
 	if c.Prompt != "" {
@@ -245,7 +353,30 @@ func (r *Runner) transcribe(ctx context.Context, wav, prefix string, translate, 
 		}
 		out = append(out, subtitle.Segment{StartMS: start, EndMS: end, Text: item.Text})
 	}
+	if err := validateSegments(out, 0, int64(c.MaxSegmentSec)*1000); err != nil {
+		return nil, fmt.Errorf("validate whisper output: %w", err)
+	}
 	return out, nil
+}
+
+func validateSegments(segments []subtitle.Segment, durationMS, maxSegmentMS int64) error {
+	var previousStart int64 = -1
+	for index, segment := range segments {
+		if segment.StartMS < 0 || segment.EndMS <= segment.StartMS {
+			return fmt.Errorf("segment %d has invalid timestamps %d-%dms", index+1, segment.StartMS, segment.EndMS)
+		}
+		if previousStart > segment.StartMS {
+			return fmt.Errorf("segment %d starts before the previous segment", index+1)
+		}
+		if maxSegmentMS > 0 && segment.EndMS-segment.StartMS > maxSegmentMS {
+			return fmt.Errorf("segment %d spans %dms, exceeding the %dms safety limit", index+1, segment.EndMS-segment.StartMS, maxSegmentMS)
+		}
+		if durationMS > 0 && segment.EndMS > durationMS+1000 {
+			return fmt.Errorf("segment %d ends beyond the %dms recording", index+1, durationMS)
+		}
+		previousStart = segment.StartMS
+	}
+	return nil
 }
 
 type whisperDocument struct {
@@ -358,6 +489,9 @@ func atomicWrite(path, content string) error {
 	defer os.Remove(tmp)
 	if _, err = io.WriteString(f, content); err == nil {
 		err = f.Sync()
+	}
+	if err == nil {
+		err = f.Chmod(0o664)
 	}
 	if closeErr := f.Close(); err == nil {
 		err = closeErr

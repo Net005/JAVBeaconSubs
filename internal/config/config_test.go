@@ -2,6 +2,13 @@ package config
 
 import "testing"
 
+func TestDefaultASRUsesBoundedReazonSpeech(t *testing.T) {
+	value := defaults().Whisper
+	if value.Backend != "reazon" || value.ReazonModel == "" || value.ChunkSeconds != 45 || value.OverlapSeconds != 2 || value.MaxSegmentSec != 60 || !value.FallbackWhisper {
+		t.Fatalf("unexpected ASR defaults: %#v", value)
+	}
+}
+
 func TestNormalizeStructuredGlossaryRemovesBlanksAndDuplicates(t *testing.T) {
 	value := TranslationConfig{
 		Mode: "direct",

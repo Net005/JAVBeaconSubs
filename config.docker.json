@@ -8,8 +8,15 @@
   "max_upload_gb": 30,
   "workers": 1,
   "whisper": {
+    "backend": "reazon",
     "binary": "/app/build/bin/whisper-cli",
     "model": "/models/ggml-large-v3.bin",
+    "reazon_script": "/app/asr/reazon_worker.py",
+    "reazon_model": "reazon-research/reazonspeech-nemo-v2",
+    "chunk_seconds": 45,
+    "chunk_overlap_seconds": 2,
+    "max_segment_seconds": 60,
+    "fallback_whisper": true,
     "vad_model": "/models/ggml-silero-v6.2.0.bin",
     "language": "ja",
     "threads": 8,
@@ -50,7 +57,7 @@
   "output": {
     "english_suffix": ".en.srt",
     "japanese_suffix": ".ja.srt",
-    "keep_japanese": true,
+    "keep_japanese": false,
     "overwrite": false,
     "max_line_chars": 42,
     "max_lines": 2

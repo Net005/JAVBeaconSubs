@@ -1,26 +1,30 @@
 # JAVBeacon Subtitles
 
-A Go subtitle service optimized for Japanese dialogue. It accepts a browser upload, exact media files, or folders; queues jobs; extracts clean mono audio with FFmpeg; transcribes with `whisper.cpp`; removes overlapping duplicate detections; and writes atomic SRT files. Jobs survive restarts in an embedded SQLite database.
+A Go subtitle service optimized for Japanese dialogue. It accepts a browser upload, exact media files, or folders; queues jobs; extracts clean mono audio with FFmpeg; transcribes Japanese with ReazonSpeech, validates timeline coverage, and writes atomic SRT files. Jobs survive restarts in an embedded SQLite database.
 
 ## Why this pipeline is different
 
-The old implementation auto-detected the language, disabled VAD, removed short lines, and sent isolated fragments to MyMemory/Google-free translation. This service fixes Japanese (`ja`) explicitly, keeps short reactions, uses padded Silero VAD, normalizes the audio, constrains line length, deduplicates only overlapping detections, and supports dialogue-window translation.
+The old implementation auto-detected the language, removed short lines, and sent isolated fragments to MyMemory/Google-free translation. The primary pipeline now uses Japanese-specific ReazonSpeech with overlapping 45-second transcription windows. Every window must complete, timestamps are offset back to the movie timeline, and impossible or out-of-order segments fail validation instead of silently collapsing hours of audio into one subtitle.
 
 Two English modes are available:
 
-- `direct`: Whisper translates Japanese speech directly to English. It is completely local and is the easiest reliable starting point.
-- `contextual`: Whisper first produces Japanese, then an OpenAI-compatible chat endpoint translates batches with neighboring dialogue and an optional glossary. This normally produces the most natural subtitles. Ollama's `/v1`, LocalAI, vLLM, and compatible hosted APIs work.
+- `direct`: Whisper translates Japanese speech directly to English. It remains available for fully local speech-to-English output.
+- `contextual`: ReazonSpeech first produces validated Japanese segments, then an OpenAI-compatible chat endpoint translates batches with neighboring dialogue and an optional glossary. This is the recommended high-quality mode. Ollama's `/v1`, LocalAI, vLLM, and compatible hosted APIs work.
 - `none`: Japanese transcription only.
 
-Go is the service and orchestration layer. `whisper.cpp` and FFmpeg are native executables invoked without a Python runtime.
+Go remains the service and orchestration layer. ReazonSpeech NeMo runs in a dedicated Python worker process per media file; `whisper.cpp` remains a validated fallback and powers direct translation.
 
 ## Docker Compose for NVIDIA GPUs (CUDA)
 
-The default Compose stack is NVIDIA/CUDA accelerated and uses host GPU device `0` by default. It builds a pinned whisper.cpp release with CUDA VMM disabled for better stability after gaming and sleep/resume, explicitly reserves the NVIDIA device, and enables the `compute` capability for CUDA plus `utility` for `nvidia-smi` health checks. Install the NVIDIA driver and NVIDIA Container Toolkit on the Docker host first.
+The default Compose stack is NVIDIA/CUDA accelerated and uses host GPU device `0` by default. It includes pinned ReazonSpeech v3 tooling and a pinned whisper.cpp fallback with CUDA VMM disabled, explicitly reserves the NVIDIA device, and enables the `compute` capability for CUDA plus `utility` for `nvidia-smi` health checks. Install the NVIDIA driver and NVIDIA Container Toolkit on the Docker host first.
 
 The CUDA image defaults to architecture targets `75;86` and two compiler workers. `CUDA_ARCHITECTURES` can be changed for a different NVIDIA generation, and `WHISPER_BUILD_JOBS` can be raised on build hosts with more memory. The conservative defaults prevent GitHub-hosted runners from being overwhelmed by simultaneous CUDA compiler processes.
 
-This project already contains the verified `models/ggml-large-v3.bin`; Compose bind-mounts the configurable `JAVBEACONSUBS_MODELS_PATH` at `/models`. The smaller Silero VAD model is downloaded on first startup. `JAVBEACONSUBS_DATA_PATH` is mounted at `/data` for SQLite and uploaded files. Both default to project-local directories, so container replacement does not discard them.
+Compose bind-mounts the configurable `JAVBEACONSUBS_MODELS_PATH` at `/models`. The checksum-verified Whisper fallback model, ReazonSpeech NeMo v2, and the smaller Silero VAD model are downloaded on first startup into that persistent cache. A model marker prevents ReazonSpeech from being downloaded or loaded merely for verification on later starts unless the configured model identifier changes. `JAVBEACONSUBS_DATA_PATH` is mounted at `/data` for SQLite and uploaded files.
+
+ReazonSpeech tooling is pinned to the official v3.0.0 commit and its Japanese NeMo v2 model is Apache-2.0 licensed. The first image build is substantially larger than the previous whisper.cpp-only image because it includes PyTorch and NVIDIA NeMo; subsequent GHCR builds reuse BuildKit layers, while model weights remain in the host-mounted cache rather than the image.
+
+Set `PUID` and `PGID` in `.env` to the numeric IDs of the host account that should own generated subtitles, uploads, and SQLite data (`id -u` and `id -g` show the usual values). `GID` and `GUID` are accepted as compatibility aliases when `PGID` is blank. The container prepares models as root, fixes ownership of `/data`, and then runs JAVBeaconSubs as that unprivileged numeric user/group. Every media bind mount must grant that owner write access; generated SRT files are group-readable and group-writable.
 
 ```sh
 cp .env.example .env
@@ -52,6 +56,9 @@ docker compose -f compose.cpu.yaml up --build -d
 ```yaml
 services:
   javbeaconsubs:
+    environment:
+      PUID: "1000"
+      PGID: "1000"
     volumes:
       - "/mnt/data/movies:/mnt/data/movies"
       - "/srv/archive:/srv/archive"
@@ -67,7 +74,7 @@ JAVBeacon can then address this API by its Compose service name, `http://javbeac
 
 ## Native install
 
-Requirements: Go 1.25+, FFmpeg, `whisper-cli`, a multilingual `large-v3` GGML model, and the whisper.cpp Silero VAD model.
+Requirements: Go 1.25+, FFmpeg, Python 3, ReazonSpeech NeMo ASR v3 tooling, and the ReazonSpeech NeMo v2 model. `whisper-cli`, multilingual `large-v3`, and Silero VAD are required when direct translation or Whisper fallback is enabled.
 
 ```sh
 cp config.example.json config.json
@@ -94,6 +101,8 @@ The job form has two explicit modes:
 - **Upload one file** streams one video/audio file into managed storage. When processing finishes, English and optional Japanese SRT downloads appear on its job card.
 - **Server paths** accepts one or more exact files and/or folders already visible to the service. Folder traversal happens only when requested.
 
+Each job has an **Also keep Japanese `.ja.srt` subtitles** option. Contextual translation already has Japanese transcript rows and writes the sidecar without another speech-recognition pass. Direct local translation normally produces only English, so enabling the option deliberately runs one additional Japanese transcription pass. Japanese-only mode always writes `.ja.srt` because it is the primary output.
+
 The separate **Settings** tab switches between direct local translation, Japanese-only transcription, and higher-quality contextual translation. It stores the endpoint URL, model, key, batching, timeout, scene-gap threshold, translation-memory preference, and glossaries in SQLite. Saved API keys are never returned to the browser; leaving the key blank keeps the existing value.
 
 Contextual requests use scene-aware windows with up to three preceding rows and one following row, stopping at the configured `context_gap_ms` silence boundary (8 seconds by default). Timestamps remain local and are never included in translation requests. Rows are serialized compactly as `[id,t,text]`, and a payload budget prevents the selected window from exceeding the previous serializer's request payload for the same transcript and batch.
@@ -108,7 +117,7 @@ The same tab can run post-processing after a successful subtitle job. Choose a B
 
 `JAVBEACONSUBS_SCRIPTS_PATH` controls the host directory mounted read-only at `/scripts`. Post-processing settings and write-only webhook credentials persist in SQLite.
 
-Running activity cards show the current absolute path, filename, file number, live Whisper progress, and an estimated completion time. The ETA becomes more accurate after the first few percent of work.
+Running activity cards show the current absolute path, filename, file number, live ASR progress, and an estimated completion time. ReazonSpeech reports progress after every bounded window, so long-file ETA and stall detection do not depend on one monolithic inference call.
 
 SQLite stores the job request, state, progress, results, and JAVBeacon correlation ID. Queued or running jobs found after an unclean restart are marked failed rather than silently left running forever. SQLite uses WAL mode and a busy timeout; one database file is sufficient for the deliberately small worker pool.
 
@@ -122,9 +131,9 @@ If `translation.base_url` is changed to `https://api.openai.com/v1` and an OpenA
 
 ## CUDA recovery and VRAM behavior
 
-Each media file runs in a separate `whisper-cli` process. When it exits—even after cancellation—the OS and NVIDIA driver destroy that process's CUDA context, releasing all VRAM owned by the subtitle worker. The service also probes `nvidia-smi` before every GPU inference and logs memory state after the worker exits.
+Each media file runs in a separate ReazonSpeech or Whisper process. When it exits—even after cancellation—the OS and NVIDIA driver destroy that process's CUDA context, releasing its VRAM. ReazonSpeech loads its model once per file and processes bounded windows in that process; it does not keep a resident CUDA worker between jobs. The service also probes `nvidia-smi` before inference and logs memory state afterward.
 
-Automatic GPU reset is disabled by default because NVIDIA refuses to reset a primary/display GPU. If CUDA preflight or inference fails, the current file is retried on CPU instead of failing the job. The image also compiles whisper.cpp with `GGML_CUDA_NO_VMM=ON`, avoiding the CUDA virtual-memory path implicated by startup crashes that stop immediately after `ggml_cuda_init` reports `VMM: yes`.
+Automatic GPU reset is disabled by default because NVIDIA refuses to reset a primary/display GPU. If ReazonSpeech CUDA inference fails, the current file can be retried on CPU; if ReazonSpeech still fails and `fallback_whisper` is enabled, validated Whisper is attempted. Whisper output is now rejected when a segment exceeds the configured safety limit, preventing the observed multi-hour tail from being reported as a successful subtitle.
 
 On a dedicated compute GPU, guarded reset can be enabled with `JAVBEACONSUBS_GPU_AUTO_RESET=true`. The service will try the reset and one GPU retry, then still fall back to CPU when enabled. A genuinely wedged host driver can require a host driver/module reload or reboot; a container cannot safely force-reset the active display GPU.
 
@@ -145,7 +154,8 @@ curl --fail-with-body --request POST 'http://localhost:8097/api/v1/jobs' \
   --data '{
     "inputs": ["/mnt/data/movies"],
     "recursive": true,
-    "overwrite": false
+    "overwrite": false,
+    "keep_japanese": true
   }'
 ```
 
@@ -162,6 +172,7 @@ Content-Type: application/json
   ],
   "recursive": true,
   "overwrite": false,
+  "keep_japanese": true,
   "external_id": "javbeacon-movie-4182",
   "callback_url": "http://127.0.0.1:8080/api/subtitles/callback"
 }
@@ -176,7 +187,7 @@ The response is `202 Accepted`, includes the job, and sets `Location: /api/v1/jo
 - `GET /api/v1/health` — dependency and model readiness.
 - `GET /api/v1/settings` and `PUT /api/v1/settings` — read/update persistent translation and post-processing settings (credentials are write-only).
 
-The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, and `overwrite` fields. Generated files can be retrieved through `GET /api/v1/jobs/{id}/outputs/{zeroBasedResultIndex}/{en|ja}`.
+The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, `overwrite`, and `keep_japanese` fields. For JSON and multipart jobs, omitting `keep_japanese` uses `output.keep_japanese` from the service configuration. Generated files can be retrieved through `GET /api/v1/jobs/{id}/outputs/{zeroBasedResultIndex}/{en|ja}`.
 
 If `callback_url` is supplied, the terminal job document is POSTed there. `external_id` round-trips unchanged so JAVBeacon can associate it with its own movie or task record.
 
@@ -188,6 +199,6 @@ Back up `JAVBEACONSUBS_DATA_PATH` to preserve SQLite history and uploaded files.
 
 ## Quality profile
 
-For the highest-quality Japanese-to-English output, use `ggml-large-v3.bin`, GPU acceleration, and `translation.mode=contextual` with a strong Japanese-capable instruction model. Put global preferences in `structured_glossary.style` and recurring Japanese names or vocabulary in `structured_glossary.terms`; the legacy `translation.glossary` remains available. `direct` mode is faster and avoids a second model, but it cannot use wider dialogue context or produce the Japanese sidecar.
+For the highest-quality Japanese-to-English output, use the default ReazonSpeech backend, GPU acceleration, and `translation.mode=contextual` with a strong Japanese-capable instruction model. Put global preferences in `structured_glossary.style` and recurring Japanese names or vocabulary in `structured_glossary.terms`; the legacy `translation.glossary` remains available. `direct` mode uses Whisper and avoids a second translation model, but it cannot use wider dialogue context; requesting its Japanese sidecar runs ReazonSpeech as an additional pass.
 
-The default VAD profile intentionally uses 100 ms minimum speech plus 320 ms padding to retain short replies that older region detectors commonly miss. If very quiet speech is still absent, lower `vad_threshold` toward `0.35`; if noise creates false lines, raise it toward `0.50`. Do not compensate by deleting all short segments—Japanese reactions often are short.
+The ReazonSpeech path uses overlapping fixed windows rather than trusting one VAD decision for an entire movie. Whisper fallback retains the padded Silero VAD profile. Do not compensate for noisy recognition by deleting all short segments—Japanese reactions are often short.

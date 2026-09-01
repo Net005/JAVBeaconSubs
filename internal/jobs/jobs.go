@@ -23,11 +23,12 @@ import (
 var videoExtensions = map[string]bool{".mp4": true, ".mkv": true, ".avi": true, ".mov": true, ".wmv": true, ".flv": true, ".webm": true, ".ts": true, ".m4v": true, ".mp3": true, ".wav": true, ".m4a": true, ".flac": true}
 
 type Request struct {
-	Inputs      []string `json:"inputs"`
-	Recursive   bool     `json:"recursive"`
-	Overwrite   bool     `json:"overwrite"`
-	ExternalID  string   `json:"external_id,omitempty"`
-	CallbackURL string   `json:"callback_url,omitempty"`
+	Inputs       []string `json:"inputs"`
+	Recursive    bool     `json:"recursive"`
+	Overwrite    bool     `json:"overwrite"`
+	KeepJapanese *bool    `json:"keep_japanese,omitempty"`
+	ExternalID   string   `json:"external_id,omitempty"`
+	CallbackURL  string   `json:"callback_url,omitempty"`
 }
 
 type Job struct {
@@ -48,6 +49,7 @@ type Job struct {
 	Error                string          `json:"error,omitempty"`
 	CallbackURL          string          `json:"-"`
 	Overwrite            bool            `json:"-"`
+	KeepJapanese         bool            `json:"keep_japanese"`
 	CreatedAt            time.Time       `json:"created_at"`
 	StartedAt            *time.Time      `json:"started_at,omitempty"`
 	FinishedAt           *time.Time      `json:"finished_at,omitempty"`
@@ -111,7 +113,11 @@ func (m *Manager) Create(req Request) (*Job, error) {
 	if len(files) == 0 {
 		return nil, fmt.Errorf("no supported media files found")
 	}
-	job := &Job{ID: newID(), ExternalID: req.ExternalID, Status: "queued", Progress: 0, Message: "Waiting for subtitle worker", Inputs: req.Inputs, Files: files, CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, CreatedAt: time.Now().UTC()}
+	keepJapanese := m.cfg.Output.KeepJapanese
+	if req.KeepJapanese != nil {
+		keepJapanese = *req.KeepJapanese
+	}
+	job := &Job{ID: newID(), ExternalID: req.ExternalID, Status: "queued", Progress: 0, Message: "Waiting for subtitle worker", Inputs: req.Inputs, Files: files, CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, KeepJapanese: keepJapanese, CreatedAt: time.Now().UTC()}
 	m.mu.Lock()
 	m.jobs[job.ID] = job
 	m.mu.Unlock()
@@ -233,7 +239,7 @@ func (m *Manager) process(ctx context.Context, id string) {
 				m.mu.Unlock()
 			}
 		}
-		result, err := m.runner.ProcessWithMemory(ctx, file, job.Overwrite, progress, translationMemory)
+		result, err := m.runner.ProcessWithMemory(ctx, file, job.Overwrite, job.KeepJapanese, progress, translationMemory)
 		if err != nil {
 			m.finish(id, "failed", err.Error())
 			return
