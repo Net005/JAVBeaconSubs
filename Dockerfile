@@ -20,8 +20,8 @@ FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION}
 ARG REAZONSPEECH_REF=8be654dc9ba8d205759d9d93fe717ae37f321b01
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends bash ca-certificates curl ffmpeg libsndfile1 python3 python3-pip sox util-linux && rm -rf /var/lib/apt/lists/*
-RUN python3 -m pip install --no-cache-dir "numpy==1.26.4" && \
-    python3 -m pip install --no-cache-dir "numpy==1.26.4" "nemo_toolkit[asr]==2.6.1" "qwen-asr==0.0.6" && \
+RUN python3 -m pip install --no-cache-dir "numpy==1.26.4" "typing-extensions==4.15.0" && \
+    python3 -m pip install --no-cache-dir "numpy==1.26.4" "typing-extensions==4.15.0" "nemo_toolkit[asr]==2.6.1" "qwen-asr==0.0.6" && \
     python3 -m pip install --no-cache-dir --no-deps "reazonspeech-nemo-asr @ https://github.com/reazon-research/ReazonSpeech/archive/${REAZONSPEECH_REF}.tar.gz#subdirectory=pkg/nemo-asr"
 COPY --from=whisper-builder /app/build/bin /app/build/bin
 COPY --from=go-builder /out/javbeaconsubs /usr/local/bin/javbeaconsubs
