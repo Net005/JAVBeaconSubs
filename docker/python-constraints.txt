@@ -1,0 +1,2 @@
+# One CUDA-enabled PyTorch runtime is shared by both isolated ASR environments.
+torch==2.9.1

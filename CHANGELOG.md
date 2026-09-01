@@ -39,6 +39,7 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ### Fixed
 
+- Isolated Qwen-ASR and NeMo/ReazonSpeech in separate Python environments because their required Transformers versions conflict, while retaining one shared PyTorch/CUDA runtime to avoid duplicating the largest image dependencies.
 - Installed the native SoX executable plus NumPy and `typing-extensions` before resolving Qwen/NeMo dependencies, covering the Python `sox` package's undeclared metadata-time imports during Docker builds.
 - Made large Japanese term-mapping imports open at the first entry in a taller editor, with controls to show every mapping or collapse the overview.
 - Made generated SRT files group-readable/writable so the configured host user and group can manage them normally.

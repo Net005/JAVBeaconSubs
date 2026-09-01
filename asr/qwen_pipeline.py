@@ -247,21 +247,45 @@ def qwen_transcribe(model, clips: list[tuple[np.ndarray, int]], context: str, ba
     return out
 
 
-def load_reazon(model_name: str, device: str):
-    from nemo.collections.asr.models import EncDecRNNTBPEModel
-
-    model = EncDecRNNTBPEModel.from_pretrained(model_name, map_location=device)
-    model.eval()
-    return model
-
-
-def reazon_transcribe(model, clip: tuple[np.ndarray, int]) -> str:
-    from reazonspeech.nemo.asr import TranscribeConfig, audio_from_numpy, transcribe
-
-    waveform, samplerate = clip
-    audio = audio_from_numpy(np.asarray(waveform, dtype=np.float32), samplerate)
-    result = transcribe(model, audio, TranscribeConfig(verbose=False))
-    return normalize_text("".join(segment.text for segment in result.segments))
+def reazon_batch_transcribe(
+    python: str,
+    script: str,
+    input_path: str,
+    regions: list[Region],
+    indexes: list[int],
+    model_name: str,
+    device: str,
+) -> dict[int, str]:
+    with tempfile.TemporaryDirectory(prefix="javbeaconsubs-reazon-") as directory:
+        manifest = os.path.join(directory, "regions.json")
+        output = os.path.join(directory, "results.json")
+        # The worker expects a top-level list to keep its input intentionally simple.
+        temporary = manifest + ".list"
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(
+                [{"index": index, "start": regions[index].start, "end": regions[index].end} for index in indexes],
+                handle,
+                separators=(",", ":"),
+            )
+        os.replace(temporary, manifest)
+        command = [
+            python,
+            script,
+            "--input",
+            input_path,
+            "--regions",
+            manifest,
+            "--output",
+            output,
+            "--model",
+            model_name,
+            "--device",
+            device,
+        ]
+        subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=None)
+        with open(output, encoding="utf-8") as handle:
+            payload = json.load(handle)
+        return {int(item["index"]): normalize_text(item.get("text", "")) for item in payload.get("results", [])}
 
 
 def whisper_transcribe(binary: str, model: str, clip: tuple[np.ndarray, int], language: str) -> str:
@@ -348,6 +372,8 @@ def main() -> int:
     parser.add_argument("--aligner-model", default="Qwen/Qwen3-ForcedAligner-0.6B")
     parser.add_argument("--aligner-revision", default="c7cbfc2048c462b0d63a45797104fc9db3ad62b7")
     parser.add_argument("--reazon-model", default="reazon-research/reazonspeech-nemo-v2")
+    parser.add_argument("--reazon-python", default="python3")
+    parser.add_argument("--reazon-script", default="reazon_batch_worker.py")
     parser.add_argument("--whisper-binary", default="whisper-cli")
     parser.add_argument("--whisper-model", default="")
     parser.add_argument("--disable-reazon", action="store_true")
@@ -428,19 +454,18 @@ def main() -> int:
     if fallback_indexes and not args.disable_reazon:
         progress(38, "fallback_transcribing")
         reazon_started = time.monotonic()
-        reazon = load_reazon(args.reazon_model, args.device)
-        for position, index in enumerate(fallback_indexes):
-            try:
-                text = reazon_transcribe(reazon, clips[index])
-            except Exception:
-                text = ""
+        try:
+            reazon_texts = reazon_batch_transcribe(
+                args.reazon_python, args.reazon_script, args.input, regions, fallback_indexes, args.reazon_model, args.device
+            )
+        except Exception:
+            reazon_texts = {}
+        for index in fallback_indexes:
+            text = reazon_texts.get(index, "")
             seconds = (regions[index].end - regions[index].start) / samplerate
             decisions[index].candidates["reazon"] = Candidate(
                 "reazon", args.reazon_model, text, suspicion_reasons(text, seconds, regions[index].speech_probability)
             )
-            if position % 8 == 0:
-                progress(38 + round(18 * (position + 1) / len(fallback_indexes)), "fallback_transcribing")
-        del reazon
         release_cuda()
         reazon_seconds = time.monotonic() - reazon_started
 
