@@ -102,6 +102,7 @@ class Decision:
     qwen_retry_reason: str = ""
     qwen_retry_similarity: float = 0.0
     qwen_retry_recovered: bool = False
+    qwen_retry_ambiguous_vocalization: bool = False
     whisper_eligible: bool = False
     whisper_reason: str = ""
     whisper_candidate_valid: bool = False
@@ -823,12 +824,35 @@ def candidate_score(
     return round(score, 4)
 
 
+def retry_is_low_evidence_vocalization(retry: Candidate, speech_probability: float, classification: str) -> bool:
+    """A prompt-leak retry that comes back as nothing more than a tiny
+    generic vocalization (e.g. はい/うん/あ/え/ん) is not, by itself, strong
+    enough evidence of real speech to accept automatically -- especially
+    when the VAD region is itself ambiguous or the speech signal is weak.
+    Those tokens are exactly the kind of thing background noise or a stray
+    breath gets misheard as. Distinguish that case from a genuine short
+    utterance recovered from a leaked prompt, which should still be kept."""
+    features = transcript_features(retry.text)
+    token = meaningful_characters(retry.text).casefold()
+    if token not in VOCALIZATION_TOKENS:
+        return False
+    if features["meaningful_char_count"] > 2:
+        return False
+    if features["lexical_ratio"] > 0.05:
+        return False
+    # Reuses the same weak-speech threshold as "weak_speech_conflict" above,
+    # so "weak evidence" means the same thing everywhere in this module.
+    return classification == "ambiguous_vocalization" or speech_probability < 0.28
+
+
 def qwen_retry_improves(
     original: Candidate,
     retry: Candidate,
     duration: float,
     profile_terms: set[str] | None = None,
     title_terms: set[str] | None = None,
+    speech_probability: float = 1.0,
+    classification: str = "speech",
 ) -> bool:
     if not meaningful_candidate(retry):
         return False
@@ -838,6 +862,12 @@ def qwen_retry_improves(
     # defect before applying the normal content-loss guard, otherwise clean
     # short retries are rejected merely because they removed leaked prompt.
     if "prompt_leakage" in original_critical and "prompt_leakage" not in retry_critical:
+        if retry_is_low_evidence_vocalization(retry, speech_probability, classification):
+            # Do not automatically mark this prompt leak as recovered. The
+            # caller is expected to classify it as an ambiguous vocalization
+            # and prefer no subtitle instead of surfacing either the leaked
+            # text or an unsupported guess.
+            return False
         return True
     original_count = transcript_features(original.text)["meaningful_char_count"]
     retry_count = transcript_features(retry.text)["meaningful_char_count"]
@@ -1515,6 +1545,7 @@ def main() -> int:
         selected = original
         retry_selected = False
         retry_recovered = False
+        retry_ambiguous_vocalization = False
         retry_similarity = 0.0
         eligibility_candidate = selected
         if index in retry_results:
@@ -1523,11 +1554,31 @@ def main() -> int:
             retry = Candidate("qwen_retry", args.qwen_model, retry_text, retry_suspicion, retry_without_context=True)
             candidates["qwen_retry"] = retry
             retry_similarity = similarity(text, retry_text)
-            if qwen_retry_improves(original, retry, seconds, profile_terms, title_terms):
+            if qwen_retry_improves(
+                original, retry, seconds, profile_terms, title_terms,
+                region.speech_probability, region.classification,
+            ):
                 selected = retry
                 eligibility_candidate = retry
                 retry_selected = True
                 retry_recovered = not bool(set(retry.suspicion) & (LEXICAL_REASONS | {"prompt_leakage"}))
+            elif "prompt_leakage" in original.suspicion and retry_is_low_evidence_vocalization(
+                retry, region.speech_probability, region.classification
+            ):
+                # The retry only recovered a tiny, low-confidence
+                # vocalization from a leaked prompt, with no strong
+                # timing/audio evidence of real speech behind it. Prefer no
+                # subtitle over surfacing either the leaked prompt text or an
+                # unsupported guess: an empty selection is treated the same
+                # as any other unusable transcript in the alignment pass
+                # below (has_meaningful_transcript is False -> "failed",
+                # segment dropped).
+                selected = Candidate(
+                    "ambiguous_vocalization", original.model, "",
+                    ["ambiguous_vocalization_low_evidence"],
+                )
+                eligibility_candidate = selected
+                retry_ambiguous_vocalization = True
             elif meaningful_candidate(retry):
                 # A still-suspicious lexical retry is the best evidence for
                 # fallback eligibility, without making it canonical output.
@@ -1556,6 +1607,7 @@ def main() -> int:
                 qwen_retry_reason=retry_reasons.get(index, ""),
                 qwen_retry_similarity=retry_similarity,
                 qwen_retry_recovered=retry_recovered,
+                qwen_retry_ambiguous_vocalization=retry_ambiguous_vocalization,
                 whisper_eligible=whisper_eligible,
                 whisper_reason=whisper_reason,
                 fallback_audio=fallback_audio_stats(clips[index][0], clips[index][1], region) if whisper_eligible else {},
@@ -1894,6 +1946,9 @@ def main() -> int:
         for index in leakage_indexes
     )
     leakage_escalated = sum(decisions[index].whisper_eligible for index in leakage_indexes)
+    leakage_ambiguous_vocalization = sum(
+        decisions[index].qwen_retry_ambiguous_vocalization for index in leakage_indexes
+    )
     suspicion_counts: dict[str, int] = {}
     for decision in decisions:
         for reason in decision.candidates["qwen3"].suspicion:
@@ -2088,6 +2143,7 @@ def main() -> int:
             "prompt_leakage_retry_selected": leakage_retry_selected,
             "prompt_leakage_retry_failed": leakage_segments - leakage_retry_clean,
             "prompt_leakage_escalated_to_whisper": leakage_escalated,
+            "prompt_leakage_retry_ambiguous_vocalization": leakage_ambiguous_vocalization,
             "prompt_leakage_retries": len(leakage_indexes),
             "prompt_leakage_recovered": leakage_recovered,
             "prompt_leakage_unresolved": leakage_segments - leakage_recovered,

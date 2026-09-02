@@ -4,6 +4,18 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-02
+
+### Fixed
+
+- Fixed a subtitle-splitting artifact where a cue boundary could land in the middle of an ellipsis, leaving a leading ".." fragment orphaned at the start of the next child cue (e.g. "...so." / "..  Ah, ..."). Ellipses (ASCII "...", ".." and Unicode "…") now always stay attached to the phrase that precedes them; any leftover fragment is relocated rather than dropped, so no text is lost. Covered by a dedicated ellipsis-boundary test suite and a strengthened ADN-803 regression.
+- Fixed two-line subtitle wrapping to balance the two output lines by visible character length instead of raw midpoint proximity, avoiding a very short line next to a much longer one.
+- Fixed prompt-leak retries that recover only a tiny generic vocalization (e.g. はい/うん/あ/え/ん) with weak or ambiguous speech evidence from being automatically accepted as recovered dialogue. These are now classified as an ambiguous vocalization and preferred silent instead of surfacing either the leaked prompt text or an unsupported guess, while genuine short utterances and vocalizations backed by strong timing/audio confidence are still preserved and never escalate to Whisper.
+
+### Added
+
+- Added diagnostic-only subtitle normalizer summary logging (over-target/over-hard-target line counts, max line length, split-method counts, punctuation-repair count) and a `prompt_leakage_retry_ambiguous_vocalization` recognition pipeline metric.
+
 ## [0.4.0] - 2026-09-02
 
 ### Fixed
