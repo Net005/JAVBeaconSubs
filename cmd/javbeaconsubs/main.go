@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"javbeaconsubs/internal/auth"
+	"javbeaconsubs/internal/buildinfo"
 	"javbeaconsubs/internal/config"
 	"javbeaconsubs/internal/engine"
 	"javbeaconsubs/internal/jobs"
@@ -117,7 +118,7 @@ func main() {
 		_ = httpServer.Shutdown(shutdownCtx)
 	}()
 
-	logger.Info("JAVBeacon Subtitles started", "listen", cfg.Listen)
+	logger.Info("JAVBeacon Subtitles started", "version", buildinfo.Version, "listen", cfg.Listen)
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.Error("server stopped", "error", err)
 		os.Exit(1)

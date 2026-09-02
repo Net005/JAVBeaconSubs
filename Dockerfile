@@ -1,11 +1,12 @@
 ARG CUDA_VERSION=13.0.0
 ARG UBUNTU_VERSION=22.04
 FROM golang:1.25-bookworm AS go-builder
+ARG APP_VERSION=0.3.0
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/javbeaconsubs ./cmd/javbeaconsubs
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X javbeaconsubs/internal/buildinfo.Version=${APP_VERSION}" -o /out/javbeaconsubs ./cmd/javbeaconsubs
 
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS whisper-builder
 ARG WHISPER_CPP_REF=f049fff95a089aa9969deb009cdd4892b3e74916
@@ -42,7 +43,7 @@ COPY asr /app/asr
 COPY vocabulary /app/vocabulary
 COPY javbeaconsubs_translation_glossary_v2.json /app/javbeaconsubs_translation_glossary_v2.json
 COPY docker/entrypoint.sh /usr/local/bin/javbeaconsubs-entrypoint
-RUN chmod 0755 /usr/local/bin/javbeaconsubs-entrypoint /app/asr/reazon_worker.py /app/asr/reazon_batch_worker.py /app/asr/qwen_pipeline.py && mkdir -p /data/uploads /models /scripts
+RUN chmod 0755 /usr/local/bin/javbeaconsubs-entrypoint /app/asr/reazon_worker.py /app/asr/reazon_batch_worker.py /app/asr/qwen_pipeline.py /app/asr/qwen_batch_worker.py && mkdir -p /data/uploads /models /scripts
 ENV JAVBEACONSUBS_LISTEN=0.0.0.0:8097 \
     JAVBEACONSUBS_DATABASE_PATH=/data/javbeaconsubs.db \
     JAVBEACONSUBS_UPLOAD_DIR=/data/uploads \
@@ -52,6 +53,10 @@ ENV JAVBEACONSUBS_LISTEN=0.0.0.0:8097 \
     JAVBEACONSUBS_WHISPER_MODEL=/models/ggml-large-v3.bin \
     JAVBEACONSUBS_WHISPER_DEVICE=auto \
     JAVBEACONSUBS_WHISPER_CPU_TIMEOUT_SECONDS=7200 \
+    JAVBEACONSUBS_WHISPER_THREADS=12 \
+    JAVBEACONSUBS_WHISPER_BEAM_SIZE=5 \
+    JAVBEACONSUBS_WHISPER_BEST_OF=5 \
+    JAVBEACONSUBS_WHISPER_CUDA_SAFE_MINIMUM_MB=4096 \
     JAVBEACONSUBS_WHISPER_RUNTIME_STATUS_PATH=/data/whisper-runtime.json \
     JAVBEACONSUBS_VAD_MODEL=/models/ggml-silero-v6.2.0.bin \
     JAVBEACONSUBS_ASR_BACKEND=qwen \

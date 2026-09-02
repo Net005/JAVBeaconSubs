@@ -4,8 +4,13 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-02
+
 ### Added
 
+- Added application version reporting in the header and health response, version-injected container builds, semver GHCR tags, and tag-driven GitHub releases.
+- Added strict player-compatible SRT output plus SHA-256 provenance in the existing subtitle project/job metadata and portable `.srt.json` sidecars.
+- Added shared post-translation subtitle normalization that wraps text and splits oversized cues only at real forced-alignment timing anchors.
 - Added ADN-803 regression coverage, silence-valley VAD splitting, energy-based short-vocalization timing recovery, separate timing-quality states, lexical-aware Reazon eligibility, fallback-benefit metrics, and optional translation cost normalization.
 - Added canonical Standard/JAV/GIGA profiles, independent per-file path-based profile/accuracy resolution, persisted resolution sources, and legacy alias normalization to GIGA.
 - Added Japanese Recognition Vocabulary v1 and hierarchical Translation Glossary v2 validation, scope activation, title override support, persistent import/export controls, and bundled production catalogs.
@@ -15,7 +20,6 @@ All notable changes to JAVBeacon Subtitles are documented here.
 - Added a Japanese-forced Qwen3-ASR-1.7B primary pipeline with a separate Qwen3-ForcedAligner-0.6B timing phase.
 - Added Fast, Balanced, and High Accuracy per-job modes in the web/API workflow.
 - Added recall-biased configurable dialogue detection, padded 30-second regions, ambiguous-vocalization classification, transcript suspicion heuristics, normalized multi-ASR comparison, confidence/review states, and per-segment failure isolation.
-- Added conditional ReazonSpeech verification and disagreement-only Whisper tie-breaking while retaining existing whole-file compatibility fallback.
 - Added English/Japanese ASS output and a JSON subtitle project containing canonical Japanese/English tracks, model identities, processing metrics, confidence, and optional raw candidate diagnostics.
 - Added a JAVBeacon-derived subtitle/translation logo, favicon set, and embedded asset route.
 - Added first-run username/password web login with SQLite-backed password hashes and HTTP-only sessions, while retaining bearer-token authentication for external API clients.
@@ -27,17 +31,18 @@ All notable changes to JAVBeacon Subtitles are documented here.
 - Added validated local text-file import for effectively unbounded `Japanese=English` mappings, with blank-line removal and duplicate/conflict handling.
 - Added an optional high-confidence Japanese-to-English base glossary for JAV, GIGA/tokusatsu heroine, and Akiba-web-style adult/action vocabulary.
 - Added a per-job `keep_japanese` web/API option for retaining `.ja.srt` beside the English subtitle.
-- Added ReazonSpeech NeMo v2 as the primary Japanese ASR backend with persistent model caching and validated Whisper fallback.
 - Added bounded overlapping transcription windows, per-window retry/progress, full-duration coverage checks, and timestamp safety validation.
 
 ### Changed
 
-- Redesigned Balanced recognition as Qwen → targeted no-context Qwen retry → batched Whisper Large-v3 verification; Reazon remains compatible and independently selectable but is inactive in normal Qwen production jobs.
+- Isolated Qwen primary and retry inference in one terminating child process so PyTorch cannot retain its ~3.3 GB CUDA reservation before Whisper, enabling full Large-v3 CUDA on the tested 10 GB NVIDIA environment (`qwen-first-v2.5`).
+- Made Whisper CPU threads, beam size, and best-of configurable; selected 12 CPU threads from focused 4/8/12/16-thread testing while retaining quality-preserving beam 5/best-of 5 defaults.
+- Added a configurable 4096 MB free-VRAM preflight for full Large-v3 so known-insufficient states bypass a guaranteed CUDA OOM and enter the existing CPU safety path directly.
+- Redesigned Balanced recognition as Qwen → targeted no-context Qwen retry → batched Whisper Large-v3 verification; Reazon is excluded from normal Qwen production jobs and remains only as an experimental standalone compatibility backend.
 - Promoted Whisper to the CUDA-capable Balanced fallback role, added deterministic candidate validation/scoring and hard 30-second fallback chunking, and advanced diagnostics to `qwen-first-v2.2`.
 - Replaced verbose English Qwen profile prompts with minimal Japanese-only hints and made `standard`, `jav`, and `giga` the only persisted profile values.
 - Made selected ASR text canonical: forced alignment now supplies timing and cannot silently truncate or replace Japanese dialogue.
 - Tightened Balanced/High Accuracy fallback eligibility so empty candidates and minor disagreement cannot trigger Whisper.
-- Replaced Reazon-first recognition with Qwen-first recognition and forced Japanese by default; Reazon is now secondary and Whisper is tertiary.
 - Changed GPU model lifecycle handling so Qwen ASR, fallback ASR, and forced alignment are released between phases instead of remaining resident together.
 - Replaced the purple interface with JAVBeacon's dark red, charcoal, ivory, and Inter/system-font visual identity.
 - Cached Qwen ASR and aligner snapshots on the persistent models mount and reused unchanged revisions across Docker/GHCR rebuilds.
@@ -46,17 +51,17 @@ All notable changes to JAVBeacon Subtitles are documented here.
 - Reduced contextual request overhead without adding model passes, embedding calls, summaries, or more than four external context rows.
 - Indexed large structured glossaries once per job and raised the settings payload allowance for very large mapping collections.
 - Changed Docker startup to run the service as the configured `PUID` and `PGID` (`GID`/`GUID` aliases supported) after root-only model preparation.
-- Changed contextual and Japanese-only modes to use Japanese-specific ReazonSpeech; direct speech-to-English mode continues to use Whisper.
 
 ### Fixed
 
+- Added PyTorch allocated/reserved/peak diagnostics, idle-context and post-exit cleanup deltas, debug-only surviving CUDA-tensor metadata, Whisper model metadata, persisted selected-correction evidence, and fallback value metrics grouped by reason.
 - Hardened the Qwen → Whisper → ForcedAligner GPU lifecycle with explicit model deletion/cache collection and staged VRAM/process diagnostics; classified CUDA OOM separately and retries the complete selective Whisper batch once on CPU when enabled (`qwen-first-v2.4`).
 - Added configurable Whisper `auto`/`cuda`/`cpu` policy and CPU timeout, plus concise model path/type/quantization/size, preferred-device, last-load, CUDA-failure, and fallback availability metadata in Models.
 - Fixed swallowed Whisper fallback failures by validating the model and per-candidate PCM WAVs, preserving bounded process diagnostics, explicitly reporting execution/timeout/parser failures, and mapping every multi-file result back to its source segment.
 - Restored clean no-context Qwen prompt-leak retries even when the corrected utterance is much shorter, prevented unresolved prompt leakage alone from flooding Whisper, and made High Accuracy verification broader than Balanced while retaining vocalization/timing exclusions (`qwen-first-v2.3`).
 - Report existing-subtitle skips honestly instead of presenting an instant no-op as a successful Fast/Balanced rerun, and expose every previously generated artifact on the skipped result.
 - Enforced `max_segment_seconds` as a hard VAD-region limit so a quiet-valley split can never make Qwen exceed the 30-second validation boundary and cascade into whole-file fallbacks.
-- Prevented punctuation-only ASR output from becoming subtitles or translation requests, bounded pathological long timing for tiny vocalizations, and stopped Balanced mode spending Reazon work on repeated short replies and vocal reactions.
+- Prevented punctuation-only ASR output from becoming subtitles or translation requests, bounded pathological long timing for tiny vocalizations, and stopped Balanced mode spending fallback work on repeated short replies and vocal reactions.
 - Isolated Qwen-ASR and NeMo/ReazonSpeech in separate Python environments because their required Transformers versions conflict, while retaining one shared PyTorch/CUDA runtime to avoid duplicating the largest image dependencies.
 - Installed the native SoX executable plus NumPy and `typing-extensions` before resolving Qwen/NeMo dependencies, covering the Python `sox` package's undeclared metadata-time imports during Docker builds.
 - Made large Japanese term-mapping imports open at the first entry in a taller editor, with controls to show every mapping or collapse the overview.

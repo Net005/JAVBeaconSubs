@@ -30,6 +30,10 @@ class PipelineUtilitiesTest(unittest.TestCase):
             fake_soundfile = types.SimpleNamespace(read=lambda *_args, **_kwargs: (audio, samplerate))
             aligner = mock.Mock()
             aligner.align.side_effect = align_side_effect
+            reasons = pipeline.suspicion_reasons(transcript, 30.0, 0.55, pipeline.PROFILE_CONTEXT["jav"])
+            eligible, retry_reason = pipeline.should_retry_qwen(transcript, reasons, "speech", 0.55)
+            wants_retry = "prompt_leakage" in reasons or (mode != "fast" and eligible)
+            retry_value = retry_transcript if retry_transcript is not None else transcript
             arguments = [
                 "qwen_pipeline.py", "--input", str(input_path), "--output", str(output_path),
                 "--device", "cpu", "--mode", mode, "--disable-reazon", "--disable-whisper", "--debug",
@@ -37,12 +41,17 @@ class PipelineUtilitiesTest(unittest.TestCase):
             with (
                 mock.patch.object(sys, "argv", arguments),
                 mock.patch.object(pipeline, "detect_regions", return_value=[pipeline.Region(0, len(audio), 0.55, "speech")]),
-                mock.patch.object(pipeline, "load_qwen", return_value=object()),
                 mock.patch.object(
                     pipeline,
-                    "qwen_transcribe",
-                    side_effect=([[transcript], [retry_transcript]] if retry_transcript is not None else None),
-                    return_value=[transcript],
+                    "qwen_worker_transcribe",
+                    return_value=({0: transcript}, {
+                        "retry_results": (
+                            [{"index": 0, "text": retry_value}] if wants_retry else []
+                        ),
+                        "retry_reasons": ({
+                            "0": "prompt_leakage_unresolved" if "prompt_leakage" in reasons else retry_reason
+                        } if wants_retry else {}),
+                    }),
                 ),
                 mock.patch.object(pipeline, "load_aligner", return_value=aligner),
                 mock.patch.object(
@@ -182,6 +191,16 @@ class PipelineUtilitiesTest(unittest.TestCase):
         self.assertEqual(len(groups), 2)
         self.assertEqual("".join(x["text"] for x in groups[0]), "もうダメ。")
 
+    def test_normalization_anchors_come_only_from_successful_alignment(self):
+        items = [
+            {"text": "もう", "start_time": 0.1, "end_time": 0.5},
+            {"text": "ダメ", "start_time": 0.5, "end_time": 1.0},
+            {"text": "。", "start_time": 1.0, "end_time": 1.2},
+        ]
+        self.assertEqual(pipeline.trusted_timing_anchors(items, 10.0, "aligned"), [10500, 11000])
+        self.assertEqual(pipeline.trusted_timing_anchors(items, 10.0, "timing_only"), [])
+        self.assertEqual(pipeline.trusted_timing_anchors(items[:1], 10.0, "aligned"), [])
+
     def test_reazon_fallback_runs_in_external_interpreter(self):
         regions = [pipeline.Region(10, 20, 0.8, "speech"), pipeline.Region(30, 45, 0.7, "speech")]
 
@@ -195,6 +214,31 @@ class PipelineUtilitiesTest(unittest.TestCase):
 
         self.assertEqual(result, {1: "もう ダメ"})
         self.assertEqual(run.call_args.args[0][:2], ["/opt/reazon/bin/python", "/app/asr/reazon_batch_worker.py"])
+
+    def test_qwen_phase_runs_in_external_process_and_returns_diagnostics(self):
+        regions = [pipeline.Region(10, 20, 0.8, "speech")]
+
+        def complete_worker(command, **_kwargs):
+            manifest = command[command.index("--regions") + 1]
+            output = command[command.index("--output") + 1]
+            entries = json.loads(pathlib.Path(manifest).read_text(encoding="utf-8"))
+            pathlib.Path(output).write_text(json.dumps({
+                "results": [{"index": entries[0]["index"], "text": "  もう   ダメ  "}],
+                "diagnostics": {"gpu_after_asr": {"used_mb": 4000}},
+            }), encoding="utf-8")
+            return types.SimpleNamespace(returncode=0)
+
+        with mock.patch.object(pipeline.subprocess, "run", side_effect=complete_worker) as run:
+            result, diagnostics = pipeline.qwen_worker_transcribe(
+                "/opt/qwen-asr/bin/python", "/app/asr/qwen_batch_worker.py", "movie.wav",
+                regions, [0], "文脈", "Qwen/Qwen3-ASR-1.7B", "revision", "cuda", 4, True,
+            )
+
+        self.assertEqual(result, {0: "もう ダメ"})
+        self.assertEqual(diagnostics["gpu_after_asr"]["used_mb"], 4000)
+        command = run.call_args.args[0]
+        self.assertEqual(command[:2], ["/opt/qwen-asr/bin/python", "/app/asr/qwen_batch_worker.py"])
+        self.assertIn("--debug", command)
 
     def test_profiles_are_minimal_japanese_and_aliases_are_canonical(self):
         self.assertEqual(pipeline.normalize_profile("tokusatsu"), "giga")
@@ -334,9 +378,13 @@ class PipelineUtilitiesTest(unittest.TestCase):
             model.write_bytes(b"model")
             with (
                 mock.patch.dict(sys.modules, {"soundfile": fake_soundfile}),
+                mock.patch.object(pipeline, "gpu_snapshot", return_value={"free_mb": 5000}),
                 mock.patch.object(pipeline.subprocess, "run", side_effect=complete_whisper) as run,
             ):
-                result = pipeline.whisper_batch_transcribe("whisper-cli", str(model), [(audio, samplerate)], [0], "ja", "cuda", 30)
+                result = pipeline.whisper_batch_transcribe(
+                    "whisper-cli", str(model), [(audio, samplerate)], [0], "ja", "cuda", 30,
+                    threads=12, beam_size=3, best_of=2,
+                )
         self.assertTrue(written_lengths)
         self.assertTrue(all(length <= 30000 for length in written_lengths))
         self.assertGreater(len(written_lengths), 1)
@@ -345,6 +393,9 @@ class PipelineUtilitiesTest(unittest.TestCase):
         self.assertIn("-ojf", run.call_args.args[0])
         self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("-l") + 1], "ja")
         self.assertNotIn("-tr", run.call_args.args[0])
+        self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("-t") + 1], "12")
+        self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("-bs") + 1], "3")
+        self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("-bo") + 1], "2")
         self.assertEqual(run.call_args.args[0].count("-f"), len(written_lengths))
         self.assertEqual(run.call_args.args[0].count("-of"), len(written_lengths))
         self.assertTrue(result.success)
@@ -408,9 +459,11 @@ class PipelineUtilitiesTest(unittest.TestCase):
                 )
                 return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
-            with mock.patch.dict(sys.modules, {"soundfile": fake_soundfile}), mock.patch.object(
-                pipeline.subprocess, "run", side_effect=launch
-            ) as run:
+            with (
+                mock.patch.dict(sys.modules, {"soundfile": fake_soundfile}),
+                mock.patch.object(pipeline, "gpu_snapshot", return_value={"free_mb": 5000}),
+                mock.patch.object(pipeline.subprocess, "run", side_effect=launch) as run,
+            ):
                 result = pipeline.whisper_batch_transcribe(
                     "whisper-cli", str(model), [(audio, 1000)], [0], "ja", "cuda", 30, True, 900
                 )
@@ -425,6 +478,44 @@ class PipelineUtilitiesTest(unittest.TestCase):
         self.assertEqual(result.texts[0], "これはテストです")
         self.assertNotIn(0, result.candidate_errors)
 
+    def test_whisper_low_vram_preflight_skips_known_oom_and_uses_cpu(self):
+        audio = np.ones(1000, dtype=np.float32) * 0.02
+        with tempfile.TemporaryDirectory() as directory:
+            model = pathlib.Path(directory) / "large-v3.bin"
+            model.write_bytes(b"model")
+            fake_soundfile = types.SimpleNamespace(
+                write=lambda path, *_args, **_kwargs: pathlib.Path(path).write_bytes(b"RIFF" + b"0" * 128),
+                info=lambda _path: types.SimpleNamespace(
+                    frames=1000, channels=1, samplerate=1000, subtype="PCM_16", duration=1.0
+                ),
+            )
+
+            def complete_cpu(command, **_kwargs):
+                self.assertIn("-ng", command)
+                prefix = command[command.index("-of") + 1]
+                pathlib.Path(prefix + ".json").write_text(
+                    json.dumps({"transcription": [{"text": "これはテストです"}]}), encoding="utf-8"
+                )
+                return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+            with (
+                mock.patch.dict(sys.modules, {"soundfile": fake_soundfile}),
+                mock.patch.object(pipeline, "gpu_snapshot", return_value={"free_mb": 2700}),
+                mock.patch.object(pipeline.subprocess, "run", side_effect=complete_cpu) as run,
+            ):
+                result = pipeline.whisper_batch_transcribe(
+                    "whisper-cli", str(model), [(audio, 1000)], [0], "ja", "cuda", 30, True, 900,
+                    cuda_safe_minimum_mb=4096,
+                )
+
+        self.assertEqual(run.call_count, 1)
+        self.assertTrue(result.success)
+        self.assertTrue(result.cuda_preflight_skipped)
+        self.assertEqual(result.cuda_preflight_free_mb, 2700)
+        self.assertFalse(result.cuda_attempted)
+        self.assertTrue(result.cpu_fallback_succeeded)
+        self.assertEqual(result.execution_device, "cpu")
+
     def test_whisper_does_not_cpu_retry_non_cuda_failure(self):
         audio = np.ones(1000, dtype=np.float32) * 0.02
         with tempfile.TemporaryDirectory() as directory:
@@ -437,9 +528,11 @@ class PipelineUtilitiesTest(unittest.TestCase):
                 ),
             )
             completed = types.SimpleNamespace(returncode=2, stdout="", stderr="unknown command-line option")
-            with mock.patch.dict(sys.modules, {"soundfile": fake_soundfile}), mock.patch.object(
-                pipeline.subprocess, "run", return_value=completed
-            ) as run:
+            with (
+                mock.patch.dict(sys.modules, {"soundfile": fake_soundfile}),
+                mock.patch.object(pipeline, "gpu_snapshot", return_value={"free_mb": 5000}),
+                mock.patch.object(pipeline.subprocess, "run", return_value=completed) as run,
+            ):
                 result = pipeline.whisper_batch_transcribe(
                     "whisper-cli", str(model), [(audio, 1000)], [0], "ja", "cuda", 30, True, 900
                 )
@@ -538,6 +631,45 @@ class PipelineUtilitiesTest(unittest.TestCase):
             self.assertTrue(
                 pipeline.validate_whisper_candidate(candidate, candidate, len(waveform) / samplerate)[0]
             )
+
+    @unittest.skipUnless(
+        os.getenv("JAVBEACONSUBS_ISOLATED_QWEN_SMOKE") == "1"
+        and os.getenv("JAVBEACONSUBS_WHISPER_SMOKE_WAV")
+        and os.getenv("JAVBEACONSUBS_WHISPER_SMOKE_MODEL"),
+        "set isolated-Qwen smoke flag plus Whisper WAV/model paths to run the process-boundary test",
+    )
+    def test_isolated_qwen_then_whisper_smoke(self):
+        import soundfile as sf
+
+        source = os.environ["JAVBEACONSUBS_WHISPER_SMOKE_WAV"]
+        waveform, samplerate = sf.read(source, dtype="float32", always_2d=False)
+        if waveform.ndim > 1:
+            waveform = waveform.mean(axis=1)
+        sample_count = min(len(waveform), samplerate * 30)
+        region = pipeline.Region(0, sample_count, 0.8, "speech")
+        before = pipeline.gpu_snapshot()
+        texts, worker = pipeline.qwen_worker_transcribe(
+            sys.executable, str(MODULE_PATH.with_name("qwen_batch_worker.py")), source,
+            [region], [0], pipeline.PROFILE_CONTEXT["jav"], "Qwen/Qwen3-ASR-1.7B",
+            "7278e1e70fe206f11671096ffdd38061171dd6e5", "cuda", 1, True,
+        )
+        after_worker_exit = pipeline.gpu_snapshot()
+        result = pipeline.whisper_batch_transcribe(
+            os.getenv("JAVBEACONSUBS_WHISPER_SMOKE_BINARY", "whisper-cli"),
+            os.environ["JAVBEACONSUBS_WHISPER_SMOKE_MODEL"],
+            [(waveform[:sample_count], samplerate)], [0], "ja", "cuda", 30, True, 7200,
+        )
+        print(json.dumps({
+            "gpu_before_qwen": before,
+            "gpu_after_qwen_worker_exit": after_worker_exit,
+            "qwen_worker": worker,
+            "qwen_nonempty": pipeline.has_meaningful_transcript(texts.get(0, "")),
+            "whisper_cuda_failure": result.cuda_failure_reason,
+            "whisper_execution_device": result.execution_device,
+            "whisper_seconds": result.duration_seconds,
+        }))
+        self.assertTrue(result.success, result.stderr or result.cuda_stderr)
+        self.assertEqual(result.execution_device, "cuda")
 
     @unittest.skipUnless(
         os.getenv("JAVBEACONSUBS_POST_QWEN_SMOKE") == "1"

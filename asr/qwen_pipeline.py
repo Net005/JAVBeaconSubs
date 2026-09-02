@@ -28,7 +28,7 @@ from typing import Any
 import numpy as np
 
 
-PIPELINE_VERSION = "qwen-first-v2.4"
+PIPELINE_VERSION = "qwen-first-v2.5"
 JAPANESE = "Japanese"
 PROFILE_CONTEXT = {
     "standard": "日本語",
@@ -132,6 +132,9 @@ class WhisperBatchResult:
     cpu_fallback_timeout: int = 0
     cpu_fallback_candidate_count: int = 0
     execution_device: str = "not_attempted"
+    cuda_preflight_skipped: bool = False
+    cuda_preflight_free_mb: int | None = None
+    cuda_safe_minimum_mb: int = 0
 
 
 def normalize_text(value: str) -> str:
@@ -580,6 +583,55 @@ def dispose_qwen(model: Any) -> dict[str, Any]:
     return actions
 
 
+def torch_memory_snapshot(initialize: bool = False) -> dict[str, Any]:
+    snapshot: dict[str, Any] = {
+        "available": False, "allocated_mb": 0.0, "reserved_mb": 0.0,
+        "max_allocated_mb": 0.0, "max_reserved_mb": 0.0,
+    }
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            return snapshot
+        if initialize:
+            torch.cuda.init()
+        divisor = 1024 * 1024
+        snapshot.update({
+            "available": True,
+            "allocated_mb": round(torch.cuda.memory_allocated() / divisor, 2),
+            "reserved_mb": round(torch.cuda.memory_reserved() / divisor, 2),
+            "max_allocated_mb": round(torch.cuda.max_memory_allocated() / divisor, 2),
+            "max_reserved_mb": round(torch.cuda.max_memory_reserved() / divisor, 2),
+        })
+    except Exception as error:
+        snapshot["error"] = normalize_text(str(error))[:1024]
+    return snapshot
+
+
+def surviving_cuda_tensors(limit: int = 64) -> dict[str, Any]:
+    result: dict[str, Any] = {"count": 0, "total_bytes": 0, "tensors": []}
+    try:
+        import torch
+
+        for item in gc.get_objects():
+            try:
+                if not isinstance(item, torch.Tensor) or not item.is_cuda:
+                    continue
+                size = int(item.nelement() * item.element_size())
+                result["count"] += 1
+                result["total_bytes"] += size
+                if len(result["tensors"]) < limit:
+                    result["tensors"].append({
+                        "shape": list(item.shape), "dtype": str(item.dtype),
+                        "bytes": size, "type": type(item).__name__,
+                    })
+            except Exception:
+                continue
+    except Exception as error:
+        result["error"] = normalize_text(str(error))[:1024]
+    return result
+
+
 def gpu_snapshot() -> dict[str, Any]:
     """Return plain-data NVIDIA memory/process diagnostics without retaining tensors."""
     snapshot: dict[str, Any] = {"available": False, "total_mb": None, "used_mb": None, "free_mb": None, "processes": []}
@@ -660,6 +712,65 @@ def qwen_transcribe(model, clips: list[tuple[np.ndarray, int]], context: str, ba
         finally:
             del batch
     return out
+
+
+def qwen_worker_transcribe(
+    python: str,
+    worker_script: str,
+    input_path: str,
+    regions: list[Region],
+    indexes: list[int],
+    context: str,
+    model: str,
+    revision: str,
+    device: str,
+    batch_size: int,
+    debug: bool = False,
+    mode: str = "balanced",
+) -> tuple[dict[int, str], dict[str, Any]]:
+    """Run Qwen primary/retry in one child so its CUDA context dies on exit."""
+    if not indexes:
+        return {}, {}
+    with tempfile.TemporaryDirectory(prefix="javbeaconsubs-qwen-phase-") as directory:
+        manifest = os.path.join(directory, "regions.json")
+        output = os.path.join(directory, "results.json")
+        with open(manifest + ".tmp", "w", encoding="utf-8") as handle:
+            json.dump(
+                [
+                    {
+                        "index": index,
+                        "start": regions[index].start,
+                        "end": regions[index].end,
+                        "speech_probability": regions[index].speech_probability,
+                        "classification": regions[index].classification,
+                    }
+                    for index in indexes
+                ],
+                handle,
+                separators=(",", ":"),
+            )
+        os.replace(manifest + ".tmp", manifest)
+        command = [
+            python, worker_script,
+            "--input", input_path,
+            "--regions", manifest,
+            "--output", output,
+            "--context", context,
+            "--model", model,
+            "--revision", revision,
+            "--device", device,
+            "--batch-size", str(max(1, batch_size)),
+            "--mode", mode,
+        ]
+        if debug:
+            command.append("--debug")
+        subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=None)
+        with open(output, encoding="utf-8") as handle:
+            payload = json.load(handle)
+        return (
+            {int(item["index"]): normalize_text(item.get("text", "")) for item in payload.get("results", [])},
+            payload.get("diagnostics", {}),
+        )
 
 
 def active_recognition_vocabulary(path: str, profile: str, title: str) -> tuple[set[str], set[str]]:
@@ -824,6 +935,10 @@ def whisper_batch_transcribe(
     max_segment_seconds: float = 30.0,
     cpu_fallback: bool = True,
     cpu_timeout_seconds: int = 7200,
+    threads: int = 12,
+    beam_size: int = 5,
+    best_of: int = 5,
+    cuda_safe_minimum_mb: int = 4096,
 ) -> WhisperBatchResult:
     """Run whisper.cpp once for safely split fallback files.
 
@@ -913,7 +1028,11 @@ def whisper_batch_transcribe(
             detail["input_valid"] = candidate_index in valid_indexes
 
         def command_for(execution_device: str) -> list[str]:
-            command = [binary, "-m", model, "-l", language, "-ojf", "-nt"]
+            command = [
+                binary, "-m", model, "-l", language, "-ojf", "-nt",
+                "-t", str(max(1, threads)), "-bs", str(max(1, beam_size)),
+                "-bo", str(max(1, best_of)),
+            ]
             for _, audio_path, _ in inputs:
                 command.extend(["-f", audio_path])
             for _, _, prefix in inputs:
@@ -934,13 +1053,31 @@ def whisper_batch_transcribe(
             )
 
         requested_device = "cuda" if device in {"auto", "cuda"} else "cpu"
+        result.cuda_safe_minimum_mb = max(0, cuda_safe_minimum_mb)
+        if requested_device == "cuda" and cpu_fallback and result.cuda_safe_minimum_mb:
+            free_mb = gpu_snapshot().get("free_mb")
+            result.cuda_preflight_free_mb = free_mb if isinstance(free_mb, int) else None
+            if isinstance(free_mb, int) and free_mb < result.cuda_safe_minimum_mb:
+                result.cuda_preflight_skipped = True
+                result.cpu_fallback_attempted = True
+                result.cpu_fallback_candidate_count = len(valid_indexes)
+                result.cpu_fallback_timeout = max(300, cpu_timeout_seconds)
+                requested_device = "cpu"
         result.cuda_attempted = requested_device == "cuda"
+        launch_started = time.monotonic()
         try:
-            completed = launch(requested_device, max(300.0, min(1800.0, len(inputs) * 20.0)))
+            launch_timeout = (
+                result.cpu_fallback_timeout if result.cuda_preflight_skipped
+                else max(300.0, min(1800.0, len(inputs) * 20.0))
+            )
+            completed = launch(requested_device, launch_timeout)
         except subprocess.TimeoutExpired as error:
             return fail("whisper_timeout", str(error), candidate_reason="whisper_batch_failed")
         except OSError as error:
             return fail("whisper_execution_failed", str(error), candidate_reason="whisper_batch_failed")
+        if result.cuda_preflight_skipped:
+            result.cpu_fallback_seconds = round(time.monotonic() - launch_started, 3)
+            result.cpu_fallback_succeeded = completed.returncode == 0
         if requested_device == "cuda" and completed.returncode != 0:
             cuda_stderr = normalize_text(completed.stderr)[:8192]
             result.cuda_failed = True
@@ -1171,6 +1308,13 @@ def split_alignment(items: list[dict[str, Any]], max_chars: int = 24, max_durati
     return groups
 
 
+def trusted_timing_anchors(group: list[dict[str, Any]], base_seconds: float, alignment: str) -> list[int]:
+    """Return only real internal boundaries from a successful forced alignment."""
+    if alignment != "aligned" or len(group) < 2:
+        return []
+    return [round((base_seconds + item["end_time"]) * 1000) for item in group[:-1]]
+
+
 def load_aligner(model_name: str, revision: str, device: str):
     from qwen_asr import Qwen3ForcedAligner
 
@@ -1189,6 +1333,20 @@ def write_json(path: str, payload: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
+def whisper_model_metadata(path: str) -> dict[str, Any]:
+    name = os.path.basename(path).casefold()
+    quantization = "full"
+    for label in ("q2", "q3", "q4", "q5", "q6", "q8"):
+        if label in name:
+            quantization = label
+            break
+    try:
+        size_mb = round(os.path.getsize(path) / (1024 * 1024), 2)
+    except OSError:
+        size_mb = None
+    return {"path": path, "size_mb": size_mb, "quantization": quantization}
+
+
 def main() -> int:
     import soundfile as sf
 
@@ -1203,6 +1361,10 @@ def main() -> int:
     parser.add_argument("--title", default="")
     parser.add_argument("--qwen-model", default="Qwen/Qwen3-ASR-1.7B")
     parser.add_argument("--qwen-revision", default="7278e1e70fe206f11671096ffdd38061171dd6e5")
+    parser.add_argument(
+        "--qwen-worker-script",
+        default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "qwen_batch_worker.py"),
+    )
     parser.add_argument("--aligner-model", default="Qwen/Qwen3-ForcedAligner-0.6B")
     parser.add_argument("--aligner-revision", default="c7cbfc2048c462b0d63a45797104fc9db3ad62b7")
     parser.add_argument("--reazon-model", default="reazon-research/reazonspeech-nemo-v2")
@@ -1212,6 +1374,10 @@ def main() -> int:
     parser.add_argument("--whisper-model", default="")
     parser.add_argument("--whisper-device", choices=("auto", "cuda", "cpu"), default="auto")
     parser.add_argument("--whisper-cpu-timeout", type=int, default=7200)
+    parser.add_argument("--whisper-threads", type=int, default=12)
+    parser.add_argument("--whisper-beam-size", type=int, default=5)
+    parser.add_argument("--whisper-best-of", type=int, default=5)
+    parser.add_argument("--whisper-cuda-safe-minimum-mb", type=int, default=4096)
     parser.add_argument("--whisper-runtime-status", default="")
     parser.add_argument("--disable-whisper-cpu-fallback", action="store_true")
     parser.add_argument("--disable-reazon", action="store_true")
@@ -1267,11 +1433,9 @@ def main() -> int:
     vad_seconds = time.monotonic() - vad_started
     clips = [(waveform[item.start : item.end], samplerate) for item in regions]
 
-    progress(8, "loading_qwen")
+    progress(8, "running_qwen_worker")
     qwen_started = time.monotonic()
     gpu_lifecycle["before_qwen"] = gpu_snapshot()
-    qwen = load_qwen(args.qwen_model, args.qwen_revision, args.device, args.batch_size)
-    gpu_lifecycle["after_qwen"] = gpu_snapshot()
     # Keep ASR conditioning deliberately tiny.  --context remains accepted for
     # backward-compatible command lines, but legacy prose is never sent to the
     # recognizer because it can be echoed into the transcript.
@@ -1279,9 +1443,24 @@ def main() -> int:
     profile_terms, title_terms = active_recognition_vocabulary(
         args.recognition_vocabulary, args.profile, args.title
     )
-    qwen_texts = qwen_transcribe(qwen, clips, context, max(1, args.batch_size))
-    gpu_lifecycle["after_qwen_asr"] = gpu_snapshot()
-    qwen_primary_seconds = time.monotonic() - qwen_started
+    primary_results, primary_worker = qwen_worker_transcribe(
+        sys.executable,
+        args.qwen_worker_script,
+        args.input,
+        regions,
+        list(range(len(regions))),
+        context,
+        args.qwen_model,
+        args.qwen_revision,
+        args.device,
+        max(1, args.batch_size),
+        args.debug,
+        args.mode,
+    )
+    qwen_texts = [primary_results.get(index, "") for index in range(len(regions))]
+    gpu_lifecycle["after_qwen"] = primary_worker.get("gpu_after_load", {"available": False})
+    gpu_lifecycle["after_qwen_asr"] = primary_worker.get("gpu_after_asr", {"available": False})
+    qwen_phase_seconds = time.monotonic() - qwen_started
     retry_indexes: list[int] = []
     retry_reasons: dict[int, str] = {}
     for index, (region, text) in enumerate(zip(regions, qwen_texts)):
@@ -1293,18 +1472,29 @@ def main() -> int:
         if "prompt_leakage" in reasons or (args.mode != "fast" and eligible):
             retry_indexes.append(index)
             retry_reasons[index] = "prompt_leakage_unresolved" if "prompt_leakage" in reasons else reason
-    retry_results: dict[int, str] = {}
-    qwen_retry_seconds = 0.0
-    if retry_indexes:
-        progress(30, "retrying_qwen")
-        retry_started = time.monotonic()
-        retries = qwen_transcribe(qwen, [clips[index] for index in retry_indexes], "", max(1, args.batch_size))
-        retry_results = dict(zip(retry_indexes, retries))
-        qwen_retry_seconds = time.monotonic() - retry_started
-    gpu_lifecycle["after_qwen_retries"] = gpu_snapshot()
-    qwen_cleanup = dispose_qwen(qwen)
+    retry_results = {
+        int(item["index"]): normalize_text(item.get("text", ""))
+        for item in primary_worker.get("retry_results", [])
+    }
+    worker_retry_reasons = {
+        int(index): str(reason) for index, reason in primary_worker.get("retry_reasons", {}).items()
+    }
+    # Recompute in the parent as a defensive consistency check and retain the
+    # worker's reason when available. Recognition thresholds remain unchanged.
+    if set(retry_results) != set(retry_indexes):
+        raise RuntimeError("isolated Qwen retry selection disagreed with parent selection")
+    retry_reasons.update(worker_retry_reasons)
+    qwen_retry_seconds = float(primary_worker.get("qwen_retry_seconds", 0.0))
+    qwen_primary_seconds = max(0.0, qwen_phase_seconds - qwen_retry_seconds)
+    gpu_lifecycle["after_qwen_retries"] = primary_worker.get(
+        "gpu_after_retries", primary_worker.get("gpu_after_asr", {"available": False})
+    )
+    # A child process owns all Qwen tensors and its CUDA context. Its exit is
+    # the hard lifecycle boundary; the parent process now has no Qwen model to
+    # retain before launching whisper.cpp.
+    qwen_cleanup = dict(primary_worker.get("cleanup", {}))
+    qwen_cleanup["qwen_worker_process_exited"] = True
     qwen_model_deleted = True
-    del qwen
     gpu_lifecycle["after_qwen_cleanup"] = gpu_snapshot()
     decisions: list[Decision] = []
     previous: list[str] = []
@@ -1390,6 +1580,10 @@ def main() -> int:
             args.max_segment_seconds,
             not args.disable_whisper_cpu_fallback,
             args.whisper_cpu_timeout,
+            args.whisper_threads,
+            args.whisper_beam_size,
+            args.whisper_best_of,
+            args.whisper_cuda_safe_minimum_mb,
         )
         whisper_seconds = time.monotonic() - whisper_started
         gpu_lifecycle["after_whisper"] = gpu_snapshot()
@@ -1442,6 +1636,9 @@ def main() -> int:
             "whisper_cuda_attempted": whisper_result.cuda_attempted,
             "whisper_cuda_failed": whisper_result.cuda_failed,
             "whisper_cuda_failure_reason": whisper_result.cuda_failure_reason,
+            "whisper_cuda_preflight_skipped": whisper_result.cuda_preflight_skipped,
+            "whisper_cuda_preflight_free_mb": whisper_result.cuda_preflight_free_mb,
+            "whisper_cuda_safe_minimum_mb": whisper_result.cuda_safe_minimum_mb,
             "whisper_cuda_stderr": whisper_result.cuda_stderr,
             "whisper_cpu_fallback_attempted": whisper_result.cpu_fallback_attempted,
             "whisper_cpu_fallback_succeeded": whisper_result.cpu_fallback_succeeded,
@@ -1577,6 +1774,9 @@ def main() -> int:
                 "timing_quality_state": decision.timing_quality,
                 "suspicion_category": suspicion_category(selected, decision.selected.suspicion, decision.timing_quality),
             }
+            anchors = trusted_timing_anchors(group, base_seconds, decision.alignment)
+            if anchors:
+                record["timing_anchors_ms"] = anchors
             if args.debug:
                 record["candidates"] = candidate_payload
                 record["alignment_items"] = group
@@ -1646,9 +1846,40 @@ def main() -> int:
     whisper_selected = sum(item.selected.engine == "whisper" for item in decisions)
     whisper_rejected = whisper_count - whisper_selected
     whisper_reason_counts: dict[str, int] = {}
+    whisper_selected_by_reason: dict[str, int] = {}
+    whisper_rejected_by_reason: dict[str, int] = {}
     for index in whisper_indexes:
         reason = decisions[index].whisper_reason or "lexical_suspicion"
         whisper_reason_counts[reason] = whisper_reason_counts.get(reason, 0) + 1
+        target = whisper_selected_by_reason if decisions[index].selected.engine == "whisper" else whisper_rejected_by_reason
+        target[reason] = target.get(reason, 0) + 1
+    whisper_benefit_by_reason = {
+        reason: {
+            "candidates": count,
+            "selected": whisper_selected_by_reason.get(reason, 0),
+            "rejected": whisper_rejected_by_reason.get(reason, 0),
+            "benefit_percentage": round(whisper_selected_by_reason.get(reason, 0) * 100 / count, 2),
+            "average_runtime_seconds_per_candidate": round(whisper_seconds / max(1, whisper_count), 3),
+        }
+        for reason, count in whisper_reason_counts.items()
+    }
+    whisper_corrections = []
+    for index in whisper_indexes:
+        decision = decisions[index]
+        if decision.selected.engine != "whisper":
+            continue
+        retry = decision.candidates.get("qwen_retry")
+        whisper = decision.candidates.get("whisper")
+        whisper_corrections.append({
+            "source_segment_index": index,
+            "source_suspicion_reason": decision.whisper_reason,
+            "mode": args.mode,
+            "original_qwen_text": decision.candidates["qwen3"].text,
+            "qwen_retry_text": retry.text if retry else "",
+            "whisper_text": whisper.text if whisper else "",
+            "comparison_score": round(decision.comparison_score, 3),
+            "selected": True,
+        })
     review_count = sum(item.quality_state != "accepted" for item in decisions)
     leakage_indexes = [index for index, item in enumerate(decisions) if "prompt_leakage" in item.candidates["qwen3"].suspicion]
     leakage_segments = len(leakage_indexes)
@@ -1710,6 +1941,21 @@ def main() -> int:
 
     def gpu_used(stage: str) -> int | None:
         return gpu_lifecycle.get(stage, {}).get("used_mb")
+    primary_torch_after = primary_worker.get("torch_after_asr", {})
+    final_worker = primary_worker
+    final_torch_cleanup = final_worker.get("torch_after_cleanup", {})
+    worker_before = primary_worker.get("gpu_before_load", {}).get("used_mb")
+    worker_context = primary_worker.get("gpu_after_context", {}).get("used_mb")
+    idle_python_cuda_context_mb = (
+        max(0, worker_context - worker_before)
+        if isinstance(worker_context, int) and isinstance(worker_before, int) else None
+    )
+    after_cleanup_used = gpu_used("after_qwen_cleanup")
+    qwen_cleanup_excess_gpu_mb = (
+        max(0, after_cleanup_used - before_qwen_used)
+        if isinstance(after_cleanup_used, int) and isinstance(before_qwen_used, int) else None
+    )
+    whisper_model = whisper_model_metadata(args.whisper_model)
     payload = {
         "duration_ms": round(duration * 1000),
         "processed_ms": round(duration * 1000),
@@ -1738,6 +1984,7 @@ def main() -> int:
             "vad_seconds": round(vad_seconds, 3),
             "qwen_asr_seconds": round(qwen_primary_seconds, 3),
             "qwen_retry_seconds": round(qwen_retry_seconds, 3),
+            "qwen_worker_total_seconds": round(qwen_phase_seconds, 3),
             "whisper_seconds": round(whisper_seconds, 3),
             "alignment_seconds": round(alignment_seconds, 3),
             "total_processing_seconds": round(total_seconds, 3),
@@ -1764,6 +2011,9 @@ def main() -> int:
             "whisper_fallback_percentage": round(whisper_count * 100 / len(decisions), 2),
             "whisper_benefit_percentage": round(whisper_selected * 100 / whisper_count, 2) if whisper_count else 0,
             "whisper_reason_counts": whisper_reason_counts,
+            "whisper_selected_by_reason": whisper_selected_by_reason,
+            "whisper_rejected_by_reason": whisper_rejected_by_reason,
+            "whisper_benefit_by_reason": whisper_benefit_by_reason,
             "whisper_process_exit_code": whisper_result.exit_code,
             "whisper_process_success": whisper_result.success,
             "whisper_process_stderr": whisper_result.stderr,
@@ -1774,9 +2024,18 @@ def main() -> int:
             "whisper_cuda_failed": whisper_result.cuda_failed,
             "whisper_cuda_failure_reason": whisper_result.cuda_failure_reason,
             "whisper_cuda_stderr": whisper_result.cuda_stderr,
+            "whisper_cuda_preflight_skipped": whisper_result.cuda_preflight_skipped,
+            "whisper_cuda_preflight_free_mb": whisper_result.cuda_preflight_free_mb,
+            "whisper_cuda_safe_minimum_mb": whisper_result.cuda_safe_minimum_mb,
             "whisper_cpu_fallback_attempted": whisper_result.cpu_fallback_attempted,
             "whisper_cpu_fallback_succeeded": whisper_result.cpu_fallback_succeeded,
             "whisper_execution_device": whisper_result.execution_device,
+            "whisper_effective_threads": max(1, args.whisper_threads),
+            "whisper_effective_beam_size": max(1, args.whisper_beam_size),
+            "whisper_effective_best_of": max(1, args.whisper_best_of),
+            "whisper_model_path": whisper_model["path"],
+            "whisper_model_size_mb": whisper_model["size_mb"],
+            "whisper_model_quantization": whisper_model["quantization"],
             "cpu_fallback_seconds": whisper_result.cpu_fallback_seconds,
             "cpu_fallback_timeout": whisper_result.cpu_fallback_timeout,
             "cpu_fallback_candidate_count": whisper_result.cpu_fallback_candidate_count,
@@ -1794,6 +2053,16 @@ def main() -> int:
             "whisper_gpu_free_mb_before_launch": gpu_lifecycle.get("before_whisper", {}).get("free_mb"),
             "whisper_gpu_processes_before_launch": gpu_lifecycle.get("before_whisper", {}).get("processes", []),
             "qwen_model_deleted": qwen_model_deleted,
+            "qwen_worker_process_exited": True,
+            "torch_allocated_mb_after_qwen": primary_torch_after.get("allocated_mb"),
+            "torch_reserved_mb_after_qwen": primary_torch_after.get("reserved_mb"),
+            "torch_max_allocated_mb_after_qwen": primary_torch_after.get("max_allocated_mb"),
+            "torch_max_reserved_mb_after_qwen": primary_torch_after.get("max_reserved_mb"),
+            "torch_allocated_mb_after_cleanup": final_torch_cleanup.get("allocated_mb"),
+            "torch_reserved_mb_after_cleanup": final_torch_cleanup.get("reserved_mb"),
+            "idle_python_cuda_context_mb": idle_python_cuda_context_mb,
+            "qwen_cleanup_excess_gpu_mb": qwen_cleanup_excess_gpu_mb,
+            "surviving_cuda_tensors_after_cleanup": final_worker.get("surviving_cuda_tensors_after_cleanup", {}),
             **qwen_cleanup,
             "review_segments": review_count,
             "low_confidence_percentage": round(review_count * 100 / len(decisions), 2),
@@ -1831,6 +2100,7 @@ def main() -> int:
             "suspicion_reasons": suspicion_counts,
             "runtime_warnings": warnings,
         },
+        "whisper_corrections": whisper_corrections,
         "segments": output_segments,
     }
     if args.whisper_runtime_status and whisper_indexes:
@@ -1843,6 +2113,8 @@ def main() -> int:
                     "success" if whisper_result.success else whisper_result.failure_reason
                 ),
                 "last_cuda_failure": whisper_result.cuda_failure_reason,
+                "cuda_preflight_skipped": whisper_result.cuda_preflight_skipped,
+                "cuda_preflight_free_mb": whisper_result.cuda_preflight_free_mb,
                 "execution_device": whisper_result.execution_device,
                 "cpu_fallback_available": not args.disable_whisper_cpu_fallback,
             })

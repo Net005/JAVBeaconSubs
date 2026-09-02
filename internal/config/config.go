@@ -62,6 +62,7 @@ type WhisperConfig struct {
 	WhisperDevice     string  `json:"whisper_device"`
 	WhisperCPUTimeout int     `json:"whisper_cpu_timeout_seconds"`
 	WhisperStatusPath string  `json:"whisper_runtime_status_path"`
+	WhisperCUDAMinMB  int     `json:"whisper_cuda_safe_minimum_mb"`
 	ReazonPython      string  `json:"reazon_python"`
 	ReazonScript      string  `json:"reazon_script"`
 	ReazonBatchScript string  `json:"reazon_batch_script"`
@@ -75,6 +76,7 @@ type WhisperConfig struct {
 	Threads           int     `json:"threads"`
 	UseGPU            bool    `json:"use_gpu"`
 	BeamSize          int     `json:"beam_size"`
+	BestOf            int     `json:"best_of"`
 	VAD               bool    `json:"vad"`
 	VADThreshold      float64 `json:"vad_threshold"`
 	MinSpeechMS       int     `json:"vad_min_speech_ms"`
@@ -118,15 +120,22 @@ type PostProcessingConfig struct {
 }
 
 type OutputConfig struct {
-	EnglishSuffix  string `json:"english_suffix"`
-	JapaneseSuffix string `json:"japanese_suffix"`
-	EnglishASS     string `json:"english_ass_suffix"`
-	JapaneseASS    string `json:"japanese_ass_suffix"`
-	ProjectJSON    string `json:"project_json_suffix"`
-	KeepJapanese   bool   `json:"keep_japanese"`
-	Overwrite      bool   `json:"overwrite"`
-	MaxLineChars   int    `json:"max_line_chars"`
-	MaxLines       int    `json:"max_lines"`
+	EnglishSuffix      string  `json:"english_suffix"`
+	JapaneseSuffix     string  `json:"japanese_suffix"`
+	EnglishASS         string  `json:"english_ass_suffix"`
+	JapaneseASS        string  `json:"japanese_ass_suffix"`
+	ProjectJSON        string  `json:"project_json_suffix"`
+	KeepJapanese       bool    `json:"keep_japanese"`
+	Overwrite          bool    `json:"overwrite"`
+	NormalizeSubtitles bool    `json:"subtitle_normalization_enabled"`
+	TargetLineChars    int     `json:"subtitle_target_chars_per_line"`
+	MaxLineChars       int     `json:"max_line_chars"`
+	MaxLines           int     `json:"max_lines"`
+	TargetCueChars     int     `json:"subtitle_target_chars_per_cue"`
+	MaxCueDurationMS   int64   `json:"subtitle_max_duration_ms"`
+	MinCueDurationMS   int64   `json:"subtitle_min_duration_ms"`
+	TargetCPS          float64 `json:"subtitle_target_cps"`
+	WriteProvenance    bool    `json:"subtitle_write_provenance_sidecar"`
 }
 
 func defaults() Config {
@@ -137,22 +146,27 @@ func defaults() Config {
 		TranslationGlossaryPath:   "./javbeaconsubs_translation_glossary_v2.json",
 		Profiles:                  ProfilesConfig{DefaultProfile: "jav", DefaultASRMode: "balanced"},
 		Whisper: WhisperConfig{
-			Backend: "qwen", Mode: "balanced", Profile: "jav", Binary: "whisper-cli", Language: "ja", Threads: 8, UseGPU: true,
+			Backend: "qwen", Mode: "balanced", Profile: "jav", Binary: "whisper-cli", Language: "ja", Threads: 12, UseGPU: true,
 			QwenPython: "python3", QwenScript: "./asr/qwen_pipeline.py", QwenModel: "Qwen/Qwen3-ASR-1.7B", AlignerModel: "Qwen/Qwen3-ForcedAligner-0.6B",
 			QwenRevision: "7278e1e70fe206f11671096ffdd38061171dd6e5", AlignerRevision: "c7cbfc2048c462b0d63a45797104fc9db3ad62b7",
 			ASRBatchSize: 4, ReazonEnabled: false, WhisperEnabled: true,
 			ReazonPython: "python3", ReazonScript: "./asr/reazon_worker.py", ReazonBatchScript: "./asr/reazon_batch_worker.py", ReazonModel: "reazon-research/reazonspeech-nemo-v2",
 			ChunkSeconds: 45, OverlapSeconds: 2, MaxSegmentSec: 30, FallbackWhisper: true,
-			BeamSize: 5, VAD: true, VADThreshold: .42, MinSpeechMS: 100,
+			BeamSize: 5, BestOf: 5, VAD: true, VADThreshold: .42, MinSpeechMS: 100,
 			MinSilenceMS: 500, SpeechPadMS: 320, VADPreRollMS: 350, VADPostRollMS: 600, VADEnergyFactor: 1.45, GPUPreflight: true,
 			GPUFallbackCPU: true, WhisperDevice: "auto", WhisperCPUTimeout: 7200,
+			WhisperCUDAMinMB:  4096,
 			WhisperStatusPath: "./data/whisper-runtime.json",
 			Prompt:            "",
 		},
 		Translation:    TranslationConfig{Mode: "direct", BatchSize: 24, TimeoutSec: 120, ContextGapMS: 8000},
 		PostProcessing: PostProcessingConfig{Mode: "none", TimeoutSec: 60},
-		Output:         OutputConfig{EnglishSuffix: ".en.srt", JapaneseSuffix: ".ja.srt", EnglishASS: ".en.ass", JapaneseASS: ".ja.ass", ProjectJSON: ".subtitles.json", KeepJapanese: false, MaxLineChars: 42, MaxLines: 2},
-		Workers:        1,
+		Output: OutputConfig{
+			EnglishSuffix: ".en.srt", JapaneseSuffix: ".ja.srt", EnglishASS: ".en.ass", JapaneseASS: ".ja.ass", ProjectJSON: ".subtitles.json",
+			KeepJapanese: false, NormalizeSubtitles: true, TargetLineChars: 40, MaxLineChars: 46, MaxLines: 2,
+			TargetCueChars: 80, MaxCueDurationMS: 6000, MinCueDurationMS: 1000, TargetCPS: 17, WriteProvenance: true,
+		},
+		Workers: 1,
 	}
 }
 
@@ -257,6 +271,26 @@ func Load(path string) (Config, error) {
 	if value := os.Getenv("JAVBEACONSUBS_WHISPER_RUNTIME_STATUS_PATH"); value != "" {
 		cfg.Whisper.WhisperStatusPath = value
 	}
+	if value := os.Getenv("JAVBEACONSUBS_WHISPER_THREADS"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			cfg.Whisper.Threads = parsed
+		}
+	}
+	if value := os.Getenv("JAVBEACONSUBS_WHISPER_BEAM_SIZE"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			cfg.Whisper.BeamSize = parsed
+		}
+	}
+	if value := os.Getenv("JAVBEACONSUBS_WHISPER_BEST_OF"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			cfg.Whisper.BestOf = parsed
+		}
+	}
+	if value := os.Getenv("JAVBEACONSUBS_WHISPER_CUDA_SAFE_MINIMUM_MB"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			cfg.Whisper.WhisperCUDAMinMB = parsed
+		}
+	}
 	if value := os.Getenv("JAVBEACONSUBS_VAD_MODEL"); value != "" {
 		cfg.Whisper.VADModel = value
 	}
@@ -353,6 +387,39 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Whisper.WhisperCPUTimeout < 300 {
 		cfg.Whisper.WhisperCPUTimeout = 7200
+	}
+	if cfg.Whisper.Threads < 1 {
+		cfg.Whisper.Threads = 12
+	}
+	if cfg.Whisper.BeamSize < 1 {
+		cfg.Whisper.BeamSize = 5
+	}
+	if cfg.Whisper.BestOf < 1 {
+		cfg.Whisper.BestOf = 5
+	}
+	if cfg.Whisper.WhisperCUDAMinMB < 0 {
+		cfg.Whisper.WhisperCUDAMinMB = 0
+	}
+	if cfg.Output.TargetLineChars < 1 {
+		cfg.Output.TargetLineChars = 40
+	}
+	if cfg.Output.MaxLineChars < cfg.Output.TargetLineChars {
+		cfg.Output.MaxLineChars = 46
+	}
+	if cfg.Output.MaxLines < 1 || cfg.Output.MaxLines > 2 {
+		cfg.Output.MaxLines = 2
+	}
+	if cfg.Output.TargetCueChars < 1 {
+		cfg.Output.TargetCueChars = 80
+	}
+	if cfg.Output.MaxCueDurationMS < 1 {
+		cfg.Output.MaxCueDurationMS = 6000
+	}
+	if cfg.Output.MinCueDurationMS < 1 {
+		cfg.Output.MinCueDurationMS = 1000
+	}
+	if cfg.Output.TargetCPS <= 0 {
+		cfg.Output.TargetCPS = 17
 	}
 	if cfg.Profiles.DefaultProfile == "" {
 		cfg.Profiles.DefaultProfile = cfg.Whisper.Profile

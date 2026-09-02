@@ -19,12 +19,11 @@ import (
 	"sync"
 	"time"
 
+	"javbeaconsubs/internal/buildinfo"
 	"javbeaconsubs/internal/config"
 	catalog "javbeaconsubs/internal/profile"
 	"javbeaconsubs/internal/subtitle"
 )
-
-const marker = "; generated-by=javbeaconsubs-v1"
 
 type ProgressFunc func(phase string, percent int, message string)
 
@@ -36,34 +35,45 @@ type ProcessOptions struct {
 }
 
 type Result struct {
-	Input                        string            `json:"input"`
-	EnglishSRT                   string            `json:"english_srt,omitempty"`
-	JapaneseSRT                  string            `json:"japanese_srt,omitempty"`
-	EnglishASS                   string            `json:"english_ass,omitempty"`
-	JapaneseASS                  string            `json:"japanese_ass,omitempty"`
-	ProjectJSON                  string            `json:"project_json,omitempty"`
-	Segments                     int               `json:"segments"`
-	Skipped                      bool              `json:"skipped,omitempty"`
-	SkipReason                   string            `json:"skip_reason,omitempty"`
-	TranslationInputTokens       int               `json:"translation_input_tokens,omitempty"`
-	TranslationOutputTokens      int               `json:"translation_output_tokens,omitempty"`
-	TranslationTotalTokens       int               `json:"translation_total_tokens,omitempty"`
-	TranslationBatches           int               `json:"translation_batches,omitempty"`
-	TranslationRows              int               `json:"translation_rows,omitempty"`
-	TranslationContextRows       int               `json:"translation_context_rows,omitempty"`
-	TranslationReusedRows        int               `json:"translation_reused_rows,omitempty"`
-	TranslationTokensPerMinute   float64           `json:"translation_tokens_per_source_minute,omitempty"`
-	TranslationCostEstimateUSD   float64           `json:"translation_cost_estimate_usd,omitempty"`
-	TranslationCostPerSourceHour float64           `json:"translation_cost_per_source_hour_usd,omitempty"`
-	Profile                      string            `json:"profile,omitempty"`
-	ASRMode                      string            `json:"asr_mode,omitempty"`
-	RecognitionVocabularyVersion int               `json:"recognition_vocabulary_version,omitempty"`
-	RecognitionVocabularyScopes  []string          `json:"recognition_vocabulary_scopes,omitempty"`
-	TranslationGlossaryVersion   int               `json:"translation_glossary_version,omitempty"`
-	TranslationGlossaryScopes    []string          `json:"translation_glossary_scopes,omitempty"`
-	PipelineVersion              string            `json:"pipeline_version,omitempty"`
-	Models                       map[string]string `json:"models,omitempty"`
-	DiagnosticSummary            map[string]any    `json:"diagnostic_summary,omitempty"`
+	Input                        string               `json:"input"`
+	EnglishSRT                   string               `json:"english_srt,omitempty"`
+	JapaneseSRT                  string               `json:"japanese_srt,omitempty"`
+	EnglishSRTProvenance         string               `json:"english_srt_provenance,omitempty"`
+	JapaneseSRTProvenance        string               `json:"japanese_srt_provenance,omitempty"`
+	EnglishASS                   string               `json:"english_ass,omitempty"`
+	JapaneseASS                  string               `json:"japanese_ass,omitempty"`
+	ProjectJSON                  string               `json:"project_json,omitempty"`
+	Segments                     int                  `json:"segments"`
+	Skipped                      bool                 `json:"skipped,omitempty"`
+	SkipReason                   string               `json:"skip_reason,omitempty"`
+	TranslationInputTokens       int                  `json:"translation_input_tokens,omitempty"`
+	TranslationOutputTokens      int                  `json:"translation_output_tokens,omitempty"`
+	TranslationTotalTokens       int                  `json:"translation_total_tokens,omitempty"`
+	TranslationBatches           int                  `json:"translation_batches,omitempty"`
+	TranslationRows              int                  `json:"translation_rows,omitempty"`
+	TranslationContextRows       int                  `json:"translation_context_rows,omitempty"`
+	TranslationReusedRows        int                  `json:"translation_reused_rows,omitempty"`
+	TranslationTokensPerMinute   float64              `json:"translation_tokens_per_source_minute,omitempty"`
+	TranslationCostEstimateUSD   float64              `json:"translation_cost_estimate_usd,omitempty"`
+	TranslationCostPerSourceHour float64              `json:"translation_cost_per_source_hour_usd,omitempty"`
+	Profile                      string               `json:"profile,omitempty"`
+	ASRMode                      string               `json:"asr_mode,omitempty"`
+	RecognitionVocabularyVersion int                  `json:"recognition_vocabulary_version,omitempty"`
+	RecognitionVocabularyScopes  []string             `json:"recognition_vocabulary_scopes,omitempty"`
+	TranslationGlossaryVersion   int                  `json:"translation_glossary_version,omitempty"`
+	TranslationGlossaryScopes    []string             `json:"translation_glossary_scopes,omitempty"`
+	PipelineVersion              string               `json:"pipeline_version,omitempty"`
+	Models                       map[string]string    `json:"models,omitempty"`
+	DiagnosticSummary            map[string]any       `json:"diagnostic_summary,omitempty"`
+	SubtitleProvenance           []ProvenanceArtifact `json:"subtitle_provenance,omitempty"`
+	Warnings                     []string             `json:"warnings,omitempty"`
+}
+
+type ProvenanceArtifact struct {
+	SubtitlePath string                    `json:"subtitle_path"`
+	SidecarPath  string                    `json:"sidecar_path,omitempty"`
+	Status       subtitle.ProvenanceStatus `json:"status"`
+	Metadata     subtitle.Provenance       `json:"metadata"`
 }
 
 type Runner struct {
@@ -126,7 +136,7 @@ func (r *Runner) Check() map[string]any {
 	whisperPath, whisperErr := exec.LookPath(r.cfg.Whisper.Binary)
 	ffmpegPath, ffmpegErr := exec.LookPath("ffmpeg")
 	_, modelErr := os.Stat(r.cfg.Whisper.Model)
-	result := map[string]any{"ready": whisperErr == nil && ffmpegErr == nil && modelErr == nil, "translation_mode": r.cfg.Translation.Mode}
+	result := map[string]any{"ready": whisperErr == nil && ffmpegErr == nil && modelErr == nil, "translation_mode": r.cfg.Translation.Mode, "version": buildinfo.Version}
 	result["asr_backend"] = r.cfg.Whisper.Backend
 	if r.cfg.Whisper.Backend == "qwen" {
 		pythonPath, pythonErr := exec.LookPath(r.cfg.Whisper.QwenPython)
@@ -231,7 +241,7 @@ func (r *Runner) applyCatalogs(title string) {
 }
 
 func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapanese bool, progress ProgressFunc, memory *TranslationMemory) (Result, error) {
-	result := Result{Input: input, Profile: r.cfg.Whisper.Profile, ASRMode: r.cfg.Whisper.Mode, PipelineVersion: "qwen-first-v2.4", Models: map[string]string{
+	result := Result{Input: input, Profile: r.cfg.Whisper.Profile, ASRMode: r.cfg.Whisper.Mode, PipelineVersion: "qwen-first-v2.5", Models: map[string]string{
 		"asr_primary":      modelIdentity(r.cfg.Whisper.QwenModel, r.cfg.Whisper.QwenRevision),
 		"asr_retry_engine": modelIdentity(r.cfg.Whisper.QwenModel, r.cfg.Whisper.QwenRevision),
 		"aligner":          modelIdentity(r.cfg.Whisper.AlignerModel, r.cfg.Whisper.AlignerRevision),
@@ -260,6 +270,7 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 			result.JapaneseSRT = existingArtifact(japanesePath)
 			result.JapaneseASS = existingArtifact(japaneseASSPath)
 			result.ProjectJSON = existingArtifact(projectPath)
+			result.loadExistingProvenance(projectPath, englishPath, japanesePath)
 			result.Skipped = true
 			result.SkipReason = "English subtitles already exist; enable Replace existing subtitles to rerun recognition or change accuracy"
 			return result, nil
@@ -309,13 +320,18 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 			result.DiagnosticSummary = metadata.Metrics
 		}
 	}
+	japaneseOutput, err := r.normalizeSubtitles("Japanese", input, segments)
+	if err != nil {
+		return result, err
+	}
+	transcriptionBackend := r.transcriptionBackend(result)
 
 	if keepJapanese {
 		progress("subtitle", 72, "Writing Japanese transcript")
-		if err := atomicWrite(japanesePath, subtitle.RenderSRT(segments, 30, r.cfg.Output.MaxLines, marker)); err != nil {
+		if err := r.writeSRT(&result, japanesePath, "ja", transcriptionBackend, "", japaneseOutput); err != nil {
 			return result, err
 		}
-		if err := atomicWrite(japaneseASSPath, subtitle.RenderASS(segments, 30, r.cfg.Output.MaxLines, filepath.Base(input)+" Japanese")); err != nil {
+		if err := atomicWrite(japaneseASSPath, subtitle.RenderASS(japaneseOutput, r.cfg.Output.MaxLineChars, r.cfg.Output.MaxLines, filepath.Base(input)+" Japanese")); err != nil {
 			return result, err
 		}
 		result.JapaneseSRT = japanesePath
@@ -357,17 +373,18 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 	case "none":
 		result.JapaneseSRT = japanesePath
 		if !keepJapanese {
-			if err := atomicWrite(japanesePath, subtitle.RenderSRT(segments, 30, r.cfg.Output.MaxLines, marker)); err != nil {
+			if err := r.writeSRT(&result, japanesePath, "ja", transcriptionBackend, "", japaneseOutput); err != nil {
 				return result, err
 			}
-			if err := atomicWrite(japaneseASSPath, subtitle.RenderASS(segments, 30, r.cfg.Output.MaxLines, filepath.Base(input)+" Japanese")); err != nil {
+			if err := atomicWrite(japaneseASSPath, subtitle.RenderASS(japaneseOutput, r.cfg.Output.MaxLineChars, r.cfg.Output.MaxLines, filepath.Base(input)+" Japanese")); err != nil {
 				return result, err
 			}
 		}
 		result.JapaneseASS = japaneseASSPath
 		project := map[string]any{
-			"pipeline_version": result.PipelineVersion, "input": input, "language": "ja", "japanese": segments, "profile": r.cfg.Whisper.Profile, "asr_mode": r.cfg.Whisper.Mode,
+			"generator_version": buildinfo.Version, "pipeline_version": result.PipelineVersion, "input": input, "language": "ja", "japanese": japaneseOutput, "profile": r.cfg.Whisper.Profile, "asr_mode": r.cfg.Whisper.Mode,
 			"models":                 result.Models,
+			"subtitle_provenance":    result.SubtitleProvenance,
 			"diagnostic_summary":     result.DiagnosticSummary,
 			"recognition_vocabulary": map[string]any{"format": catalog.RecognitionFormat, "version": result.RecognitionVocabularyVersion, "active_scopes": result.RecognitionVocabularyScopes},
 			"translation_glossary":   map[string]any{"format": catalog.GlossaryFormat, "version": result.TranslationGlossaryVersion, "active_scopes": result.TranslationGlossaryScopes},
@@ -388,21 +405,26 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 			return result, err
 		}
 		result.ProjectJSON = projectPath
-		result.Segments = len(segments)
+		result.Segments = len(japaneseOutput)
 		return result, nil
 	}
 
 	progress("subtitle", 95, "Writing English subtitles")
-	if err := atomicWrite(englishPath, subtitle.RenderSRT(subtitle.Clean(english), r.cfg.Output.MaxLineChars, r.cfg.Output.MaxLines, marker)); err != nil {
+	englishOutput, err := r.normalizeSubtitles("English", input, subtitle.Clean(english))
+	if err != nil {
 		return result, err
 	}
-	if err := atomicWrite(englishASSPath, subtitle.RenderASS(subtitle.Clean(english), r.cfg.Output.MaxLineChars, r.cfg.Output.MaxLines, filepath.Base(input)+" English")); err != nil {
+	if err := r.writeSRT(&result, englishPath, "en", transcriptionBackend, r.translationBackend(), englishOutput); err != nil {
+		return result, err
+	}
+	if err := atomicWrite(englishASSPath, subtitle.RenderASS(englishOutput, r.cfg.Output.MaxLineChars, r.cfg.Output.MaxLines, filepath.Base(input)+" English")); err != nil {
 		return result, err
 	}
 	project := map[string]any{
-		"pipeline_version": result.PipelineVersion, "input": input, "language": "ja", "profile": r.cfg.Whisper.Profile, "asr_mode": r.cfg.Whisper.Mode,
-		"japanese": segments, "english": subtitle.Clean(english),
+		"generator_version": buildinfo.Version, "pipeline_version": result.PipelineVersion, "input": input, "language": "ja", "profile": r.cfg.Whisper.Profile, "asr_mode": r.cfg.Whisper.Mode,
+		"japanese": japaneseOutput, "english": englishOutput,
 		"models":                 result.Models,
+		"subtitle_provenance":    result.SubtitleProvenance,
 		"diagnostic_summary":     result.DiagnosticSummary,
 		"recognition_vocabulary": map[string]any{"format": catalog.RecognitionFormat, "version": result.RecognitionVocabularyVersion, "active_scopes": result.RecognitionVocabularyScopes},
 		"translation_glossary":   map[string]any{"format": catalog.GlossaryFormat, "version": result.TranslationGlossaryVersion, "active_scopes": result.TranslationGlossaryScopes},
@@ -430,7 +452,7 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 	result.EnglishSRT = englishPath
 	result.EnglishASS = englishASSPath
 	result.ProjectJSON = projectPath
-	result.Segments = len(english)
+	result.Segments = len(englishOutput)
 	progress("complete", 100, "Subtitle generation complete")
 	return result, nil
 }
@@ -441,6 +463,123 @@ func existingArtifact(path string) string {
 		return ""
 	}
 	return path
+}
+
+func (r *Runner) normalizeSubtitles(track, input string, segments []subtitle.Segment) ([]subtitle.Segment, error) {
+	options := subtitle.NormalizeOptions{
+		Enabled: r.cfg.Output.NormalizeSubtitles, TargetCharsPerLine: r.cfg.Output.TargetLineChars,
+		MaxCharsPerLine: r.cfg.Output.MaxLineChars, MaxLines: r.cfg.Output.MaxLines,
+		TargetCharsPerCue: r.cfg.Output.TargetCueChars, MaxCueDurationMS: r.cfg.Output.MaxCueDurationMS,
+		MinCueDurationMS: r.cfg.Output.MinCueDurationMS, TargetCPS: r.cfg.Output.TargetCPS,
+	}
+	normalized, changes, err := subtitle.NormalizeSubtitles(segments, options)
+	if err != nil {
+		return nil, fmt.Errorf("normalize %s subtitles for %s: %w", track, input, err)
+	}
+	if r.cfg.Whisper.DebugMode {
+		for _, change := range changes {
+			r.log.Debug("subtitle normalizer", "track", track, "source_index", change.SourceIndex,
+				"duration_ms", change.DurationMS, "characters", change.Characters,
+				"output_cues", change.OutputCues, "skipped", change.Skipped)
+		}
+	}
+	return normalized, nil
+}
+
+func (r *Runner) writeSRT(result *Result, path, language, transcriptionBackend, translationBackend string, segments []subtitle.Segment) error {
+	content := []byte(subtitle.RenderSRT(segments, r.cfg.Output.MaxLineChars, r.cfg.Output.MaxLines))
+	if err := atomicWrite(path, string(content)); err != nil {
+		return err
+	}
+	metadata := subtitle.NewProvenance(
+		buildinfo.Version, language, transcriptionBackend, translationBackend, path, content,
+	)
+	artifact := ProvenanceArtifact{SubtitlePath: path, Status: subtitle.ProvenanceValid, Metadata: metadata}
+	if r.cfg.Output.WriteProvenance {
+		if err := subtitle.WriteProvenanceSidecar(path, metadata); err != nil {
+			message := fmt.Sprintf("write subtitle provenance for %s: %v", filepath.Base(path), err)
+			result.Warnings = append(result.Warnings, message)
+			r.log.Warn("subtitle provenance sidecar failed", "file", path, "error", err)
+		} else {
+			artifact.SidecarPath = subtitle.SidecarPath(path)
+			if language == "en" {
+				result.EnglishSRTProvenance = artifact.SidecarPath
+			} else if language == "ja" {
+				result.JapaneseSRTProvenance = artifact.SidecarPath
+			}
+			r.log.Debug("subtitle provenance", "file", path, "sha256", metadata.SubtitleSHA256, "sidecar", artifact.SidecarPath)
+		}
+	}
+	result.SubtitleProvenance = append(result.SubtitleProvenance, artifact)
+	return nil
+}
+
+func (result *Result) loadExistingProvenance(projectPath string, paths ...string) {
+	projectRecords := make(map[string]ProvenanceArtifact)
+	if data, err := os.ReadFile(projectPath); err == nil {
+		var project struct {
+			SubtitleProvenance []ProvenanceArtifact `json:"subtitle_provenance"`
+		}
+		if json.Unmarshal(data, &project) == nil {
+			for _, artifact := range project.SubtitleProvenance {
+				projectRecords[filepath.Clean(artifact.SubtitlePath)] = artifact
+			}
+		}
+	}
+	for _, path := range paths {
+		if existingArtifact(path) == "" {
+			continue
+		}
+		if artifact, ok := projectRecords[filepath.Clean(path)]; ok {
+			status, err := subtitle.VerifyProvenanceRecord(path, artifact.Metadata)
+			if err == nil {
+				artifact.Status = status
+				if existingArtifact(subtitle.SidecarPath(path)) == "" {
+					artifact.SidecarPath = ""
+				}
+				result.addExistingProvenance(path, artifact)
+				continue
+			}
+		}
+		status, metadata, err := subtitle.VerifyProvenance(path)
+		if err != nil || metadata == nil {
+			continue
+		}
+		sidecar := ""
+		if existingArtifact(subtitle.SidecarPath(path)) != "" {
+			sidecar = subtitle.SidecarPath(path)
+		}
+		result.addExistingProvenance(path, ProvenanceArtifact{
+			SubtitlePath: path, SidecarPath: sidecar, Status: status, Metadata: *metadata,
+		})
+	}
+}
+
+func (result *Result) addExistingProvenance(path string, artifact ProvenanceArtifact) {
+	result.SubtitleProvenance = append(result.SubtitleProvenance, artifact)
+	if strings.HasSuffix(path, ".en.srt") {
+		result.EnglishSRTProvenance = artifact.SidecarPath
+	} else if strings.HasSuffix(path, ".ja.srt") {
+		result.JapaneseSRTProvenance = artifact.SidecarPath
+	}
+}
+
+func (r *Runner) transcriptionBackend(result Result) string {
+	if value := result.Models["asr_primary"]; value != "" {
+		return value
+	}
+	return r.cfg.Whisper.Backend
+}
+
+func (r *Runner) translationBackend() string {
+	switch r.cfg.Translation.Mode {
+	case "contextual":
+		return r.cfg.Translation.Model
+	case "direct":
+		return "whisper.cpp:" + filepath.Base(r.cfg.Whisper.Model)
+	default:
+		return ""
+	}
 }
 
 func (r *Runner) transcribe(ctx context.Context, wav, prefix string, translate, useGPU bool, report func(int)) ([]subtitle.Segment, error) {
@@ -483,6 +622,10 @@ func (r *Runner) transcribeQwen(ctx context.Context, wav, prefix string, useGPU 
 		"--whisper-binary", c.Binary, "--whisper-model", c.Model,
 		"--whisper-device", c.WhisperDevice,
 		"--whisper-cpu-timeout", strconv.Itoa(c.WhisperCPUTimeout),
+		"--whisper-threads", strconv.Itoa(c.Threads),
+		"--whisper-beam-size", strconv.Itoa(c.BeamSize),
+		"--whisper-best-of", strconv.Itoa(c.BestOf),
+		"--whisper-cuda-safe-minimum-mb", strconv.Itoa(c.WhisperCUDAMinMB),
 		"--whisper-runtime-status", c.WhisperStatusPath,
 		"--batch-size", strconv.Itoa(c.ASRBatchSize),
 		"--vad-threshold", fmt.Sprintf("%.3f", c.VADEnergyFactor),
@@ -540,7 +683,7 @@ func (r *Runner) transcribeQwen(ctx context.Context, wav, prefix string, useGPU 
 	}
 	segments := make([]subtitle.Segment, 0, len(doc.Segments))
 	for _, item := range doc.Segments {
-		segments = append(segments, subtitle.Segment{StartMS: item.StartMS, EndMS: item.EndMS, Text: item.Text})
+		segments = append(segments, subtitle.Segment{StartMS: item.StartMS, EndMS: item.EndMS, Text: item.Text, TimingAnchors: item.TimingAnchors})
 	}
 	if err := validateSegments(segments, doc.DurationMS, int64(c.MaxSegmentSec)*1000); err != nil {
 		return nil, fmt.Errorf("validate Qwen pipeline output: %w", err)
@@ -553,9 +696,10 @@ type qwenDocument struct {
 	ProcessedMS int64  `json:"processed_ms"`
 	Language    string `json:"language"`
 	Segments    []struct {
-		StartMS int64  `json:"start_ms"`
-		EndMS   int64  `json:"end_ms"`
-		Text    string `json:"text"`
+		StartMS       int64   `json:"start_ms"`
+		EndMS         int64   `json:"end_ms"`
+		Text          string  `json:"text"`
+		TimingAnchors []int64 `json:"timing_anchors_ms,omitempty"`
 	} `json:"segments"`
 }
 

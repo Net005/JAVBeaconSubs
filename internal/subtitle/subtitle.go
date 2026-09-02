@@ -3,14 +3,16 @@ package subtitle
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"unicode"
 )
 
 type Segment struct {
-	StartMS int64  `json:"start_ms"`
-	EndMS   int64  `json:"end_ms"`
-	Text    string `json:"text"`
+	StartMS       int64   `json:"start_ms"`
+	EndMS         int64   `json:"end_ms"`
+	Text          string  `json:"text"`
+	TimingAnchors []int64 `json:"timing_anchors_ms,omitempty"`
 }
 
 var (
@@ -77,12 +79,9 @@ func normalize(s string) string {
 	}, s)
 }
 
-func RenderSRT(segments []Segment, maxChars, maxLines int, marker string) string {
+func RenderSRT(segments []Segment, maxChars, maxLines int) string {
 	var b strings.Builder
-	if marker != "" {
-		fmt.Fprintf(&b, "%s\n", marker)
-	}
-	for i, seg := range segments {
+	for i, seg := range strictSegments(segments) {
 		fmt.Fprintf(&b, "%d\n%s --> %s\n%s\n\n", i+1, timestamp(seg.StartMS), timestamp(seg.EndMS), reflow(seg.Text, maxChars, maxLines))
 	}
 	return b.String()
@@ -94,12 +93,33 @@ func RenderASS(segments []Segment, maxChars, maxLines int, title string) string 
 	b.WriteString("[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
 	b.WriteString("Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00101010,&H80000000,-1,0,0,0,100,100,0,0,1,2,1,2,60,60,42,1\n\n")
 	b.WriteString("[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
-	for _, seg := range segments {
+	for _, seg := range strictSegments(segments) {
 		text := strings.ReplaceAll(reflow(seg.Text, maxChars, maxLines), "\n", `\N`)
 		text = strings.ReplaceAll(text, "{", `\{`)
 		fmt.Fprintf(&b, "Dialogue: 0,%s,%s,Default,,0,0,0,,%s\n", assTimestamp(seg.StartMS), assTimestamp(seg.EndMS), text)
 	}
 	return b.String()
+}
+
+func strictSegments(input []Segment) []Segment {
+	segments := append([]Segment(nil), input...)
+	sort.SliceStable(segments, func(i, j int) bool {
+		if segments[i].StartMS == segments[j].StartMS {
+			return segments[i].EndMS < segments[j].EndMS
+		}
+		return segments[i].StartMS < segments[j].StartMS
+	})
+	output := segments[:0]
+	for _, segment := range segments {
+		// Serialization must never invent or move trustworthy ASR/alignment
+		// timestamps. Recognition cleanup happens earlier in the pipeline.
+		segment.Text = strings.TrimSpace(segment.Text)
+		if segment.EndMS <= segment.StartMS || !HasMeaningfulTranscript(segment.Text) {
+			continue
+		}
+		output = append(output, segment)
+	}
+	return output
 }
 
 func timestamp(ms int64) string {
@@ -129,25 +149,7 @@ func assTimestamp(ms int64) string {
 }
 
 func reflow(text string, maxChars, maxLines int) string {
-	if maxChars <= 0 || maxLines <= 0 || len([]rune(text)) <= maxChars {
-		return text
-	}
-	words := strings.Fields(text)
-	if len(words) < 2 {
-		return text
-	}
-	lines := []string{""}
-	for _, word := range words {
-		last := len(lines) - 1
-		candidate := word
-		if lines[last] != "" {
-			candidate = lines[last] + " " + word
-		}
-		if len([]rune(candidate)) <= maxChars || len(lines) == maxLines {
-			lines[last] = candidate
-		} else {
-			lines = append(lines, word)
-		}
-	}
-	return strings.Join(lines, "\n")
+	return wrapTwoLines(text, NormalizeOptions{
+		Enabled: true, TargetCharsPerLine: maxChars, MaxCharsPerLine: maxChars, MaxLines: maxLines,
+	})
 }

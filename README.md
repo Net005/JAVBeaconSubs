@@ -2,6 +2,10 @@
 
 A Go subtitle service optimized for Japanese dialogue in JAV, GIGA/tokusatsu heroine action, and similarly difficult material. It accepts a browser upload, exact media files, or folders; queues jobs; extracts clean mono audio with FFmpeg; runs a Japanese-forced Qwen-first recognition pipeline; and writes atomic SRT, ASS, and diagnostic JSON outputs. Jobs survive restarts in an embedded SQLite database.
 
+Generated SRT files are strict subtitle payloads beginning directly with cue `1`; generator comments are intentionally excluded because non-standard headers can prevent players such as Haruna from loading them. Readability normalization runs after translation, preserves every word, and uses Qwen forced-alignment anchors when an oversized cue can safely be split. Without trustworthy anchors it wraps text only and never invents timing from character counts.
+
+Generator identity and integrity live primarily in the existing `.subtitles.json` project/job metadata. When enabled, a portable `<name>.srt.json` sidecar contains the same `javbeaconsubs.subtitle-provenance.v1` record and SHA-256 of the exact SRT bytes. A matching hash is `valid`; edited subtitles are `modified`; the old first-line marker is recognized read-only as `legacy` and is never written to new files.
+
 ## Why this pipeline is different
 
 The old implementation auto-detected the language, removed short lines, and sent isolated fragments to MyMemory/Google-free translation. The primary pipeline now forces Japanese in Qwen3-ASR-1.7B, uses recall-biased padded dialogue detection, validates suspicious text before timing it, and rejects impossible or out-of-order timestamps instead of silently collapsing hours of audio into one subtitle.
@@ -114,7 +118,9 @@ The job form has two explicit modes:
 
 The canonical content profiles are `standard`, `jav`, and `giga`; legacy `tokusatsu` and `akiba` inputs normalize to `giga`. Their Qwen hints are deliberately minimal Japanese-only strings to prevent prompt text leaking into subtitles. Profile and recognition accuracy can each be Auto, explicitly selected, or resolved independently per file by case-insensitive path mappings in the Profiles tab. **Also keep Japanese** writes `.ja.srt` and `.ja.ass` from the canonical Japanese transcript without another ASR pass.
 
-Pipeline `qwen-first-v2.4` rejects punctuation-only ASR output, splits oversized VAD and fallback regions near local energy valleys, and bounds tiny unaligned vocalizations around the strongest speech-like activity. Fast uses Qwen plus alignment only, except its existing no-context prompt-leak recovery. Balanced retries genuinely suspicious lexical Qwen output once without context, then sends only strong unresolved lexical candidates to one supported multi-file Whisper Large-v3 process. High Accuracy additionally verifies a controlled set of long or medium-confidence lexical lines. Vocalizations and timing/alignment-only problems never invoke Whisper. Qwen is explicitly deleted and CUDA caches are collected before Whisper; the aligner loads only after Whisper exits. With `JAVBEACONSUBS_WHISPER_DEVICE=auto`, a CUDA allocation/initialization failure retries the whole selective batch once on CPU, using `JAVBEACONSUBS_WHISPER_CPU_TIMEOUT_SECONDS` (7200 by default). Diagnostics distinguish CUDA OOM, missing models, invalid WAVs, process/timeout/parser failures, and genuinely empty output while recording VRAM at every heavyweight phase.
+Pipeline `qwen-first-v2.5` rejects punctuation-only ASR output, splits oversized VAD and fallback regions near local energy valleys, and bounds tiny unaligned vocalizations around the strongest speech-like activity. Fast uses Qwen plus alignment only, except its existing no-context prompt-leak recovery. Balanced retries genuinely suspicious lexical Qwen output once without context, then sends only strong unresolved lexical candidates to one supported multi-file Whisper Large-v3 process. High Accuracy additionally verifies a controlled set of long or medium-confidence lexical lines. Vocalizations and timing/alignment-only problems never invoke Whisper. Qwen primary and retry phases share one terminating child process, so its complete PyTorch CUDA context is gone before Whisper starts; the aligner loads only after Whisper exits. With `JAVBEACONSUBS_WHISPER_DEVICE=auto`, at least 4096 MB free VRAM is required before attempting full Large-v3 CUDA, otherwise the selective batch goes directly to the reliable CPU path. A CUDA allocation/initialization failure still retries the whole batch once on CPU using `JAVBEACONSUBS_WHISPER_CPU_TIMEOUT_SECONDS` (7200 by default).
+
+Whisper CPU fallback defaults to 12 threads after a focused 4/8/12/16-thread benchmark on a 16-logical-CPU host. Decode remains at beam 5/best-of 5 because the faster settings were not yet proven against both full correction sets. Tune `JAVBEACONSUBS_WHISPER_THREADS`, `JAVBEACONSUBS_WHISPER_BEAM_SIZE`, and `JAVBEACONSUBS_WHISPER_BEST_OF` explicitly if your hardware has been benchmarked. Diagnostics record these effective values, model path/size/quantization, CUDA preflight, allocator state, process-exit cleanup, and fallback value grouped by reason.
 
 Compare an old and new debug export without printing dialogue using `PYTHONPATH=asr python3 asr/compare_diagnostics.py old.subtitles.json new.subtitles.json`. The report includes long/tiny/punctuation row counts, fallback benefit, alignment totals, runtime, and RTF.
 
@@ -148,7 +154,7 @@ If `translation.base_url` is changed to `https://api.openai.com/v1` and an OpenA
 
 ## CUDA recovery and VRAM behavior
 
-Each media file runs in a separate ASR worker process. When it exits—even after cancellation—the OS and NVIDIA driver destroy that process's CUDA context. Within a normal job, Qwen ASR is explicitly released before the batched Whisper fallback is started, Whisper exits before the forced aligner loads, and CUDA caches and IPC allocations are cleared between phases. Models are reused across the relevant segment batch but are not kept resident between jobs. The service also probes `nvidia-smi` before inference and logs memory state afterward.
+Each media file runs in a separate ASR pipeline process, and Qwen primary/retry inference additionally shares one short-lived child process. Child exit destroys the otherwise persistent PyTorch CUDA allocator/context before the batched Whisper process starts; Whisper exits before the forced aligner loads. Models are reused across each relevant segment batch but are not kept resident between phases or jobs. The service records `nvidia-smi`, PyTorch allocated/reserved/peak memory, an idle CUDA-context baseline, cleanup excess, and a debug-only metadata sweep of surviving tensors without retaining tensor data.
 
 Automatic GPU reset is disabled by default because NVIDIA refuses to reset a primary/display GPU. If the Qwen worker fails, its process exit first releases its CUDA context; configured CPU and whole-file compatibility fallbacks can then run. Whisper output is rejected when a segment exceeds the configured safety limit, preventing the observed multi-hour tail from being reported as successful.
 
@@ -211,7 +217,7 @@ The response is `202 Accepted`, includes the job, and sets `Location: /api/v1/jo
 - `GET /api/v1/health` — dependency and model readiness.
 - `GET /api/v1/settings` and `PUT /api/v1/settings` — read/update persistent translation and post-processing settings (credentials are write-only).
 
-The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, `overwrite`, `keep_japanese`, `asr_mode`, `profile`, and `debug_mode` fields. The legacy `asr_profile` field remains accepted as an alias. For JSON and multipart jobs, omitting `keep_japanese` uses `output.keep_japanese` from service configuration. Generated files are available through `GET /api/v1/jobs/{id}/outputs/{zeroBasedResultIndex}/{en|ja|en-ass|ja-ass|json}`.
+The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, `overwrite`, `keep_japanese`, `asr_mode`, `profile`, and `debug_mode` fields. The legacy `asr_profile` field remains accepted as an alias. For JSON and multipart jobs, omitting `keep_japanese` uses `output.keep_japanese` from service configuration. Generated files are available through `GET /api/v1/jobs/{id}/outputs/{zeroBasedResultIndex}/{en|ja|en-ass|ja-ass|json|en-provenance|ja-provenance}`.
 
 If `callback_url` is supplied, the terminal job document is POSTed there. `external_id` round-trips unchanged so JAVBeacon can associate it with its own movie or task record.
 
@@ -220,6 +226,10 @@ External clients send `Authorization: Bearer …` or `X-API-Key: …` to `/api/*
 ## Backups and updates
 
 Back up `JAVBEACONSUBS_DATA_PATH` to preserve SQLite history and uploaded files. SQLite's main database, WAL, and SHM files must be captured together while the service is running; the simplest consistent backup is to stop the container first. `docker compose down` preserves both host directories. Models are ordinary files under `JAVBEACONSUBS_MODELS_PATH`.
+
+## Versioned releases
+
+`VERSION` is the release source for normal `main` builds. To publish a version, update `VERSION` and `CHANGELOG.md`, commit those changes, then create and push the matching `v` tag (for example `v0.3.0`). The publish workflow injects that version into the application, publishes `latest`, commit, and semantic-version GHCR tags, and creates the matching GitHub release. A tag version should always match `VERSION`.
 
 ## Quality profile
 
