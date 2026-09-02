@@ -44,6 +44,7 @@ type Result struct {
 	ProjectJSON                  string            `json:"project_json,omitempty"`
 	Segments                     int               `json:"segments"`
 	Skipped                      bool              `json:"skipped,omitempty"`
+	SkipReason                   string            `json:"skip_reason,omitempty"`
 	TranslationInputTokens       int               `json:"translation_input_tokens,omitempty"`
 	TranslationOutputTokens      int               `json:"translation_output_tokens,omitempty"`
 	TranslationTotalTokens       int               `json:"translation_total_tokens,omitempty"`
@@ -253,8 +254,13 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 	projectPath := base + r.cfg.Output.ProjectJSON
 	if !overwrite && !r.cfg.Output.Overwrite {
 		if _, err := os.Stat(englishPath); err == nil {
-			result.EnglishSRT = englishPath
+			result.EnglishSRT = existingArtifact(englishPath)
+			result.EnglishASS = existingArtifact(englishASSPath)
+			result.JapaneseSRT = existingArtifact(japanesePath)
+			result.JapaneseASS = existingArtifact(japaneseASSPath)
+			result.ProjectJSON = existingArtifact(projectPath)
 			result.Skipped = true
+			result.SkipReason = "English subtitles already exist; enable Replace existing subtitles to rerun recognition or change accuracy"
 			return result, nil
 		}
 	}
@@ -426,6 +432,14 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 	result.Segments = len(english)
 	progress("complete", 100, "Subtitle generation complete")
 	return result, nil
+}
+
+func existingArtifact(path string) string {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return ""
+	}
+	return path
 }
 
 func (r *Runner) transcribe(ctx context.Context, wav, prefix string, translate, useGPU bool, report func(int)) ([]subtitle.Segment, error) {

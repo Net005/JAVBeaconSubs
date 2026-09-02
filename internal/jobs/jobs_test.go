@@ -8,12 +8,30 @@ import (
 	"testing"
 
 	"javbeaconsubs/internal/config"
+	"javbeaconsubs/internal/engine"
 )
 
 type testPersistence struct{}
 
 func (testPersistence) Save(*Job) error       { return nil }
 func (testPersistence) Load() ([]*Job, error) { return nil, nil }
+
+func TestCompletionMessageReportsSkippedExistingFiles(t *testing.T) {
+	results := []engine.Result{{Skipped: true}, {Skipped: true}}
+	if !allResultsSkipped(results) {
+		t.Fatal("all-skipped results were not recognized")
+	}
+	got := completionMessage(results)
+	if got != "Skipped 2 existing file(s); enable Replace existing subtitles to rerun recognition or change accuracy" {
+		t.Fatalf("completion message = %q", got)
+	}
+	if got := completionMessage([]engine.Result{{}, {Skipped: true}}); got != "Generated 1 file(s); skipped 1 existing file(s)" {
+		t.Fatalf("mixed completion message = %q", got)
+	}
+	if allResultsSkipped([]engine.Result{{}, {Skipped: true}}) || allResultsSkipped(nil) {
+		t.Fatal("mixed or empty results were marked all-skipped")
+	}
+}
 
 func TestDiscoverSpecificFileAndFolder(t *testing.T) {
 	root := t.TempDir()
