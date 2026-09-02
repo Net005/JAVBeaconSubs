@@ -28,7 +28,7 @@ from typing import Any
 import numpy as np
 
 
-PIPELINE_VERSION = "qwen-first-v2.2"
+PIPELINE_VERSION = "qwen-first-v2.3"
 JAPANESE = "Japanese"
 PROFILE_CONTEXT = {
     "standard": "日本語",
@@ -107,7 +107,21 @@ class Decision:
     whisper_candidate_valid: bool = False
     whisper_rejection_reason: str = "not_attempted"
     fallback_audio: dict[str, Any] = field(default_factory=dict)
+    whisper_execution: dict[str, Any] = field(default_factory=dict)
     aligned_items: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class WhisperBatchResult:
+    texts: dict[int, str] = field(default_factory=dict)
+    candidate_errors: dict[int, str] = field(default_factory=dict)
+    candidate_details: dict[int, dict[str, Any]] = field(default_factory=dict)
+    exit_code: int | None = None
+    success: bool = False
+    stderr: str = ""
+    stdout_summary: str = ""
+    duration_seconds: float = 0.0
+    failure_reason: str = "not_attempted"
 
 
 def normalize_text(value: str) -> str:
@@ -618,14 +632,17 @@ def qwen_retry_improves(
 ) -> bool:
     if not meaningful_candidate(retry):
         return False
+    original_critical = set(original.suspicion) & (LEXICAL_REASONS | {"prompt_leakage"})
+    retry_critical = set(retry.suspicion) & (LEXICAL_REASONS | {"prompt_leakage"})
+    # Prompt echoes can be much longer than the real utterance. Resolve that
+    # defect before applying the normal content-loss guard, otherwise clean
+    # short retries are rejected merely because they removed leaked prompt.
+    if "prompt_leakage" in original_critical and "prompt_leakage" not in retry_critical:
+        return True
     original_count = transcript_features(original.text)["meaningful_char_count"]
     retry_count = transcript_features(retry.text)["meaningful_char_count"]
     if original_count >= 2 and retry_count < original_count * 0.55:
         return False
-    original_critical = set(original.suspicion) & (LEXICAL_REASONS | {"prompt_leakage"})
-    retry_critical = set(retry.suspicion) & (LEXICAL_REASONS | {"prompt_leakage"})
-    if "prompt_leakage" in original_critical and "prompt_leakage" not in retry_critical:
-        return True
     if not retry_critical and original_critical:
         return True
     return candidate_score(retry, duration, profile_terms, title_terms) >= candidate_score(
@@ -695,17 +712,36 @@ def whisper_batch_transcribe(
     language: str,
     device: str = "cpu",
     max_segment_seconds: float = 30.0,
-) -> dict[int, str]:
+) -> WhisperBatchResult:
     """Run whisper.cpp once for safely split fallback files.
 
     The pinned CLI accepts multiple ``-f``/``-of`` arguments and loads its model
     before processing them, preserving one heavyweight lifecycle phase without
     concatenating unrelated regions or admitting an oversized input.
     """
+    result = WhisperBatchResult()
+    if not indexes:
+        return result
+    started = time.monotonic()
+
+    def fail(reason: str, stderr: str = "", exit_code: int | None = None) -> WhisperBatchResult:
+        result.failure_reason = reason
+        result.stderr = normalize_text(stderr)[:8192]
+        result.exit_code = exit_code
+        result.duration_seconds = round(time.monotonic() - started, 3)
+        for candidate_index in indexes:
+            result.candidate_errors.setdefault(candidate_index, reason)
+        return result
+
+    try:
+        model_stat = os.stat(model)
+        if not os.path.isfile(model) or model_stat.st_size <= 0 or not os.access(model, os.R_OK):
+            return fail("whisper_model_missing", f"Whisper model is not a readable non-empty file: {model}")
+    except OSError as error:
+        return fail("whisper_model_missing", str(error))
+
     import soundfile as sf
 
-    if not indexes:
-        return {}
     samplerate = clips[indexes[0]][1]
     maximum = max(1, round(max_segment_seconds * samplerate))
     with tempfile.TemporaryDirectory(prefix="javbeaconsubs-whisper-") as directory:
@@ -727,10 +763,37 @@ def whisper_batch_transcribe(
                 sequence = len(inputs)
                 audio_path = os.path.join(directory, f"fallback-{sequence:05d}.wav")
                 prefix = os.path.join(directory, f"result-{sequence:05d}")
-                sf.write(audio_path, child, samplerate, subtype="PCM_16")
+                try:
+                    sf.write(audio_path, child, samplerate, subtype="PCM_16")
+                    info = sf.info(audio_path)
+                    valid = (
+                        os.path.getsize(audio_path) > 44
+                        and info.frames > 0
+                        and info.channels == 1
+                        and info.samplerate == samplerate
+                        and str(info.subtype).startswith("PCM")
+                        and info.duration <= max_segment_seconds + 0.05
+                        and float(np.max(np.abs(child))) > 1e-6
+                    )
+                except (OSError, ValueError, RuntimeError) as error:
+                    valid = False
+                    result.candidate_details.setdefault(index, {})["wav_error"] = normalize_text(str(error))[:1024]
+                if not valid:
+                    result.candidate_errors[index] = "whisper_invalid_audio"
+                    continue
                 inputs.append((index, audio_path, prefix))
         if not inputs:
-            return {}
+            return fail("whisper_invalid_audio")
+        valid_indexes = {item[0] for item in inputs}
+        for candidate_index in indexes:
+            detail = result.candidate_details.setdefault(candidate_index, {})
+            candidate_inputs = [item for item in inputs if item[0] == candidate_index]
+            detail["fallback_candidate_id"] = f"fallback-{candidate_index}"
+            detail["source_segment_index"] = candidate_index
+            detail["temp_wav_ids"] = [os.path.basename(item[1]) for item in candidate_inputs]
+            detail["whisper_result_indexes"] = [inputs.index(item) for item in candidate_inputs]
+            detail["input_count"] = sum(item[0] == candidate_index for item in inputs)
+            detail["input_valid"] = candidate_index in valid_indexes
         command = [binary, "-m", model, "-l", language, "-ojf", "-nt"]
         for _, audio_path, _ in inputs:
             command.extend(["-f", audio_path])
@@ -738,16 +801,45 @@ def whisper_batch_transcribe(
             command.extend(["-of", prefix])
         if device != "cuda":
             command.append("-ng")
-        subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        try:
+            completed = subprocess.run(
+                command,
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=max(300.0, min(1800.0, len(inputs) * 20.0)),
+            )
+        except subprocess.TimeoutExpired as error:
+            return fail("whisper_timeout", str(error))
+        except OSError as error:
+            return fail("whisper_execution_failed", str(error))
+        result.exit_code = completed.returncode
+        result.stderr = normalize_text(completed.stderr)[:8192]
+        # whisper-cli can print recognized dialogue to stdout, so retain only a
+        # bounded structural summary rather than sensitive transcript content.
+        stdout = completed.stdout or ""
+        result.stdout_summary = f"{len(stdout.encode('utf-8'))} bytes captured"
+        if completed.returncode != 0:
+            return fail("whisper_execution_failed", completed.stderr, completed.returncode)
+        result.success = True
+        result.failure_reason = ""
         results: dict[int, list[str]] = {index: [] for index in indexes}
         for index, _, prefix in inputs:
             try:
                 with open(prefix + ".json", encoding="utf-8") as handle:
                     doc = json.load(handle)
-            except (OSError, ValueError):
+                transcription = doc.get("transcription")
+                if not isinstance(transcription, list):
+                    raise ValueError("missing transcription array")
+            except (OSError, ValueError, TypeError) as error:
+                result.candidate_errors[index] = "whisper_output_parse_failed"
+                result.candidate_details.setdefault(index, {})["output_error"] = normalize_text(str(error))[:1024]
                 continue
-            results[index].extend(str(item.get("text", "")) for item in doc.get("transcription", []))
-        return {index: normalize_text("".join(parts)) for index, parts in results.items()}
+            results[index].extend(str(item.get("text", "")) for item in transcription if isinstance(item, dict))
+        result.texts = {index: normalize_text("".join(parts)) for index, parts in results.items()}
+        result.duration_seconds = round(time.monotonic() - started, 3)
+        return result
 
 
 def meaningful_candidate(candidate: Candidate | None) -> bool:
@@ -755,10 +847,44 @@ def meaningful_candidate(candidate: Candidate | None) -> bool:
 
 
 def should_use_whisper(
-    qwen: Candidate, classification: str, speech_probability: float
+    qwen: Candidate,
+    classification: str,
+    speech_probability: float,
+    mode: str = "balanced",
+    duration: float = 0.0,
+    vocabulary_terms: set[str] | None = None,
 ) -> tuple[bool, str]:
-    """Whisper is for unresolved lexical ASR uncertainty, never timing."""
-    return lexical_fallback_eligibility(qwen.text, qwen.suspicion, classification, speech_probability)
+    """Select controlled lexical fallback; prompt leakage alone is not enough."""
+    if not has_meaningful_transcript(qwen.text):
+        return False, "empty_transcript"
+    features = transcript_features(qwen.text)
+    if features["vocalization_heavy"]:
+        return False, "vocalization"
+    if classification == "ambiguous_vocalization" and features["meaningful_char_count"] <= 6:
+        return False, "ambiguous_vocalization"
+    strong = [reason for reason in qwen.suspicion if reason in {
+        "script_anomaly", "mixed_script_lexical", "pathological_repetition",
+        "malformed_lexical_repetition", "suspicious_mixed_script", "implausible_lexical_output",
+    }]
+    if strong:
+        return True, strong[0]
+    # A leaked prompt gets exactly one no-context Qwen retry. Do not turn a
+    # failed retry into a movie-wide Whisper flood unless another lexical
+    # defect independently justifies it.
+    other_lexical = [
+        reason for reason in qwen.suspicion
+        if reason in LEXICAL_REASONS and reason != "weak_speech_conflict"
+    ]
+    if "prompt_leakage" in qwen.suspicion and not other_lexical:
+        return False, "prompt_leakage_retry_unresolved"
+    if mode == "high_accuracy":
+        if duration >= 10.0 and speech_probability < 0.7 and features["meaningful_char_count"] >= 12:
+            return True, "long_lexical_verification"
+        if 0.28 <= speech_probability < 0.58 and features["meaningful_char_count"] >= 8:
+            return True, "medium_confidence_verification"
+        if vocabulary_terms and any(term in qwen.text for term in vocabulary_terms) and qwen.suspicion:
+            return True, "vocabulary_uncertainty"
+    return False, "not_lexical"
 
 
 def mode_allows_whisper(mode: str) -> bool:
@@ -767,14 +893,14 @@ def mode_allows_whisper(mode: str) -> bool:
 
 def validate_whisper_candidate(whisper: Candidate, qwen: Candidate, duration: float) -> tuple[bool, str]:
     if not has_meaningful_transcript(whisper.text):
-        return False, "empty_or_punctuation"
+        return False, "whisper_empty_output"
     features = transcript_features(whisper.text)
     if features["vocalization_heavy"]:
         return False, "vocalization_for_lexical_candidate"
     if "prompt_leakage" in whisper.suspicion:
         return False, "prompt_leakage"
     if "pathological_repetition" in whisper.suspicion:
-        return False, "pathological_repetition"
+        return False, "whisper_pathological_repetition"
     if "script_anomaly" in whisper.suspicion:
         return False, "script_anomaly"
     qwen_count = transcript_features(qwen.text)["meaningful_char_count"]
@@ -791,7 +917,7 @@ def validate_whisper_candidate(whisper: Candidate, qwen: Candidate, duration: fl
         for ch in meaningful
     )
     if japanese / max(1, len(meaningful)) < 0.5:
-        return False, "wrong_language"
+        return False, "whisper_wrong_language"
     return True, ""
 
 
@@ -802,6 +928,7 @@ def choose_balanced_candidate(
     duration: float,
     profile_terms: set[str] | None = None,
     title_terms: set[str] | None = None,
+    verification_reason: str = "",
 ) -> tuple[Candidate, float, bool, str]:
     baseline_score = candidate_score(current, duration, profile_terms, title_terms)
     if whisper is None:
@@ -814,6 +941,12 @@ def choose_balanced_candidate(
     whisper_issue = set(whisper.suspicion) & (LEXICAL_REASONS | {"prompt_leakage"})
     improved = bool(original_issue - whisper_issue)
     materially_different = similarity(original.text, whisper.text) < 0.92
+    high_accuracy_verification = verification_reason in {
+        "long_lexical_verification", "medium_confidence_verification",
+        "vocabulary_uncertainty", "proper_name_verification",
+    }
+    if high_accuracy_verification and materially_different and not whisper_issue and whisper_score >= baseline_score + 0.12:
+        return whisper, similarity(current.text, whisper.text), True, ""
     if improved and materially_different and whisper_score >= baseline_score + 0.1:
         return whisper, similarity(current.text, whisper.text), True, ""
     return current, similarity(current.text, whisper.text), False, "no_clear_improvement"
@@ -1021,6 +1154,7 @@ def main() -> int:
         retry_selected = False
         retry_recovered = False
         retry_similarity = 0.0
+        eligibility_candidate = selected
         if index in retry_results:
             retry_text = retry_results[index]
             retry_suspicion = suspicion_reasons(retry_text, seconds, region.speech_probability, "")
@@ -1029,12 +1163,20 @@ def main() -> int:
             retry_similarity = similarity(text, retry_text)
             if qwen_retry_improves(original, retry, seconds, profile_terms, title_terms):
                 selected = retry
+                eligibility_candidate = retry
                 retry_selected = True
-                retry_recovered = not lexical_fallback_eligibility(
-                    retry.text, retry.suspicion, region.classification, region.speech_probability
-                )[0]
+                retry_recovered = not bool(set(retry.suspicion) & (LEXICAL_REASONS | {"prompt_leakage"}))
+            elif meaningful_candidate(retry):
+                # A still-suspicious lexical retry is the best evidence for
+                # fallback eligibility, without making it canonical output.
+                eligibility_candidate = retry
         whisper_eligible, whisper_reason = should_use_whisper(
-            selected, region.classification, region.speech_probability
+            eligibility_candidate,
+            region.classification,
+            region.speech_probability,
+            args.mode,
+            seconds,
+            profile_terms | title_terms,
         )
         whisper_eligible = bool(
             mode_allows_whisper(args.mode) and whisper_eligible and not args.disable_whisper and args.whisper_model
@@ -1061,40 +1203,69 @@ def main() -> int:
 
     whisper_seconds = 0.0
     whisper_indexes = [index for index, decision in enumerate(decisions) if decision.whisper_eligible]
-    whisper_texts: dict[int, str] = {}
+    whisper_result = WhisperBatchResult()
     if whisper_indexes:
         progress(45, "whisper_lexical_fallback")
         whisper_started = time.monotonic()
-        try:
-            whisper_texts = whisper_batch_transcribe(
-                args.whisper_binary,
-                args.whisper_model,
-                clips,
-                whisper_indexes,
-                "ja",
-                args.device,
-                args.max_segment_seconds,
-            )
-        except Exception:
-            whisper_texts = {}
+        whisper_result = whisper_batch_transcribe(
+            args.whisper_binary,
+            args.whisper_model,
+            clips,
+            whisper_indexes,
+            "ja",
+            args.device,
+            args.max_segment_seconds,
+        )
         whisper_seconds = time.monotonic() - whisper_started
+        print(
+            "Whisper fallback process: "
+            f"exit={whisper_result.exit_code} success={whisper_result.success} "
+            f"duration={whisper_result.duration_seconds:.3f}s candidates={len(whisper_indexes)} "
+            f"failure={whisper_result.failure_reason or 'none'}",
+            file=sys.stderr,
+            flush=True,
+        )
+        if not whisper_result.success:
+            print(
+                "Whisper fallback failed: "
+                f"reason={whisper_result.failure_reason} exit={whisper_result.exit_code} "
+                f"stderr={whisper_result.stderr[:1024]}",
+                file=sys.stderr,
+                flush=True,
+            )
         release_cuda()
 
     for index in whisper_indexes:
         decision = decisions[index]
-        text = whisper_texts.get(index, "")
+        text = whisper_result.texts.get(index, "")
         seconds = (regions[index].end - regions[index].start) / samplerate
         whisper = Candidate(
             "whisper", args.whisper_model, text, suspicion_reasons(text, seconds, regions[index].speech_probability, "")
         )
         decision.candidates["whisper"] = whisper
-        chosen, agreement, corrected, rejection = choose_balanced_candidate(
-            decision.candidates["qwen3"], decision.selected, whisper, seconds, profile_terms, title_terms
-        )
+        execution_error = whisper_result.candidate_errors.get(index, "")
+        if execution_error:
+            chosen, agreement, corrected, rejection = decision.selected, 0.0, False, execution_error
+        else:
+            chosen, agreement, corrected, rejection = choose_balanced_candidate(
+                decision.candidates["qwen3"], decision.selected, whisper, seconds, profile_terms, title_terms,
+                decision.whisper_reason,
+            )
         decision.selected = chosen
         decision.comparison_score = agreement
         decision.whisper_candidate_valid = rejection in {"", "no_clear_improvement"}
         decision.whisper_rejection_reason = rejection
+        decision.whisper_execution = {
+            "whisper_process_exit_code": whisper_result.exit_code,
+            "whisper_process_success": whisper_result.success,
+            "whisper_process_stderr": whisper_result.stderr,
+            "whisper_process_stdout_summary": whisper_result.stdout_summary,
+            "whisper_process_duration_seconds": whisper_result.duration_seconds,
+            "whisper_process_failure_reason": whisper_result.failure_reason,
+            "source_start_ms": decision.fallback_audio.get("fallback_audio_source_start_ms"),
+            "source_end_ms": decision.fallback_audio.get("fallback_audio_source_end_ms"),
+            **whisper_result.candidate_details.get(index, {}),
+        }
         decision.quality_state = "accepted" if corrected and not chosen.suspicion else "review"
 
     # Fast never escalates prompt leakage to another ASR, but leaked meta-text
@@ -1250,6 +1421,7 @@ def main() -> int:
                 record["whisper_meaningful_char_count"] = transcript_features(whisper.text)["meaningful_char_count"] if whisper else 0
                 record["whisper_lexical_ratio"] = transcript_features(whisper.text)["lexical_ratio"] if whisper else 0
                 record.update(decision.fallback_audio)
+                record.update(decision.whisper_execution)
                 record["parent_vad_region_id"] = decision.region.parent_vad_region_id
                 record["split_index"] = decision.region.split_index
                 record["split_count"] = decision.region.split_count
@@ -1271,8 +1443,17 @@ def main() -> int:
             reason = item.qwen_retry_reason or "lexical_suspicion"
             retry_reason_counts[reason] = retry_reason_counts.get(reason, 0) + 1
     whisper_count = len(whisper_indexes)
-    whisper_nonempty = sum(meaningful_candidate(item.candidates.get("whisper")) for item in decisions)
-    whisper_empty = whisper_count - whisper_nonempty
+    whisper_nonempty = sum(
+        index not in whisper_result.candidate_errors
+        and has_meaningful_transcript(whisper_result.texts.get(index, ""))
+        for index in whisper_indexes
+    )
+    whisper_failed = sum(bool(whisper_result.candidate_errors.get(index)) for index in whisper_indexes)
+    whisper_empty = sum(
+        not has_meaningful_transcript(whisper_result.texts.get(index, ""))
+        for index in whisper_indexes
+        if index not in whisper_result.candidate_errors
+    )
     whisper_selected = sum(item.selected.engine == "whisper" for item in decisions)
     whisper_rejected = whisper_count - whisper_selected
     whisper_reason_counts: dict[str, int] = {}
@@ -1283,6 +1464,16 @@ def main() -> int:
     leakage_indexes = [index for index, item in enumerate(decisions) if "prompt_leakage" in item.candidates["qwen3"].suspicion]
     leakage_segments = len(leakage_indexes)
     leakage_recovered = sum("prompt_leakage" not in decisions[index].selected.suspicion for index in leakage_indexes)
+    leakage_retry_clean = sum(
+        meaningful_candidate(decisions[index].candidates.get("qwen_retry")) for index in leakage_indexes
+    )
+    leakage_retry_selected = sum(decisions[index].qwen_retry_selected for index in leakage_indexes)
+    leakage_retry_recovered = sum(
+        decisions[index].qwen_retry_selected
+        and "prompt_leakage" not in decisions[index].selected.suspicion
+        for index in leakage_indexes
+    )
+    leakage_escalated = sum(decisions[index].whisper_eligible for index in leakage_indexes)
     suspicion_counts: dict[str, int] = {}
     for decision in decisions:
         for reason in decision.candidates["qwen3"].suspicion:
@@ -1302,6 +1493,20 @@ def main() -> int:
     )
     hard_max_splits = sum(item.region.split_strategy == "hard_max" for item in decisions)
     energy_valley_splits = sum(item.region.split_strategy == "energy_valley" for item in decisions)
+    warnings: list[str] = []
+    if whisper_count and whisper_result.success and whisper_nonempty == 0:
+        warnings.append("whisper_all_candidates_empty")
+    if whisper_count >= 20 and whisper_seconds < 3.0:
+        warnings.append("whisper_runtime_suspiciously_low")
+    if leakage_segments >= 20 and leakage_recovered / max(1, leakage_segments) < 0.2:
+        warnings.append("prompt_leak_recovery_regressed")
+    high_accuracy_reasons = {
+        "long_lexical_verification",
+        "medium_confidence_verification",
+        "vocabulary_uncertainty",
+    }
+    if args.mode == "high_accuracy" and not any(item.whisper_reason in high_accuracy_reasons for item in decisions):
+        warnings.append("high_accuracy_same_as_balanced")
     payload = {
         "duration_ms": round(duration * 1000),
         "processed_ms": round(duration * 1000),
@@ -1344,6 +1549,9 @@ def main() -> int:
             "qwen_retry_percentage": round(retry_count * 100 / len(decisions), 2),
             "qwen_retry_reason_counts": retry_reason_counts,
             "whisper_candidates": whisper_count,
+            "whisper_candidates_attempted": whisper_count,
+            "whisper_candidates_succeeded": whisper_count - whisper_failed,
+            "whisper_candidates_failed": whisper_failed,
             "whisper_nonempty_candidates": whisper_nonempty,
             "whisper_empty_candidates": whisper_empty,
             "whisper_selected_segments": whisper_selected,
@@ -1353,6 +1561,12 @@ def main() -> int:
             "whisper_fallback_percentage": round(whisper_count * 100 / len(decisions), 2),
             "whisper_benefit_percentage": round(whisper_selected * 100 / whisper_count, 2) if whisper_count else 0,
             "whisper_reason_counts": whisper_reason_counts,
+            "whisper_process_exit_code": whisper_result.exit_code,
+            "whisper_process_success": whisper_result.success,
+            "whisper_process_stderr": whisper_result.stderr,
+            "whisper_process_stdout_summary": whisper_result.stdout_summary,
+            "whisper_process_duration_seconds": whisper_result.duration_seconds,
+            "whisper_process_failure_reason": whisper_result.failure_reason,
             "review_segments": review_count,
             "low_confidence_percentage": round(review_count * 100 / len(decisions), 2),
             "alignment_failures": alignment_failures,
@@ -1371,11 +1585,23 @@ def main() -> int:
             "hard_max_split_regions": hard_max_splits,
             "energy_valley_split_regions": energy_valley_splits,
             "prompt_leakage_segments": leakage_segments,
+            "prompt_leakage_detected": leakage_segments,
+            "prompt_leakage_retry_attempted": len(leakage_indexes),
+            "prompt_leakage_retry_clean": leakage_retry_clean,
+            "prompt_leakage_retry_selected": leakage_retry_selected,
+            "prompt_leakage_retry_failed": leakage_segments - leakage_retry_clean,
+            "prompt_leakage_escalated_to_whisper": leakage_escalated,
             "prompt_leakage_retries": len(leakage_indexes),
             "prompt_leakage_recovered": leakage_recovered,
             "prompt_leakage_unresolved": leakage_segments - leakage_recovered,
+            "prompt_leak_retry_detected": leakage_segments,
+            "prompt_leak_retry_attempted": len(leakage_indexes),
+            "prompt_leak_retry_selected": leakage_retry_selected,
+            "prompt_leak_retry_recovered": leakage_retry_recovered,
+            "prompt_leak_retry_unresolved": leakage_segments - leakage_retry_recovered,
             "prompt_leakage_percentage": round(leakage_segments * 100 / len(decisions), 2),
             "suspicion_reasons": suspicion_counts,
+            "runtime_warnings": warnings,
         },
         "segments": output_segments,
     }

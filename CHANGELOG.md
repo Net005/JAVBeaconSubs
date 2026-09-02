@@ -50,6 +50,8 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ### Fixed
 
+- Fixed swallowed Whisper fallback failures by validating the model and per-candidate PCM WAVs, preserving bounded process diagnostics, explicitly reporting execution/timeout/parser failures, and mapping every multi-file result back to its source segment.
+- Restored clean no-context Qwen prompt-leak retries even when the corrected utterance is much shorter, prevented unresolved prompt leakage alone from flooding Whisper, and made High Accuracy verification broader than Balanced while retaining vocalization/timing exclusions (`qwen-first-v2.3`).
 - Report existing-subtitle skips honestly instead of presenting an instant no-op as a successful Fast/Balanced rerun, and expose every previously generated artifact on the skipped result.
 - Enforced `max_segment_seconds` as a hard VAD-region limit so a quiet-valley split can never make Qwen exceed the 30-second validation boundary and cascade into whole-file fallbacks.
 - Prevented punctuation-only ASR output from becoming subtitles or translation requests, bounded pathological long timing for tiny vocalizations, and stopped Balanced mode spending Reazon work on repeated short replies and vocal reactions.

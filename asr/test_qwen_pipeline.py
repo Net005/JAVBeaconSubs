@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 import pathlib
 import sys
 import tempfile
@@ -19,7 +20,7 @@ SPEC.loader.exec_module(pipeline)
 
 
 class PipelineUtilitiesTest(unittest.TestCase):
-    def run_synthetic_pipeline(self, transcript, align_side_effect=None, mode="balanced"):
+    def run_synthetic_pipeline(self, transcript, align_side_effect=None, mode="balanced", retry_transcript=None):
         samplerate = 1000
         audio = np.zeros(samplerate * 30, dtype=np.float32)
         audio[samplerate * 12 : samplerate * 13] = 0.04
@@ -37,7 +38,12 @@ class PipelineUtilitiesTest(unittest.TestCase):
                 mock.patch.object(sys, "argv", arguments),
                 mock.patch.object(pipeline, "detect_regions", return_value=[pipeline.Region(0, len(audio), 0.55, "speech")]),
                 mock.patch.object(pipeline, "load_qwen", return_value=object()),
-                mock.patch.object(pipeline, "qwen_transcribe", return_value=[transcript]),
+                mock.patch.object(
+                    pipeline,
+                    "qwen_transcribe",
+                    side_effect=([[transcript], [retry_transcript]] if retry_transcript is not None else None),
+                    return_value=[transcript],
+                ),
                 mock.patch.object(pipeline, "load_aligner", return_value=aligner),
                 mock.patch.object(pipeline, "release_cuda"),
                 mock.patch.object(pipeline, "progress"),
@@ -200,10 +206,11 @@ class PipelineUtilitiesTest(unittest.TestCase):
         self.assertFalse(pipeline.detect_prompt_leakage("日本語が上手ですね", pipeline.PROFILE_CONTEXT["standard"])[0])
 
     def test_whisper_requires_meaningful_unresolved_lexical_suspicion(self):
-        suspicious = pipeline.Candidate("qwen3", "q", "もうダメ", ["weak_speech_conflict"])
+        suspicious = pipeline.Candidate("qwen3", "q", "今日はもう本当にダメです", ["weak_speech_conflict"])
         clean = pipeline.Candidate("qwen3", "q", "もうダメ")
         vocalization = pipeline.Candidate("qwen3", "q", "うん", ["identical_neighbors"])
-        self.assertTrue(pipeline.should_use_whisper(suspicious, "speech", 0.8)[0])
+        self.assertFalse(pipeline.should_use_whisper(suspicious, "speech", 0.8, "balanced")[0])
+        self.assertTrue(pipeline.should_use_whisper(suspicious, "speech", 0.5, "high_accuracy")[0])
         self.assertFalse(pipeline.should_use_whisper(clean, "speech", 0.8)[0])
         self.assertFalse(pipeline.should_use_whisper(vocalization, "ambiguous_vocalization", 0.2)[0])
         self.assertFalse(pipeline.mode_allows_whisper("fast"))
@@ -215,6 +222,52 @@ class PipelineUtilitiesTest(unittest.TestCase):
         retry = pipeline.Candidate("qwen_retry", "q", "あ、そう。", [])
         self.assertTrue(pipeline.qwen_retry_improves(original, retry, 1.2))
         self.assertFalse(pipeline.should_use_whisper(retry, "speech", 0.8)[0])
+
+    def test_prompt_leak_retry_can_be_much_shorter_and_avoids_whisper(self):
+        original_text = "日本語・成人向け映像。"
+        retry_text = "エアコンの温度を一十五度に。"
+        original_reasons = pipeline.suspicion_reasons(original_text, 2.0, 0.8, pipeline.PROFILE_CONTEXT["jav"])
+        retry_reasons = pipeline.suspicion_reasons(retry_text, 2.0, 0.8, "")
+        original = pipeline.Candidate("qwen3", "q", original_text, original_reasons)
+        retry = pipeline.Candidate("qwen_retry", "q", retry_text, retry_reasons)
+        self.assertIn("prompt_leakage", original.suspicion)
+        self.assertNotIn("prompt_leakage", retry.suspicion)
+        self.assertTrue(pipeline.qwen_retry_improves(original, retry, 2.0))
+        self.assertNotEqual(pipeline.suspicion_category(retry.text, retry.suspicion), "META")
+        leaked = pipeline.Candidate("qwen3", "q", original.text, ["prompt_leakage"])
+        self.assertFalse(pipeline.should_use_whisper(leaked, "speech", 0.8, "balanced")[0])
+
+    def test_prompt_leak_retry_state_is_clean_in_pipeline_output(self):
+        result, _ = self.run_synthetic_pipeline(
+            "日本語・成人向け映像。",
+            RuntimeError("alignment failed"),
+            mode="balanced",
+            retry_transcript="エアコンの温度を一十五度に。",
+        )
+        self.assertEqual(result["metrics"]["prompt_leakage_detected"], 1)
+        self.assertEqual(result["metrics"]["prompt_leakage_retry_attempted"], 1)
+        self.assertEqual(result["metrics"]["prompt_leakage_retry_clean"], 1)
+        self.assertEqual(result["metrics"]["prompt_leakage_retry_selected"], 1)
+        self.assertEqual(result["metrics"]["prompt_leakage_escalated_to_whisper"], 0)
+        self.assertEqual(result["segments"][0]["selected_engine"], "qwen_retry")
+        self.assertNotEqual(result["segments"][0]["suspicion_category"], "META")
+
+    def test_malformed_retry_remains_balanced_whisper_eligible(self):
+        retry = pipeline.Candidate(
+            "qwen_retry", "q", "まあそうだ...までまで俺には...", ["malformed_lexical_repetition"]
+        )
+        eligible, reason = pipeline.should_use_whisper(retry, "speech", 0.7, "balanced", 3.0)
+        self.assertTrue(eligible)
+        self.assertEqual(reason, "malformed_lexical_repetition")
+
+    def test_high_accuracy_is_broader_but_vocalizations_stay_excluded(self):
+        lexical = pipeline.Candidate("qwen3", "q", "今日は少し遅くなりました", [])
+        self.assertFalse(pipeline.should_use_whisper(lexical, "speech", 0.45, "balanced", 4.0)[0])
+        eligible, reason = pipeline.should_use_whisper(lexical, "speech", 0.45, "high_accuracy", 4.0)
+        self.assertTrue(eligible)
+        self.assertEqual(reason, "medium_confidence_verification")
+        vocal = pipeline.Candidate("qwen3", "q", "あっ", ["weak_speech_conflict"])
+        self.assertFalse(pipeline.should_use_whisper(vocal, "speech", 0.45, "high_accuracy", 12.0)[0])
 
     def test_fast_never_runs_normal_retry_or_fallback_for_script_anomaly(self):
         result, _ = self.run_synthetic_pipeline("あ、啥。", RuntimeError("alignment failed"), mode="fast")
@@ -248,9 +301,17 @@ class PipelineUtilitiesTest(unittest.TestCase):
         audio = np.ones(188780, dtype=np.float32) * 0.02
         written_lengths = []
 
-        def write_audio(_path, child, _rate, subtype=None):
+        def write_audio(path, child, _rate, subtype=None):
             self.assertEqual(subtype, "PCM_16")
             written_lengths.append(len(child))
+            pathlib.Path(path).write_bytes(b"RIFF" + b"0" * 128)
+
+        def audio_info(path):
+            child_length = written_lengths[int(pathlib.Path(path).stem.split("-")[-1])]
+            return types.SimpleNamespace(
+                frames=child_length, channels=1, samplerate=samplerate, subtype="PCM_16",
+                duration=child_length / samplerate
+            )
 
         def complete_whisper(command, **_kwargs):
             prefixes = [command[index + 1] for index, value in enumerate(command) if value == "-of"]
@@ -258,19 +319,147 @@ class PipelineUtilitiesTest(unittest.TestCase):
                 pathlib.Path(prefix + ".json").write_text(
                     json.dumps({"transcription": [{"text": "テスト"}]}), encoding="utf-8"
                 )
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
-        fake_soundfile = types.SimpleNamespace(write=write_audio)
-        with (
-            mock.patch.dict(sys.modules, {"soundfile": fake_soundfile}),
-            mock.patch.object(pipeline.subprocess, "run", side_effect=complete_whisper) as run,
-        ):
-            result = pipeline.whisper_batch_transcribe("whisper-cli", "large-v3", [(audio, samplerate)], [0], "ja", "cuda", 30)
+        fake_soundfile = types.SimpleNamespace(write=write_audio, info=audio_info)
+        with tempfile.TemporaryDirectory() as directory:
+            model = pathlib.Path(directory) / "large-v3.bin"
+            model.write_bytes(b"model")
+            with (
+                mock.patch.dict(sys.modules, {"soundfile": fake_soundfile}),
+                mock.patch.object(pipeline.subprocess, "run", side_effect=complete_whisper) as run,
+            ):
+                result = pipeline.whisper_batch_transcribe("whisper-cli", str(model), [(audio, samplerate)], [0], "ja", "cuda", 30)
         self.assertTrue(written_lengths)
         self.assertTrue(all(length <= 30000 for length in written_lengths))
         self.assertGreater(len(written_lengths), 1)
         self.assertEqual(run.call_count, 1)
         self.assertNotIn("-ng", run.call_args.args[0])
-        self.assertEqual(result[0], "テスト" * len(written_lengths))
+        self.assertIn("-ojf", run.call_args.args[0])
+        self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("-l") + 1], "ja")
+        self.assertNotIn("-tr", run.call_args.args[0])
+        self.assertEqual(run.call_args.args[0].count("-f"), len(written_lengths))
+        self.assertEqual(run.call_args.args[0].count("-of"), len(written_lengths))
+        self.assertTrue(result.success)
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(result.texts[0], "テスト" * len(written_lengths))
+
+    def test_whisper_missing_model_is_explicit_without_launch(self):
+        with mock.patch.object(pipeline.subprocess, "run") as run:
+            result = pipeline.whisper_batch_transcribe(
+                "whisper-cli", "/missing/ggml-large-v3.bin", [(np.ones(1000, dtype=np.float32), 1000)], [0], "ja"
+            )
+        self.assertFalse(result.success)
+        self.assertEqual(result.failure_reason, "whisper_model_missing")
+        self.assertEqual(result.candidate_errors[0], "whisper_model_missing")
+        run.assert_not_called()
+
+    def test_whisper_nonzero_exit_preserves_bounded_diagnostics(self):
+        audio = np.ones(1000, dtype=np.float32) * 0.02
+        with tempfile.TemporaryDirectory() as directory:
+            model = pathlib.Path(directory) / "large-v3.bin"
+            model.write_bytes(b"model")
+            fake_soundfile = types.SimpleNamespace(
+                write=lambda path, *_args, **_kwargs: pathlib.Path(path).write_bytes(b"RIFF" + b"0" * 128),
+                info=lambda _path: types.SimpleNamespace(
+                    frames=1000, channels=1, samplerate=1000, subtype="PCM_16", duration=1.0
+                ),
+            )
+            completed = types.SimpleNamespace(returncode=3, stdout="", stderr="CUDA initialization failure " * 1000)
+            with mock.patch.dict(sys.modules, {"soundfile": fake_soundfile}), mock.patch.object(
+                pipeline.subprocess, "run", return_value=completed
+            ):
+                result = pipeline.whisper_batch_transcribe("whisper-cli", str(model), [(audio, 1000)], [0], "ja")
+        self.assertFalse(result.success)
+        self.assertEqual(result.exit_code, 3)
+        self.assertEqual(result.failure_reason, "whisper_execution_failed")
+        self.assertEqual(result.candidate_errors[0], "whisper_execution_failed")
+        self.assertLessEqual(len(result.stderr), 8192)
+
+    def test_invalid_whisper_wav_rejects_only_its_candidate(self):
+        clips = [(np.zeros(1000, dtype=np.float32), 1000), (np.ones(1000, dtype=np.float32) * 0.02, 1000)]
+        with tempfile.TemporaryDirectory() as directory:
+            model = pathlib.Path(directory) / "large-v3.bin"
+            model.write_bytes(b"model")
+            fake_soundfile = types.SimpleNamespace(
+                write=lambda path, *_args, **_kwargs: pathlib.Path(path).write_bytes(b"RIFF" + b"0" * 128),
+                info=lambda _path: types.SimpleNamespace(
+                    frames=1000, channels=1, samplerate=1000, subtype="PCM_16", duration=1.0
+                ),
+            )
+
+            def complete_whisper(command, **_kwargs):
+                prefix = command[command.index("-of") + 1]
+                pathlib.Path(prefix + ".json").write_text(
+                    json.dumps({"transcription": [{"text": "これはテストです"}]}), encoding="utf-8"
+                )
+                return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+            with mock.patch.dict(sys.modules, {"soundfile": fake_soundfile}), mock.patch.object(
+                pipeline.subprocess, "run", side_effect=complete_whisper
+            ):
+                result = pipeline.whisper_batch_transcribe(
+                    "whisper-cli", str(model), clips, [0, 1], "ja", "cpu"
+                )
+        self.assertTrue(result.success)
+        self.assertEqual(result.candidate_errors[0], "whisper_invalid_audio")
+        self.assertNotIn(1, result.candidate_errors)
+        self.assertEqual(result.texts[1], "これはテストです")
+
+    def test_successful_process_with_missing_json_is_parse_failure_not_empty(self):
+        audio = np.ones(1000, dtype=np.float32) * 0.02
+        with tempfile.TemporaryDirectory() as directory:
+            model = pathlib.Path(directory) / "large-v3.bin"
+            model.write_bytes(b"model")
+            fake_soundfile = types.SimpleNamespace(
+                write=lambda path, *_args, **_kwargs: pathlib.Path(path).write_bytes(b"RIFF" + b"0" * 128),
+                info=lambda _path: types.SimpleNamespace(
+                    frames=1000, channels=1, samplerate=1000, subtype="PCM_16", duration=1.0
+                ),
+            )
+            completed = types.SimpleNamespace(returncode=0, stdout="", stderr="")
+            with mock.patch.dict(sys.modules, {"soundfile": fake_soundfile}), mock.patch.object(
+                pipeline.subprocess, "run", return_value=completed
+            ):
+                result = pipeline.whisper_batch_transcribe(
+                    "whisper-cli", str(model), [(audio, 1000)], [0], "ja"
+                )
+        self.assertTrue(result.success)
+        self.assertEqual(result.candidate_errors[0], "whisper_output_parse_failed")
+        self.assertEqual(result.texts[0], "")
+
+    @unittest.skipUnless(
+        os.getenv("JAVBEACONSUBS_WHISPER_SMOKE_WAV") and os.getenv("JAVBEACONSUBS_WHISPER_SMOKE_MODEL"),
+        "set Whisper smoke WAV/model paths to run the real wrapper integration test",
+    )
+    def test_real_whisper_wrapper_smoke(self):
+        import soundfile as sf
+
+        paths = [os.environ["JAVBEACONSUBS_WHISPER_SMOKE_WAV"]]
+        if os.getenv("JAVBEACONSUBS_WHISPER_SMOKE_WAV_2"):
+            paths.append(os.environ["JAVBEACONSUBS_WHISPER_SMOKE_WAV_2"])
+        clips = []
+        for wav in paths:
+            waveform, samplerate = sf.read(wav, dtype="float32", always_2d=False)
+            if waveform.ndim > 1:
+                waveform = waveform.mean(axis=1)
+            clips.append((waveform, samplerate))
+        result = pipeline.whisper_batch_transcribe(
+            os.getenv("JAVBEACONSUBS_WHISPER_SMOKE_BINARY", "whisper-cli"),
+            os.environ["JAVBEACONSUBS_WHISPER_SMOKE_MODEL"],
+            clips,
+            list(range(len(clips))),
+            "ja",
+            os.getenv("JAVBEACONSUBS_WHISPER_SMOKE_DEVICE", "cuda"),
+        )
+        self.assertTrue(result.success, result.stderr)
+        self.assertEqual(result.exit_code, 0)
+        for index, (waveform, samplerate) in enumerate(clips):
+            self.assertTrue(pipeline.has_meaningful_transcript(result.texts.get(index, "")))
+            candidate = pipeline.Candidate("whisper", "large-v3", result.texts[index])
+            self.assertTrue(
+                pipeline.validate_whisper_candidate(candidate, candidate, len(waveform) / samplerate)[0]
+            )
 
     def test_fallback_audio_stats_preserve_sample_offsets(self):
         audio = np.array([0.0, 0.25, -0.5, 0.0], dtype=np.float32)
