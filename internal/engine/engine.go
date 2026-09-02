@@ -231,7 +231,7 @@ func (r *Runner) applyCatalogs(title string) {
 }
 
 func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapanese bool, progress ProgressFunc, memory *TranslationMemory) (Result, error) {
-	result := Result{Input: input, Profile: r.cfg.Whisper.Profile, ASRMode: r.cfg.Whisper.Mode, PipelineVersion: "qwen-first-v2.2", Models: map[string]string{
+	result := Result{Input: input, Profile: r.cfg.Whisper.Profile, ASRMode: r.cfg.Whisper.Mode, PipelineVersion: "qwen-first-v2.3", Models: map[string]string{
 		"asr_primary":      modelIdentity(r.cfg.Whisper.QwenModel, r.cfg.Whisper.QwenRevision),
 		"asr_retry_engine": modelIdentity(r.cfg.Whisper.QwenModel, r.cfg.Whisper.QwenRevision),
 		"aligner":          modelIdentity(r.cfg.Whisper.AlignerModel, r.cfg.Whisper.AlignerRevision),

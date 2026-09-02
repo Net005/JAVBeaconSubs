@@ -86,6 +86,15 @@ go build -o javbeaconsubs ./cmd/javbeaconsubs
 ./javbeaconsubs -config config.json
 ```
 
+The Python suite includes an opt-in real Whisper-wrapper smoke test. Point it at a short known-good Japanese speech WAV and the same binary/model used in production:
+
+```sh
+JAVBEACONSUBS_WHISPER_SMOKE_WAV=/path/to/japanese-speech.wav \
+JAVBEACONSUBS_WHISPER_SMOKE_MODEL=/models/ggml-large-v3.bin \
+JAVBEACONSUBS_WHISPER_SMOKE_BINARY=/app/build/bin/whisper-cli \
+python3 -m unittest asr.test_qwen_pipeline.PipelineUtilitiesTest.test_real_whisper_wrapper_smoke
+```
+
 Open `http://127.0.0.1:8097`.
 
 There is no application-level path allowlist. Native installs can process any readable path supplied through the API. Containers can process any path mounted into the container. Because submitted paths can cause media to be read and subtitles to be written beside it, protect remotely reachable installations with `JAVBEACONSUBS_API_TOKEN` and a trusted reverse proxy.
@@ -105,7 +114,7 @@ The job form has two explicit modes:
 
 The canonical content profiles are `standard`, `jav`, and `giga`; legacy `tokusatsu` and `akiba` inputs normalize to `giga`. Their Qwen hints are deliberately minimal Japanese-only strings to prevent prompt text leaking into subtitles. Profile and recognition accuracy can each be Auto, explicitly selected, or resolved independently per file by case-insensitive path mappings in the Profiles tab. **Also keep Japanese** writes `.ja.srt` and `.ja.ass` from the canonical Japanese transcript without another ASR pass.
 
-Pipeline `qwen-first-v2.2` rejects punctuation-only ASR output, splits oversized VAD and fallback regions near local energy valleys, and bounds tiny unaligned vocalizations around the strongest speech-like activity. Fast uses Qwen plus alignment only, except its existing no-context prompt-leak recovery. Balanced retries genuinely suspicious lexical Qwen output once without context, then sends only unresolved lexical candidates to one batched Whisper Large-v3 process. Vocalizations and timing/alignment-only problems never invoke Whisper. Diagnostics report Qwen retry benefit, validated/selected/rejected Whisper candidates, strict correction benefit, fallback-audio sanity, ASR/alignment/timing quality, and the explicit active fallback chain.
+Pipeline `qwen-first-v2.3` rejects punctuation-only ASR output, splits oversized VAD and fallback regions near local energy valleys, and bounds tiny unaligned vocalizations around the strongest speech-like activity. Fast uses Qwen plus alignment only, except its existing no-context prompt-leak recovery. Balanced retries genuinely suspicious lexical Qwen output once without context, then sends only strong unresolved lexical candidates to one supported multi-file Whisper Large-v3 process. High Accuracy additionally verifies a controlled set of long or medium-confidence lexical lines. Vocalizations and timing/alignment-only problems never invoke Whisper. Diagnostics distinguish missing models, invalid WAVs, process/timeout/parser failures, and genuinely empty output; they also report Qwen retry recovery, validated/selected/rejected Whisper candidates, strict correction benefit, fallback-audio sanity, ASR/alignment/timing quality, and the explicit active fallback chain.
 
 Compare an old and new debug export without printing dialogue using `PYTHONPATH=asr python3 asr/compare_diagnostics.py old.subtitles.json new.subtitles.json`. The report includes long/tiny/punctuation row counts, fallback benefit, alignment totals, runtime, and RTF.
 
