@@ -39,10 +39,10 @@ type Registry struct {
 
 func New(cfg config.Config) *Registry {
 	values := []*Model{
-		{ID: "qwen-asr", Role: "primary_asr", DisplayName: "Qwen3-ASR-1.7B", Provider: "huggingface", Repository: cfg.Whisper.QwenModel, ActiveRevision: cfg.Whisper.QwenRevision, UpdatePolicy: "notify_only", Status: "active", Installed: cachedHuggingFace(cfg.Whisper.QwenModel), MinimumVRAMGB: 6},
-		{ID: "qwen-aligner", Role: "alignment", DisplayName: "Qwen3 Forced Aligner 0.6B", Provider: "huggingface", Repository: cfg.Whisper.AlignerModel, ActiveRevision: cfg.Whisper.AlignerRevision, UpdatePolicy: "notify_only", Status: "active", Installed: cachedHuggingFace(cfg.Whisper.AlignerModel), MinimumVRAMGB: 4},
-		{ID: "reazon", Role: "secondary_asr", DisplayName: "ReazonSpeech NeMo v2", Provider: "huggingface", Repository: cfg.Whisper.ReazonModel, UpdatePolicy: "notify_only", Status: "active", Installed: cachedHuggingFace(cfg.Whisper.ReazonModel), MinimumVRAMGB: 6},
-		{ID: "whisper", Role: "tertiary_asr", DisplayName: "Whisper Large v3", Provider: "local", Repository: "ggml-org/whisper.cpp", Path: cfg.Whisper.Model, UpdatePolicy: "pinned", Status: "active", Installed: regularFile(cfg.Whisper.Model), MinimumVRAMGB: 5},
+		{ID: "qwen-asr", Role: "Primary ASR", DisplayName: "Qwen3-ASR-1.7B", Provider: "huggingface", Repository: cfg.Whisper.QwenModel, ActiveRevision: cfg.Whisper.QwenRevision, UpdatePolicy: "notify_only", Status: "active", Installed: cachedHuggingFace(cfg.Whisper.QwenModel), MinimumVRAMGB: 6},
+		{ID: "qwen-aligner", Role: "Alignment", DisplayName: "Qwen3 Forced Aligner 0.6B", Provider: "huggingface", Repository: cfg.Whisper.AlignerModel, ActiveRevision: cfg.Whisper.AlignerRevision, UpdatePolicy: "notify_only", Status: "active", Installed: cachedHuggingFace(cfg.Whisper.AlignerModel), MinimumVRAMGB: 4},
+		{ID: "whisper", Role: "Balanced fallback ASR", DisplayName: "Whisper Large v3", Provider: "local", Repository: "ggml-org/whisper.cpp", Path: cfg.Whisper.Model, UpdatePolicy: "pinned", Status: "active", Installed: regularFile(cfg.Whisper.Model), MinimumVRAMGB: 5},
+		{ID: "reazon", Role: "Experimental / inactive", DisplayName: "ReazonSpeech NeMo v2", Provider: "huggingface", Repository: cfg.Whisper.ReazonModel, UpdatePolicy: "notify_only", Status: "inactive", Installed: cachedHuggingFace(cfg.Whisper.ReazonModel), MinimumVRAMGB: 6},
 	}
 	registry := &Registry{models: map[string]*Model{}, client: &http.Client{Timeout: 15 * time.Second}}
 	for _, value := range values {
@@ -54,7 +54,7 @@ func New(cfg config.Config) *Registry {
 func (r *Registry) List() []Model {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	order := []string{"qwen-asr", "qwen-aligner", "reazon", "whisper"}
+	order := []string{"qwen-asr", "qwen-aligner", "whisper", "reazon"}
 	result := make([]Model, 0, len(order))
 	for _, id := range order {
 		result = append(result, *r.models[id])

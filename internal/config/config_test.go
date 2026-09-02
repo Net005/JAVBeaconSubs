@@ -4,7 +4,7 @@ import "testing"
 
 func TestDefaultASRUsesQwenWithBoundedFallbacks(t *testing.T) {
 	value := defaults().Whisper
-	if value.Backend != "qwen" || value.Mode != "balanced" || value.Profile != "jav" || value.QwenPython == "" || value.QwenModel == "" || value.QwenRevision == "" || value.AlignerModel == "" || value.AlignerRevision == "" || value.ReazonPython == "" || value.ReazonBatchScript == "" || value.ReazonModel == "" || value.MaxSegmentSec != 30 || !value.ReazonEnabled || !value.WhisperEnabled {
+	if value.Backend != "qwen" || value.Mode != "balanced" || value.Profile != "jav" || value.QwenPython == "" || value.QwenModel == "" || value.QwenRevision == "" || value.AlignerModel == "" || value.AlignerRevision == "" || value.ReazonPython == "" || value.ReazonBatchScript == "" || value.ReazonModel == "" || value.MaxSegmentSec != 30 || value.ReazonEnabled || !value.WhisperEnabled {
 		t.Fatalf("unexpected ASR defaults: %#v", value)
 	}
 }

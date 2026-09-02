@@ -231,12 +231,13 @@ func (r *Runner) applyCatalogs(title string) {
 }
 
 func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapanese bool, progress ProgressFunc, memory *TranslationMemory) (Result, error) {
-	result := Result{Input: input, Profile: r.cfg.Whisper.Profile, ASRMode: r.cfg.Whisper.Mode, PipelineVersion: "qwen-first-v2.1", Models: map[string]string{
-		"asr_primary":   modelIdentity(r.cfg.Whisper.QwenModel, r.cfg.Whisper.QwenRevision),
-		"aligner":       modelIdentity(r.cfg.Whisper.AlignerModel, r.cfg.Whisper.AlignerRevision),
-		"asr_secondary": r.cfg.Whisper.ReazonModel,
-		"asr_tertiary":  r.cfg.Whisper.Model,
-		"translator":    r.cfg.Translation.Model,
+	result := Result{Input: input, Profile: r.cfg.Whisper.Profile, ASRMode: r.cfg.Whisper.Mode, PipelineVersion: "qwen-first-v2.2", Models: map[string]string{
+		"asr_primary":      modelIdentity(r.cfg.Whisper.QwenModel, r.cfg.Whisper.QwenRevision),
+		"asr_retry_engine": modelIdentity(r.cfg.Whisper.QwenModel, r.cfg.Whisper.QwenRevision),
+		"aligner":          modelIdentity(r.cfg.Whisper.AlignerModel, r.cfg.Whisper.AlignerRevision),
+		"asr_secondary":    r.cfg.Whisper.Model,
+		"asr_experimental": r.cfg.Whisper.ReazonModel,
+		"translator":       r.cfg.Translation.Model,
 	}}
 	if r.recognitionVocabulary != nil {
 		_, result.RecognitionVocabularyScopes = r.recognitionVocabulary.Terms(r.cfg.Whisper.Profile, r.activeTitle, 0)
@@ -448,14 +449,6 @@ func (r *Runner) transcribe(ctx context.Context, wav, prefix string, translate, 
 		if err == nil {
 			return segments, nil
 		}
-		if r.cfg.Whisper.ReazonEnabled {
-			r.log.Warn("Qwen pipeline failed; trying ReazonSpeech whole-file fallback", "error", err)
-			segments, reazonErr := r.transcribeReazon(ctx, wav, prefix+"-fallback", useGPU, report)
-			if reazonErr == nil {
-				return segments, nil
-			}
-			r.log.Warn("ReazonSpeech whole-file fallback failed", "error", reazonErr)
-		}
 		if !r.cfg.Whisper.FallbackWhisper {
 			return nil, err
 		}
@@ -486,8 +479,7 @@ func (r *Runner) transcribeQwen(ctx context.Context, wav, prefix string, useGPU 
 		"--mode", c.Mode, "--profile", c.Profile, "--qwen-model", c.QwenModel,
 		"--qwen-revision", c.QwenRevision,
 		"--context", c.Prompt,
-		"--aligner-model", c.AlignerModel, "--aligner-revision", c.AlignerRevision, "--reazon-model", c.ReazonModel,
-		"--reazon-python", c.ReazonPython, "--reazon-script", c.ReazonBatchScript,
+		"--aligner-model", c.AlignerModel, "--aligner-revision", c.AlignerRevision,
 		"--whisper-binary", c.Binary, "--whisper-model", c.Model,
 		"--batch-size", strconv.Itoa(c.ASRBatchSize),
 		"--vad-threshold", fmt.Sprintf("%.3f", c.VADEnergyFactor),
@@ -496,9 +488,13 @@ func (r *Runner) transcribeQwen(ctx context.Context, wav, prefix string, useGPU 
 		"--vad-pre-roll-ms", strconv.Itoa(c.VADPreRollMS),
 		"--vad-post-roll-ms", strconv.Itoa(c.VADPostRollMS),
 		"--max-segment-seconds", strconv.Itoa(c.MaxSegmentSec),
+		"--disable-reazon",
 	}
-	if !c.ReazonEnabled {
-		args = append(args, "--disable-reazon")
+	if r.cfg.RecognitionVocabularyPath != "" {
+		args = append(args, "--recognition-vocabulary", r.cfg.RecognitionVocabularyPath)
+	}
+	if r.activeTitle != "" {
+		args = append(args, "--title", r.activeTitle)
 	}
 	if !c.WhisperEnabled || !c.FallbackWhisper {
 		args = append(args, "--disable-whisper")

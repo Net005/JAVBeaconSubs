@@ -136,7 +136,7 @@ func defaults() Config {
 			Backend: "qwen", Mode: "balanced", Profile: "jav", Binary: "whisper-cli", Language: "ja", Threads: 8, UseGPU: true,
 			QwenPython: "python3", QwenScript: "./asr/qwen_pipeline.py", QwenModel: "Qwen/Qwen3-ASR-1.7B", AlignerModel: "Qwen/Qwen3-ForcedAligner-0.6B",
 			QwenRevision: "7278e1e70fe206f11671096ffdd38061171dd6e5", AlignerRevision: "c7cbfc2048c462b0d63a45797104fc9db3ad62b7",
-			ASRBatchSize: 4, ReazonEnabled: true, WhisperEnabled: true,
+			ASRBatchSize: 4, ReazonEnabled: false, WhisperEnabled: true,
 			ReazonPython: "python3", ReazonScript: "./asr/reazon_worker.py", ReazonBatchScript: "./asr/reazon_batch_worker.py", ReazonModel: "reazon-research/reazonspeech-nemo-v2",
 			ChunkSeconds: 45, OverlapSeconds: 2, MaxSegmentSec: 30, FallbackWhisper: true,
 			BeamSize: 5, VAD: true, VADThreshold: .42, MinSpeechMS: 100,

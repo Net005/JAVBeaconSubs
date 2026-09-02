@@ -25,7 +25,7 @@
     "aligner_model": "Qwen/Qwen3-ForcedAligner-0.6B",
     "aligner_revision": "c7cbfc2048c462b0d63a45797104fc9db3ad62b7",
     "asr_batch_size": 4,
-    "reazon_enabled": true,
+    "reazon_enabled": false,
     "whisper_enabled": true,
     "debug_mode": false,
     "binary": "/opt/whisper.cpp/build/bin/whisper-cli",
