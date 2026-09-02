@@ -303,7 +303,11 @@ def split_oversized_region(
         target = cursor + maximum
         search_radius = min(round(maximum * 0.22), round(samplerate * 6.0))
         search_start = max(cursor + minimum_child, target - search_radius)
-        search_end = min(end - minimum_child, target + search_radius)
+        # The safety limit is a hard upper bound, not merely a preferred
+        # split point. Only consider valleys at or before it; selecting a
+        # quiet point after ``target`` used to create 30-36 second regions
+        # that the Go orchestrator correctly rejected.
+        search_end = min(end - minimum_child, target + frame_samples)
         boundary, strategy = target, "hard_max"
         if search_end > search_start:
             local = waveform[search_start:search_end]
@@ -316,9 +320,9 @@ def split_oversized_region(
                 reference = max(float(np.percentile(smooth, 65)), 1e-8)
                 if valley <= reference * 0.55:
                     candidate = search_start + valley_index * frame_samples
-                    if cursor + minimum_child <= candidate <= end - minimum_child:
+                    if cursor + minimum_child <= candidate <= min(target, end - minimum_child):
                         boundary, strategy = candidate, "energy_valley"
-        boundary = max(cursor + frame_samples, min(boundary, end))
+        boundary = max(cursor + frame_samples, min(boundary, target, end))
         parts.append((cursor, boundary, strategy))
         cursor = boundary
     if end > cursor:
