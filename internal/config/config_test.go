@@ -44,7 +44,7 @@ func TestSubtitleOutputDefaults(t *testing.T) {
 	value := defaults().Output
 	if !value.NormalizeSubtitles || value.TargetLineChars != 40 || value.MaxLineChars != 46 || value.MaxLines != 2 ||
 		value.TargetCueChars != 80 || value.MaxCueDurationMS != 6000 || value.MinCueDurationMS != 1000 ||
-		value.TargetCPS != 17 || !value.WriteProvenance {
+		value.TargetCPS != 17 || !value.WriteProvenance || !value.WriteASS {
 		t.Fatalf("unexpected subtitle output defaults: %#v", value)
 	}
 }

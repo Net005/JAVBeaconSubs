@@ -126,6 +126,7 @@ type OutputConfig struct {
 	JapaneseASS        string  `json:"japanese_ass_suffix"`
 	ProjectJSON        string  `json:"project_json_suffix"`
 	KeepJapanese       bool    `json:"keep_japanese"`
+	WriteASS           bool    `json:"write_ass"`
 	Overwrite          bool    `json:"overwrite"`
 	NormalizeSubtitles bool    `json:"subtitle_normalization_enabled"`
 	TargetLineChars    int     `json:"subtitle_target_chars_per_line"`
@@ -163,7 +164,7 @@ func defaults() Config {
 		PostProcessing: PostProcessingConfig{Mode: "none", TimeoutSec: 60},
 		Output: OutputConfig{
 			EnglishSuffix: ".en.srt", JapaneseSuffix: ".ja.srt", EnglishASS: ".en.ass", JapaneseASS: ".ja.ass", ProjectJSON: ".subtitles.json",
-			KeepJapanese: false, NormalizeSubtitles: true, TargetLineChars: 40, MaxLineChars: 46, MaxLines: 2,
+			KeepJapanese: false, WriteASS: true, NormalizeSubtitles: true, TargetLineChars: 40, MaxLineChars: 46, MaxLines: 2,
 			TargetCueChars: 80, MaxCueDurationMS: 6000, MinCueDurationMS: 1000, TargetCPS: 17, WriteProvenance: true,
 		},
 		Workers: 1,

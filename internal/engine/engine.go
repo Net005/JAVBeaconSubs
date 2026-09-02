@@ -32,6 +32,8 @@ type ProcessOptions struct {
 	ASRProfile string
 	DebugMode  bool
 	Title      string
+	// WriteASS overrides Output.WriteASS for one job when non-nil.
+	WriteASS *bool
 }
 
 type Result struct {
@@ -221,6 +223,9 @@ func (r *Runner) ProcessWithOptions(ctx context.Context, input string, overwrite
 	if options.DebugMode {
 		worker.cfg.Whisper.DebugMode = true
 	}
+	if options.WriteASS != nil {
+		worker.cfg.Output.WriteASS = *options.WriteASS
+	}
 	worker.applyCatalogs(options.Title)
 	worker.activeTitle = options.Title
 	return worker.process(ctx, input, overwrite, keepJapanese, progress, memory)
@@ -331,11 +336,13 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		if err := r.writeSRT(&result, japanesePath, "ja", transcriptionBackend, "", japaneseOutput); err != nil {
 			return result, err
 		}
-		if err := atomicWrite(japaneseASSPath, subtitle.RenderASS(japaneseOutput, r.cfg.Output.MaxLineChars, r.cfg.Output.MaxLines, filepath.Base(input)+" Japanese")); err != nil {
-			return result, err
-		}
 		result.JapaneseSRT = japanesePath
-		result.JapaneseASS = japaneseASSPath
+		if r.cfg.Output.WriteASS {
+			if err := atomicWrite(japaneseASSPath, subtitle.RenderASS(japaneseOutput, r.cfg.Output.MaxLineChars, r.cfg.Output.MaxLines, filepath.Base(input)+" Japanese")); err != nil {
+				return result, err
+			}
+			result.JapaneseASS = japaneseASSPath
+		}
 	}
 
 	english := segments
@@ -376,11 +383,15 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 			if err := r.writeSRT(&result, japanesePath, "ja", transcriptionBackend, "", japaneseOutput); err != nil {
 				return result, err
 			}
-			if err := atomicWrite(japaneseASSPath, subtitle.RenderASS(japaneseOutput, r.cfg.Output.MaxLineChars, r.cfg.Output.MaxLines, filepath.Base(input)+" Japanese")); err != nil {
-				return result, err
+			if r.cfg.Output.WriteASS {
+				if err := atomicWrite(japaneseASSPath, subtitle.RenderASS(japaneseOutput, r.cfg.Output.MaxLineChars, r.cfg.Output.MaxLines, filepath.Base(input)+" Japanese")); err != nil {
+					return result, err
+				}
 			}
 		}
-		result.JapaneseASS = japaneseASSPath
+		if r.cfg.Output.WriteASS {
+			result.JapaneseASS = japaneseASSPath
+		}
 		project := map[string]any{
 			"generator_version": buildinfo.Version, "pipeline_version": result.PipelineVersion, "input": input, "language": "ja", "japanese": japaneseOutput, "profile": r.cfg.Whisper.Profile, "asr_mode": r.cfg.Whisper.Mode,
 			"models":                 result.Models,
@@ -417,8 +428,10 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 	if err := r.writeSRT(&result, englishPath, "en", transcriptionBackend, r.translationBackend(), englishOutput); err != nil {
 		return result, err
 	}
-	if err := atomicWrite(englishASSPath, subtitle.RenderASS(englishOutput, r.cfg.Output.MaxLineChars, r.cfg.Output.MaxLines, filepath.Base(input)+" English")); err != nil {
-		return result, err
+	if r.cfg.Output.WriteASS {
+		if err := atomicWrite(englishASSPath, subtitle.RenderASS(englishOutput, r.cfg.Output.MaxLineChars, r.cfg.Output.MaxLines, filepath.Base(input)+" English")); err != nil {
+			return result, err
+		}
 	}
 	project := map[string]any{
 		"generator_version": buildinfo.Version, "pipeline_version": result.PipelineVersion, "input": input, "language": "ja", "profile": r.cfg.Whisper.Profile, "asr_mode": r.cfg.Whisper.Mode,
@@ -450,7 +463,9 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		return result, err
 	}
 	result.EnglishSRT = englishPath
-	result.EnglishASS = englishASSPath
+	if r.cfg.Output.WriteASS {
+		result.EnglishASS = englishASSPath
+	}
 	result.ProjectJSON = projectPath
 	result.Segments = len(englishOutput)
 	progress("complete", 100, "Subtitle generation complete")
@@ -480,7 +495,7 @@ func (r *Runner) normalizeSubtitles(track, input string, segments []subtitle.Seg
 		for _, change := range changes {
 			r.log.Debug("subtitle normalizer", "track", track, "source_index", change.SourceIndex,
 				"duration_ms", change.DurationMS, "characters", change.Characters,
-				"output_cues", change.OutputCues, "skipped", change.Skipped)
+				"output_cues", change.OutputCues, "skipped", change.Skipped, "method", change.Method)
 		}
 	}
 	return normalized, nil

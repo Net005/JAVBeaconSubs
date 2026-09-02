@@ -4,6 +4,16 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-02
+
+### Fixed
+
+- Fixed oversized translated English subtitle cues (observed on ADN-803, e.g. a 28.42s/four-line block) surviving normalization unsplit whenever a cue had no trustworthy Qwen forced-alignment anchors. The normalizer now falls back to proportional redistribution of the existing timing envelope by visible-character weight as a last-resort timing source, still capped to what the source duration can hold at the configured minimum cue duration. SRT and ASS continue to be serialized from the same normalized cue list.
+
+### Added
+
+- Added a per-job and default `write_ass` option (web UI, JSON/multipart API, and `output.write_ass` configuration) to export `.srt` subtitles only, skipping `.en.ass`/`.ja.ass` generation.
+
 ## [0.3.0] - 2026-09-02
 
 ### Added

@@ -28,6 +28,7 @@ type Request struct {
 	Recursive    bool     `json:"recursive"`
 	Overwrite    bool     `json:"overwrite"`
 	KeepJapanese *bool    `json:"keep_japanese,omitempty"`
+	WriteASS     *bool    `json:"write_ass,omitempty"`
 	ASRMode      string   `json:"asr_mode,omitempty"`
 	ASRProfile   string   `json:"asr_profile,omitempty"`
 	Profile      string   `json:"profile,omitempty"`
@@ -55,6 +56,7 @@ type Job struct {
 	CallbackURL          string                         `json:"-"`
 	Overwrite            bool                           `json:"-"`
 	KeepJapanese         bool                           `json:"keep_japanese"`
+	WriteASS             bool                           `json:"write_ass"`
 	ASRMode              string                         `json:"asr_mode"`
 	ASRProfile           string                         `json:"asr_profile"`
 	Profile              string                         `json:"profile"`
@@ -157,7 +159,11 @@ func (m *Manager) Create(req Request) (*Job, error) {
 	if req.KeepJapanese != nil {
 		keepJapanese = *req.KeepJapanese
 	}
-	job := &Job{ID: newID(), ExternalID: req.ExternalID, Status: "queued", Progress: 0, Message: "Waiting for subtitle worker", Inputs: req.Inputs, Files: files, CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, KeepJapanese: keepJapanese, ASRMode: firstResolution.ASRMode, ASRProfile: firstResolution.Profile, Profile: firstResolution.Profile, ProfileSource: firstResolution.ProfileSource, ASRModeSource: firstResolution.ASRModeSource, FileSettings: fileSettings, DebugMode: req.DebugMode, CreatedAt: time.Now().UTC()}
+	writeASS := m.cfg.Output.WriteASS
+	if req.WriteASS != nil {
+		writeASS = *req.WriteASS
+	}
+	job := &Job{ID: newID(), ExternalID: req.ExternalID, Status: "queued", Progress: 0, Message: "Waiting for subtitle worker", Inputs: req.Inputs, Files: files, CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, KeepJapanese: keepJapanese, WriteASS: writeASS, ASRMode: firstResolution.ASRMode, ASRProfile: firstResolution.Profile, Profile: firstResolution.Profile, ProfileSource: firstResolution.ProfileSource, ASRModeSource: firstResolution.ASRModeSource, FileSettings: fileSettings, DebugMode: req.DebugMode, CreatedAt: time.Now().UTC()}
 	m.mu.Lock()
 	m.jobs[job.ID] = job
 	m.mu.Unlock()
@@ -340,7 +346,7 @@ func (m *Manager) process(ctx context.Context, id string) {
 				m.mu.Unlock()
 			}
 		}
-		result, err := m.runner.ProcessWithOptions(ctx, file, job.Overwrite, job.KeepJapanese, engine.ProcessOptions{ASRMode: resolution.ASRMode, ASRProfile: resolution.Profile, DebugMode: job.DebugMode, Title: job.ExternalID}, progress, translationMemory)
+		result, err := m.runner.ProcessWithOptions(ctx, file, job.Overwrite, job.KeepJapanese, engine.ProcessOptions{ASRMode: resolution.ASRMode, ASRProfile: resolution.Profile, DebugMode: job.DebugMode, Title: job.ExternalID, WriteASS: &job.WriteASS}, progress, translationMemory)
 		if err != nil {
 			m.finish(id, "failed", err.Error())
 			return

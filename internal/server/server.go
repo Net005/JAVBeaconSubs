@@ -484,7 +484,12 @@ func (s *Server) uploadJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 500, map[string]string{"error": "store upload: " + copyErr.Error()})
 		return
 	}
-	keepJapanese, err := optionalFormBool(r.FormValue("keep_japanese"))
+	keepJapanese, err := optionalFormBool("keep_japanese", r.FormValue("keep_japanese"))
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	writeASS, err := optionalFormBool("write_ass", r.FormValue("write_ass"))
 	if err != nil {
 		writeJSON(w, 400, map[string]string{"error": err.Error()})
 		return
@@ -493,6 +498,7 @@ func (s *Server) uploadJob(w http.ResponseWriter, r *http.Request) {
 		Inputs:       []string{destination},
 		Overwrite:    r.FormValue("overwrite") == "true",
 		KeepJapanese: keepJapanese,
+		WriteASS:     writeASS,
 		ASRMode:      r.FormValue("asr_mode"),
 		ASRProfile:   firstNonEmpty(r.FormValue("profile"), r.FormValue("asr_profile")),
 		DebugMode:    r.FormValue("debug_mode") == "true",
@@ -517,13 +523,13 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func optionalFormBool(value string) (*bool, error) {
+func optionalFormBool(field, value string) (*bool, error) {
 	if strings.TrimSpace(value) == "" {
 		return nil, nil
 	}
 	parsed, err := strconv.ParseBool(strings.TrimSpace(value))
 	if err != nil {
-		return nil, fmt.Errorf("keep_japanese must be true or false")
+		return nil, fmt.Errorf("%s must be true or false", field)
 	}
 	return &parsed, nil
 }
