@@ -36,6 +36,10 @@ type tokenUsage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
+	Batches          int `json:"-"`
+	TranslatedRows   int `json:"-"`
+	ContextRows      int `json:"-"`
+	ReusedRows       int `json:"-"`
 }
 type translationResult struct {
 	Translations []struct {
@@ -281,6 +285,9 @@ func glossaryInstructionsIndexed(legacy string, index structuredGlossaryIndex, r
 const translationSystemPrompt = `Translate spoken Japanese into concise, natural English subtitles. Preserve names, relationships, tone, slang, explicit/sexual language, incomplete speech, and reactions without censorship. Input rows are [id,t,text]: t=1 must be translated; t=0 is context only. Return every t=1 id exactly once; never merge, omit, repeat, explain, or renumber. Output strict JSON only: {"translations":[{"id":number,"text":"English"}]}.`
 
 func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progress ProgressFunc, memory *TranslationMemory) ([]subtitle.Segment, tokenUsage, error) {
+	// Defense in depth: punctuation-only ASR artifacts must never consume paid
+	// translation tokens even if a future caller bypasses the ASR cleanup path.
+	source = subtitle.Clean(source)
 	out := make([]subtitle.Segment, len(source))
 	copy(out, source)
 	var totalUsage tokenUsage
@@ -331,6 +338,7 @@ func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progr
 		totalUsage.PromptTokens += usage.PromptTokens
 		totalUsage.CompletionTokens += usage.CompletionTokens
 		totalUsage.TotalTokens += usage.TotalTokens
+		totalUsage.Batches++
 		byID := make(map[int]string, len(translated.Translations))
 		for _, item := range translated.Translations {
 			byID[item.ID] = strings.TrimSpace(item.Text)
@@ -355,6 +363,9 @@ func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progr
 		percent := 74 + int(float64(end)/float64(len(source))*20)
 		progress("translation", percent, fmt.Sprintf("Translated %d of %d dialogue segments", end, len(source)))
 	}
+	totalUsage.TranslatedRows = translatedRows
+	totalUsage.ContextRows = contextRows
+	totalUsage.ReusedRows = reusedRows
 	r.log.Info("contextual translation usage", "input_tokens", totalUsage.PromptTokens, "output_tokens", totalUsage.CompletionTokens, "total_tokens", totalUsage.TotalTokens, "translated_rows", translatedRows, "context_rows", contextRows, "reused_rows", reusedRows, "glossary_entries", glossaryEntries)
 	return out, totalUsage, nil
 }

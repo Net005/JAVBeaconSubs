@@ -1,0 +1,20 @@
+{
+  "source": "ADN-803 qwen-first-v2 Balanced diagnostics",
+  "baseline": {
+    "source_duration_seconds": 7200.64,
+    "vad_regions": 960,
+    "reazon_fallback_segments": 110,
+    "reazon_empty_candidates_observed": 102,
+    "subtitle_rows_over_10_seconds": 90,
+    "subtitle_rows_over_20_seconds": 46,
+    "near_30_second_rows": 28
+  },
+  "cases": [
+    {"text": "。", "duration_seconds": 30, "meaningful": false, "vocalization_heavy": false, "reazon_eligible": false},
+    {"text": "ん", "duration_seconds": 30, "meaningful": true, "vocalization_heavy": true, "reazon_eligible": false},
+    {"text": "あ。", "duration_seconds": 18, "meaningful": true, "vocalization_heavy": true, "reazon_eligible": false},
+    {"text": "はい", "duration_seconds": 15, "meaningful": true, "vocalization_heavy": true, "reazon_eligible": false},
+    {"text": "うん。うん。うん。うん。うん。", "duration_seconds": 30, "meaningful": true, "vocalization_heavy": true, "reazon_eligible": false},
+    {"text": "あ、啥。", "duration_seconds": 0.35, "meaningful": true, "vocalization_heavy": false, "reazon_eligible": true}
+  ]
+}

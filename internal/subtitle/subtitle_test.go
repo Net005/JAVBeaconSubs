@@ -21,6 +21,26 @@ func TestCleanRemovesOnlyOverlappingDuplicates(t *testing.T) {
 	}
 }
 
+func TestHasMeaningfulTranscriptAndCleanSuppressFormattingOnlyRows(t *testing.T) {
+	for _, value := range []string{"。", "、。", "...", "「」", "()", "　", "。\n"} {
+		if HasMeaningfulTranscript(value) {
+			t.Errorf("%q was treated as meaningful", value)
+		}
+	}
+	for _, value := range []string{"あ", "はい", "A", "NHK", "123"} {
+		if !HasMeaningfulTranscript(value) {
+			t.Errorf("%q was rejected", value)
+		}
+	}
+	cleaned := Clean([]Segment{
+		{StartMS: 0, EndMS: 30_000, Text: "。"},
+		{StartMS: 31_000, EndMS: 32_000, Text: "あ"},
+	})
+	if len(cleaned) != 1 || cleaned[0].Text != "あ" {
+		t.Fatalf("Clean retained formatting-only ASR output: %#v", cleaned)
+	}
+}
+
 func TestRenderSRT(t *testing.T) {
 	got := RenderSRT([]Segment{{StartMS: 1234, EndMS: 3661001, Text: "A deliberately long subtitle line that should wrap cleanly"}}, 30, 2, "; generated-by=javbeaconsubs")
 	for _, want := range []string{"; generated-by=javbeaconsubs", "00:00:01,234 --> 01:01:01,001", "\n\n"} {

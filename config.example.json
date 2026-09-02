@@ -63,8 +63,10 @@
     "model": "qwen3:14b",
     "batch_size": 24,
     "timeout_seconds": 120,
-		"context_gap_ms": 8000,
-		"translation_memory": false,
+    "context_gap_ms": 8000,
+    "translation_memory": false,
+    "input_cost_per_million": 0,
+    "output_cost_per_million": 0,
 		"glossary": "",
 		"structured_glossary": {
 			"style": [],

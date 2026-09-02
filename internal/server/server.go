@@ -89,30 +89,34 @@ func (s *Server) Handler() http.Handler {
 }
 
 type translationSettingsResponse struct {
-	Mode               string                     `json:"mode"`
-	BaseURL            string                     `json:"base_url"`
-	Model              string                     `json:"model"`
-	BatchSize          int                        `json:"batch_size"`
-	TimeoutSec         int                        `json:"timeout_seconds"`
-	ContextGapMS       int64                      `json:"context_gap_ms"`
-	TranslationMemory  bool                       `json:"translation_memory"`
-	Glossary           string                     `json:"glossary"`
-	StructuredGlossary *config.StructuredGlossary `json:"structured_glossary,omitempty"`
-	APIKeySet          bool                       `json:"api_key_set"`
+	Mode                 string                     `json:"mode"`
+	BaseURL              string                     `json:"base_url"`
+	Model                string                     `json:"model"`
+	BatchSize            int                        `json:"batch_size"`
+	TimeoutSec           int                        `json:"timeout_seconds"`
+	ContextGapMS         int64                      `json:"context_gap_ms"`
+	TranslationMemory    bool                       `json:"translation_memory"`
+	InputCostPerMillion  float64                    `json:"input_cost_per_million,omitempty"`
+	OutputCostPerMillion float64                    `json:"output_cost_per_million,omitempty"`
+	Glossary             string                     `json:"glossary"`
+	StructuredGlossary   *config.StructuredGlossary `json:"structured_glossary,omitempty"`
+	APIKeySet            bool                       `json:"api_key_set"`
 }
 
 type translationSettingsRequest struct {
-	Mode               string                     `json:"mode"`
-	BaseURL            string                     `json:"base_url"`
-	APIKey             string                     `json:"api_key"`
-	ClearAPIKey        bool                       `json:"clear_api_key"`
-	Model              string                     `json:"model"`
-	BatchSize          int                        `json:"batch_size"`
-	TimeoutSec         int                        `json:"timeout_seconds"`
-	ContextGapMS       int64                      `json:"context_gap_ms"`
-	TranslationMemory  bool                       `json:"translation_memory"`
-	Glossary           string                     `json:"glossary"`
-	StructuredGlossary *config.StructuredGlossary `json:"structured_glossary"`
+	Mode                 string                     `json:"mode"`
+	BaseURL              string                     `json:"base_url"`
+	APIKey               string                     `json:"api_key"`
+	ClearAPIKey          bool                       `json:"clear_api_key"`
+	Model                string                     `json:"model"`
+	BatchSize            int                        `json:"batch_size"`
+	TimeoutSec           int                        `json:"timeout_seconds"`
+	ContextGapMS         int64                      `json:"context_gap_ms"`
+	TranslationMemory    bool                       `json:"translation_memory"`
+	InputCostPerMillion  float64                    `json:"input_cost_per_million,omitempty"`
+	OutputCostPerMillion float64                    `json:"output_cost_per_million,omitempty"`
+	Glossary             string                     `json:"glossary"`
+	StructuredGlossary   *config.StructuredGlossary `json:"structured_glossary"`
 }
 
 type postProcessingSettingsResponse struct {
@@ -139,7 +143,7 @@ type settingsRequest struct {
 }
 
 func settingsResponse(value config.TranslationConfig) translationSettingsResponse {
-	return translationSettingsResponse{Mode: value.Mode, BaseURL: value.BaseURL, Model: value.Model, BatchSize: value.BatchSize, TimeoutSec: value.TimeoutSec, ContextGapMS: value.ContextGapMS, TranslationMemory: value.TranslationMemory, Glossary: value.Glossary, StructuredGlossary: value.StructuredGlossary, APIKeySet: value.APIKey != ""}
+	return translationSettingsResponse{Mode: value.Mode, BaseURL: value.BaseURL, Model: value.Model, BatchSize: value.BatchSize, TimeoutSec: value.TimeoutSec, ContextGapMS: value.ContextGapMS, TranslationMemory: value.TranslationMemory, InputCostPerMillion: value.InputCostPerMillion, OutputCostPerMillion: value.OutputCostPerMillion, Glossary: value.Glossary, StructuredGlossary: value.StructuredGlossary, APIKeySet: value.APIKey != ""}
 }
 
 func (s *Server) getSettings(w http.ResponseWriter, _ *http.Request) {
@@ -238,7 +242,7 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	current := s.runner.Translation()
 	t := request.Translation
-	value := config.TranslationConfig{Mode: t.Mode, BaseURL: t.BaseURL, Model: t.Model, BatchSize: t.BatchSize, TimeoutSec: t.TimeoutSec, ContextGapMS: t.ContextGapMS, TranslationMemory: t.TranslationMemory, Glossary: t.Glossary, StructuredGlossary: t.StructuredGlossary, APIKey: current.APIKey}
+	value := config.TranslationConfig{Mode: t.Mode, BaseURL: t.BaseURL, Model: t.Model, BatchSize: t.BatchSize, TimeoutSec: t.TimeoutSec, ContextGapMS: t.ContextGapMS, TranslationMemory: t.TranslationMemory, InputCostPerMillion: t.InputCostPerMillion, OutputCostPerMillion: t.OutputCostPerMillion, Glossary: t.Glossary, StructuredGlossary: t.StructuredGlossary, APIKey: current.APIKey}
 	if t.ClearAPIKey {
 		value.APIKey = ""
 	} else if strings.TrimSpace(t.APIKey) != "" {

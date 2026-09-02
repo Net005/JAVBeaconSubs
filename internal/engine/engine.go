@@ -47,6 +47,13 @@ type Result struct {
 	TranslationInputTokens       int               `json:"translation_input_tokens,omitempty"`
 	TranslationOutputTokens      int               `json:"translation_output_tokens,omitempty"`
 	TranslationTotalTokens       int               `json:"translation_total_tokens,omitempty"`
+	TranslationBatches           int               `json:"translation_batches,omitempty"`
+	TranslationRows              int               `json:"translation_rows,omitempty"`
+	TranslationContextRows       int               `json:"translation_context_rows,omitempty"`
+	TranslationReusedRows        int               `json:"translation_reused_rows,omitempty"`
+	TranslationTokensPerMinute   float64           `json:"translation_tokens_per_source_minute,omitempty"`
+	TranslationCostEstimateUSD   float64           `json:"translation_cost_estimate_usd,omitempty"`
+	TranslationCostPerSourceHour float64           `json:"translation_cost_per_source_hour_usd,omitempty"`
 	Profile                      string            `json:"profile,omitempty"`
 	ASRMode                      string            `json:"asr_mode,omitempty"`
 	RecognitionVocabularyVersion int               `json:"recognition_vocabulary_version,omitempty"`
@@ -223,7 +230,7 @@ func (r *Runner) applyCatalogs(title string) {
 }
 
 func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapanese bool, progress ProgressFunc, memory *TranslationMemory) (Result, error) {
-	result := Result{Input: input, Profile: r.cfg.Whisper.Profile, ASRMode: r.cfg.Whisper.Mode, PipelineVersion: "qwen-first-v2", Models: map[string]string{
+	result := Result{Input: input, Profile: r.cfg.Whisper.Profile, ASRMode: r.cfg.Whisper.Mode, PipelineVersion: "qwen-first-v2.1", Models: map[string]string{
 		"asr_primary":   modelIdentity(r.cfg.Whisper.QwenModel, r.cfg.Whisper.QwenRevision),
 		"aligner":       modelIdentity(r.cfg.Whisper.AlignerModel, r.cfg.Whisper.AlignerRevision),
 		"asr_secondary": r.cfg.Whisper.ReazonModel,
@@ -328,6 +335,18 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		result.TranslationInputTokens = usage.PromptTokens
 		result.TranslationOutputTokens = usage.CompletionTokens
 		result.TranslationTotalTokens = usage.TotalTokens
+		result.TranslationBatches = usage.Batches
+		result.TranslationRows = usage.TranslatedRows
+		result.TranslationContextRows = usage.ContextRows
+		result.TranslationReusedRows = usage.ReusedRows
+		durationSeconds, _ := result.DiagnosticSummary["source_duration_seconds"].(float64)
+		if durationSeconds > 0 {
+			result.TranslationTokensPerMinute = float64(usage.TotalTokens) / (durationSeconds / 60)
+		}
+		result.TranslationCostEstimateUSD = float64(usage.PromptTokens)*r.cfg.Translation.InputCostPerMillion/1_000_000 + float64(usage.CompletionTokens)*r.cfg.Translation.OutputCostPerMillion/1_000_000
+		if durationSeconds > 0 && result.TranslationCostEstimateUSD > 0 {
+			result.TranslationCostPerSourceHour = result.TranslationCostEstimateUSD / (durationSeconds / 3600)
+		}
 	case "none":
 		result.JapaneseSRT = japanesePath
 		if !keepJapanese {
@@ -380,6 +399,11 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		"diagnostic_summary":     result.DiagnosticSummary,
 		"recognition_vocabulary": map[string]any{"format": catalog.RecognitionFormat, "version": result.RecognitionVocabularyVersion, "active_scopes": result.RecognitionVocabularyScopes},
 		"translation_glossary":   map[string]any{"format": catalog.GlossaryFormat, "version": result.TranslationGlossaryVersion, "active_scopes": result.TranslationGlossaryScopes},
+		"translation_usage": map[string]any{
+			"input_tokens": result.TranslationInputTokens, "output_tokens": result.TranslationOutputTokens, "total_tokens": result.TranslationTotalTokens,
+			"batches": result.TranslationBatches, "rows": result.TranslationRows, "context_rows": result.TranslationContextRows, "reused_rows": result.TranslationReusedRows,
+			"tokens_per_source_minute": result.TranslationTokensPerMinute, "cost_estimate_usd": result.TranslationCostEstimateUSD, "cost_per_source_hour_usd": result.TranslationCostPerSourceHour,
+		},
 	}
 	if r.cfg.Whisper.DebugMode {
 		if raw, readErr := os.ReadFile(transcriptPrefix + ".qwen.json"); readErr == nil {

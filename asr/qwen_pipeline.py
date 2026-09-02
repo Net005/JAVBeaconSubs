@@ -22,12 +22,12 @@ import tempfile
 import time
 import unicodedata
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 
 
-PIPELINE_VERSION = "qwen-first-v2"
+PIPELINE_VERSION = "qwen-first-v2.1"
 JAPANESE = "Japanese"
 PROFILE_CONTEXT = {
     "standard": "日本語",
@@ -53,7 +53,14 @@ LEAK_FRAGMENTS = (
     "japanese dialogue",
 )
 PUNCTUATION = set("。！？!?…")
-SHORT_REACTION = re.compile(r"^[あいうえおんっぁぃぅぇぉー～〜はぁ]+[。！？!?…]*$")
+VOCALIZATION_TOKENS = {
+    "あ", "あっ", "ああ", "い", "う", "うっ", "うん", "え", "えっ", "お", "おっ", "ん", "んっ",
+    "はい", "はぁ", "はあ", "はは", "ふふ", "へへ", "やっ", "いや", "わっ", "きゃ", "きゃっ",
+}
+VOCALIZATION_CHARACTERS = set("あいうえおんっぁぃぅぇぉゃゅょー～〜はふへわきゃ")
+# Conservative Chinese-specific forms observed in malformed Japanese ASR. This
+# is intentionally tiny; uncommon Japanese kanji are not errors by default.
+ATYPICAL_JAPANESE_CJK = set("啥这吗们说没给让从还")
 
 
 @dataclass
@@ -62,6 +69,10 @@ class Region:
     end: int
     speech_probability: float
     classification: str
+    parent_vad_region_id: int = 0
+    split_index: int = 0
+    split_count: int = 1
+    split_strategy: str = "natural"
 
 
 @dataclass
@@ -84,6 +95,9 @@ class Decision:
     confidence: float
     quality_state: str
     alignment: str = "pending"
+    timing_quality: str = "timing_suspicious"
+    reazon_eligible: bool = False
+    reazon_reason: str = ""
     aligned_items: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -94,6 +108,40 @@ def normalize_text(value: str) -> str:
 def comparison_text(value: str) -> str:
     value = unicodedata.normalize("NFKC", value)
     return "".join(ch for ch in value if not ch.isspace() and not unicodedata.category(ch).startswith("P"))
+
+
+def meaningful_characters(value: str) -> str:
+    """Return only actual letters and numbers, excluding punctuation/formatting."""
+    value = unicodedata.normalize("NFKC", str(value or ""))
+    return "".join(ch for ch in value if unicodedata.category(ch)[:1] in {"L", "N"})
+
+
+def has_meaningful_transcript(value: str) -> bool:
+    return bool(meaningful_characters(value))
+
+
+def transcript_features(value: str) -> dict[str, Any]:
+    meaningful = meaningful_characters(value)
+    compact = comparison_text(value)
+    if not meaningful:
+        return {"meaningful_char_count": 0, "vocalization_ratio": 0.0, "lexical_ratio": 0.0, "vocalization_heavy": False}
+    token = meaningful.casefold()
+    repeated_token = any(token == item * repeats for item in VOCALIZATION_TOKENS for repeats in range(1, 8))
+    vocal_chars = sum(ch in VOCALIZATION_CHARACTERS for ch in token)
+    vocalization_ratio = vocal_chars / len(meaningful)
+    vocalization_heavy = token in VOCALIZATION_TOKENS or repeated_token or (len(meaningful) <= 12 and vocalization_ratio >= 0.8)
+    return {
+        "meaningful_char_count": len(meaningful),
+        "vocalization_ratio": round(vocalization_ratio, 3),
+        "lexical_ratio": round(1.0 - vocalization_ratio, 3),
+        "vocalization_heavy": vocalization_heavy,
+        "compact": compact,
+    }
+
+
+def script_anomaly(value: str) -> bool:
+    meaningful = meaningful_characters(value)
+    return any(ch in ATYPICAL_JAPANESE_CJK for ch in meaningful)
 
 
 def normalize_profile(value: str) -> str:
@@ -143,7 +191,7 @@ def similarity(left: str, right: str) -> float:
 
 def repeated_phrase(text: str) -> bool:
     value = comparison_text(text)
-    if len(value) < 8:
+    if len(value) < 8 or transcript_features(value)["vocalization_heavy"]:
         return False
     for width in range(1, min(12, len(value) // 3) + 1):
         unit = value[:width]
@@ -152,8 +200,17 @@ def repeated_phrase(text: str) -> bool:
     return False
 
 
+def malformed_lexical_repetition(text: str) -> bool:
+    features = transcript_features(text)
+    if features["vocalization_heavy"] or features["meaningful_char_count"] < 6:
+        return False
+    normalized = unicodedata.normalize("NFKC", text)
+    return re.search(r"([ぁ-んァ-ヶ]{2,4})[\s、,。…]*\1", normalized) is not None
+
+
 def suspicion_reasons(text: str, duration: float, speech_probability: float, context: str = "") -> list[str]:
-    value = comparison_text(text)
+    value = meaningful_characters(text)
+    features = transcript_features(text)
     reasons: list[str] = []
     if not value:
         reasons.append("empty_transcript")
@@ -161,12 +218,66 @@ def suspicion_reasons(text: str, duration: float, speech_probability: float, con
         reasons.append("text_duration_ratio")
     if repeated_phrase(value):
         reasons.append("pathological_repetition")
+    if malformed_lexical_repetition(text):
+        reasons.append("malformed_lexical_repetition")
     if speech_probability < 0.28 and len(value) >= 8:
         reasons.append("weak_speech_conflict")
+    if script_anomaly(text):
+        reasons.append("script_anomaly")
+    latin = sum(ch.isascii() and ch.isalpha() for ch in value)
+    japanese = sum(
+        "HIRAGANA" in unicodedata.name(ch, "") or "KATAKANA" in unicodedata.name(ch, "") or "CJK UNIFIED" in unicodedata.name(ch, "")
+        for ch in value
+    )
+    if latin >= 4 and japanese >= 2 and latin / len(value) >= 0.35:
+        reasons.append("mixed_script_lexical")
     leaked, _, _ = detect_prompt_leakage(text, context)
     if leaked:
         reasons.append("prompt_leakage")
     return reasons
+
+
+LEXICAL_REASONS = {
+    "script_anomaly",
+    "mixed_script_lexical",
+    "pathological_repetition",
+    "text_duration_ratio",
+    "weak_speech_conflict",
+    "identical_neighbors",
+    "lexical_low_confidence",
+    "malformed_lexical_repetition",
+}
+
+
+def should_use_reazon_fallback(text: str, reasons: list[str], classification: str, speech_probability: float) -> tuple[bool, str]:
+    """Keep Balanced fallback focused on recoverable lexical or meta errors."""
+    if not has_meaningful_transcript(text):
+        return False, "empty_transcript"
+    features = transcript_features(text)
+    if "prompt_leakage" in reasons:
+        return True, "prompt_leakage"
+    lexical = [reason for reason in reasons if reason in LEXICAL_REASONS]
+    if features["vocalization_heavy"]:
+        return False, "vocalization"
+    if classification == "ambiguous_vocalization" and features["meaningful_char_count"] <= 6:
+        return False, "ambiguous_vocalization"
+    if lexical:
+        return True, lexical[0]
+    if speech_probability < 0.25 and features["meaningful_char_count"] >= 8:
+        return True, "lexical_low_confidence"
+    return False, "not_lexical"
+
+
+def suspicion_category(text: str, reasons: list[str], timing_quality: str = "timing_good") -> str:
+    if "prompt_leakage" in reasons:
+        return "META"
+    if any(reason in LEXICAL_REASONS for reason in reasons) and not transcript_features(text)["vocalization_heavy"]:
+        return "LEXICAL"
+    if transcript_features(text)["vocalization_heavy"]:
+        return "VOCALIZATION"
+    if timing_quality != "timing_good":
+        return "TIMING"
+    return "NONE"
 
 
 def frame_rms(waveform: np.ndarray, frame_samples: int) -> np.ndarray:
@@ -176,12 +287,43 @@ def frame_rms(waveform: np.ndarray, frame_samples: int) -> np.ndarray:
     return np.sqrt(np.mean(np.square(frames, dtype=np.float64), axis=1))
 
 
-def split_long_region(start: int, end: int, maximum: int) -> Iterable[tuple[int, int]]:
-    while end - start > maximum:
-        yield start, start + maximum
-        start += maximum
-    if end > start:
-        yield start, end
+def split_oversized_region(
+    waveform: np.ndarray, samplerate: int, start: int, end: int, maximum: int
+) -> list[tuple[int, int, str]]:
+    """Split long VAD regions near quiet valleys, with a bounded hard fallback."""
+    if end <= start:
+        return []
+    if end - start <= maximum:
+        return [(start, end, "natural")]
+    frame_samples = max(1, round(samplerate * 0.02))
+    minimum_child = max(frame_samples, round(samplerate * 3.0))
+    parts: list[tuple[int, int, str]] = []
+    cursor = start
+    while end - cursor > maximum:
+        target = cursor + maximum
+        search_radius = min(round(maximum * 0.22), round(samplerate * 6.0))
+        search_start = max(cursor + minimum_child, target - search_radius)
+        search_end = min(end - minimum_child, target + search_radius)
+        boundary, strategy = target, "hard_max"
+        if search_end > search_start:
+            local = waveform[search_start:search_end]
+            rms = frame_rms(local, frame_samples)
+            if len(rms) >= 3:
+                smooth = np.convolve(rms, np.ones(3, dtype=np.float64) / 3.0, mode="same")
+                interior = smooth[1:-1] if len(smooth) > 2 else smooth
+                valley_index = int(np.argmin(interior)) + (1 if len(smooth) > 2 else 0)
+                valley = float(smooth[valley_index])
+                reference = max(float(np.percentile(smooth, 65)), 1e-8)
+                if valley <= reference * 0.55:
+                    candidate = search_start + valley_index * frame_samples
+                    if cursor + minimum_child <= candidate <= end - minimum_child:
+                        boundary, strategy = candidate, "energy_valley"
+        boundary = max(cursor + frame_samples, min(boundary, end))
+        parts.append((cursor, boundary, strategy))
+        cursor = boundary
+    if end > cursor:
+        parts.append((cursor, end, "natural" if not parts else parts[-1][2]))
+    return parts
 
 
 def detect_regions(
@@ -229,6 +371,7 @@ def detect_regions(
     post = round(post_roll_ms * samplerate / 1000)
     maximum = max(frame_samples, round(max_segment_seconds * samplerate))
     regions: list[Region] = []
+    parent_region_id = 0
     index = 0
     while index < len(active):
         if not active[index]:
@@ -245,9 +388,91 @@ def detect_regions(
         local = rms[begin:index]
         probability = float(np.clip(np.mean(np.clip(local / max(cutoff * 2.5, 1e-8), 0, 1)), 0, 1))
         classification = "speech" if probability >= 0.35 else "ambiguous_vocalization"
-        for part_start, part_end in split_long_region(start, end, maximum):
-            regions.append(Region(part_start, part_end, probability, classification))
+        parts = split_oversized_region(waveform, samplerate, start, end, maximum)
+        for split_index, (part_start, part_end, strategy) in enumerate(parts):
+            regions.append(
+                Region(
+                    part_start,
+                    part_end,
+                    probability,
+                    classification,
+                    parent_vad_region_id=parent_region_id,
+                    split_index=split_index,
+                    split_count=len(parts),
+                    split_strategy=strategy,
+                )
+            )
+        parent_region_id += 1
     return regions
+
+
+def is_tiny_transcript_long_region(text: str, duration: float, threshold_seconds: float = 8.0) -> bool:
+    count = transcript_features(text)["meaningful_char_count"]
+    return 0 < count <= 3 and duration > threshold_seconds
+
+
+def recover_tiny_timing(
+    waveform: np.ndarray,
+    samplerate: int,
+    speech_probability: float,
+    classification: str,
+) -> tuple[float, float, str]:
+    """Bound a tiny unaligned utterance around the strongest local activity."""
+    duration = len(waveform) / max(1, samplerate)
+    if duration <= 2.5:
+        return 0.0, max(0.4, duration), "timing_vad_fallback"
+    frame_seconds = 0.02
+    frame_samples = max(1, round(samplerate * frame_seconds))
+    rms = frame_rms(np.asarray(waveform, dtype=np.float32), frame_samples)
+    peak_index = int(np.argmax(rms)) if len(rms) else 0
+    peak = float(rms[peak_index]) if len(rms) else 0.0
+    floor = float(np.percentile(rms, 20)) if len(rms) else 0.0
+    cutoff = max(floor * 1.8, peak * 0.22, 1e-5)
+    active = rms >= cutoff
+    # Bridge only very short gaps inside a voiced burst.
+    gap_frames = max(1, round(0.12 / frame_seconds))
+    index = 0
+    while index < len(active):
+        if active[index]:
+            index += 1
+            continue
+        begin = index
+        while index < len(active) and not active[index]:
+            index += 1
+        if begin > 0 and index < len(active) and index - begin <= gap_frames:
+            active[begin:index] = True
+    runs: list[tuple[int, int, float]] = []
+    index = 0
+    while index < len(active):
+        if not active[index]:
+            index += 1
+            continue
+        begin = index
+        while index < len(active) and active[index]:
+            index += 1
+        runs.append((begin, index, float(np.sum(rms[begin:index]))))
+    if runs:
+        begin, end, _ = max(runs, key=lambda item: item[2])
+        start_seconds = begin * frame_seconds
+        end_seconds = min(duration, end * frame_seconds)
+        run_duration = end_seconds - start_seconds
+        evidence_cap = 8.0 if classification == "speech" and speech_probability >= 0.65 and run_duration >= 2.0 else 2.5
+        if run_duration > evidence_cap:
+            center = (start_seconds + end_seconds) / 2
+            start_seconds, end_seconds = center - evidence_cap / 2, center + evidence_cap / 2
+        start_seconds = max(0.0, start_seconds - 0.15)
+        end_seconds = min(duration, end_seconds + 0.2)
+        if end_seconds - start_seconds < 0.4:
+            center = (start_seconds + end_seconds) / 2
+            start_seconds = max(0.0, center - 0.2)
+            end_seconds = min(duration, start_seconds + 0.4)
+        return start_seconds, end_seconds, "timing_energy_recovered"
+    center = min(duration, peak_index * frame_seconds + frame_seconds / 2)
+    target = 1.2 if classification == "ambiguous_vocalization" or speech_probability < 0.45 else 2.0
+    start_seconds = max(0.0, center - target / 2)
+    end_seconds = min(duration, start_seconds + target)
+    start_seconds = max(0.0, end_seconds - target)
+    return start_seconds, end_seconds, "timing_bounded"
 
 
 def release_cuda() -> None:
@@ -399,7 +624,7 @@ def whisper_batch_transcribe(
 
 
 def meaningful_candidate(candidate: Candidate | None) -> bool:
-    return candidate is not None and bool(comparison_text(candidate.text)) and "prompt_leakage" not in candidate.suspicion
+    return candidate is not None and has_meaningful_transcript(candidate.text) and "prompt_leakage" not in candidate.suspicion
 
 
 def should_use_whisper(qwen: Candidate, reazon: Candidate | None, threshold: float = 0.58) -> bool:
@@ -432,7 +657,7 @@ def alignment_integrity(canonical: str, aligned: str) -> dict[str, Any]:
 
 
 def choose_candidate(candidates: dict[str, Candidate]) -> tuple[Candidate, float]:
-    usable = [item for item in candidates.values() if comparison_text(item.text)]
+    usable = [item for item in candidates.values() if has_meaningful_transcript(item.text)]
     if not usable:
         return next(iter(candidates.values())), 0.0
     if len(usable) == 1:
@@ -445,10 +670,11 @@ def choose_candidate(candidates: dict[str, Candidate]) -> tuple[Candidate, float
     return chosen, max(0.0, min(1.0, scores[chosen.engine]))
 
 
-def confidence_for(decision: Decision, alignment_ok: bool) -> float:
-    score = 0.45 + decision.region.speech_probability * 0.25 + decision.comparison_score * 0.2
-    score += 0.1 if alignment_ok else -0.18
-    score -= min(0.3, 0.1 * len(decision.selected.suspicion))
+def confidence_for(decision: Decision) -> float:
+    """Estimate ASR confidence independently from alignment/timing quality."""
+    score = 0.55 + decision.region.speech_probability * 0.25 + decision.comparison_score * 0.2
+    asr_reasons = [reason for reason in decision.selected.suspicion if reason in LEXICAL_REASONS or reason == "prompt_leakage"]
+    score -= min(0.4, 0.1 * len(asr_reasons))
     return round(max(0.0, min(1.0, score)), 3)
 
 
@@ -581,16 +807,38 @@ def main() -> int:
     for index, (region, text) in enumerate(zip(regions, qwen_texts)):
         seconds = (region.end - region.start) / samplerate
         reasons = suspicion_reasons(text, seconds, region.speech_probability, context)
-        if len(previous) >= 3 and comparison_text(text) and all(similarity(text, item) > 0.96 for item in previous[-3:]):
+        features = transcript_features(text)
+        if (
+            len(previous) >= 3
+            and features["meaningful_char_count"] >= 8
+            and not features["vocalization_heavy"]
+            and all(similarity(text, item) > 0.96 for item in previous[-3:])
+        ):
             reasons.append("identical_neighbors")
         leaked, leak_score, fragment = detect_prompt_leakage(text, context)
         candidate = Candidate(
             "qwen3", args.qwen_model, text, reasons, leak_score, fragment if leaked else "", index in leakage_retry_results
         )
-        decisions.append(Decision(region, candidate, {"qwen3": candidate}, 0.0, 0.0, "fallback_required" if reasons else "accepted"))
+        eligible, eligibility_reason = should_use_reazon_fallback(text, reasons, region.classification, region.speech_probability)
+        decisions.append(
+            Decision(
+                region,
+                candidate,
+                {"qwen3": candidate},
+                0.0,
+                0.0,
+                "fallback_required" if eligible else "review" if reasons else "accepted",
+                reazon_eligible=eligible,
+                reazon_reason=eligibility_reason,
+            )
+        )
         previous.append(text)
 
-    fallback_indexes = list(range(len(decisions))) if args.mode == "high_accuracy" else [i for i, item in enumerate(decisions) if item.selected.suspicion]
+    fallback_indexes = (
+        [i for i, item in enumerate(decisions) if has_meaningful_transcript(item.selected.text)]
+        if args.mode == "high_accuracy"
+        else [i for i, item in enumerate(decisions) if item.reazon_eligible]
+    )
     if args.mode == "fast":
         fallback_indexes = []
     reazon_seconds = 0.0
@@ -662,9 +910,15 @@ def main() -> int:
     total_alignment_loss = 0.0
     for index, (decision, clip) in enumerate(zip(decisions, clips)):
         selected = normalize_text(decision.selected.text)
-        if not selected or "prompt_leakage" in decision.selected.suspicion:
+        features = transcript_features(selected)
+        region_duration = (decision.region.end - decision.region.start) / samplerate
+        tiny_long = is_tiny_transcript_long_region(selected, region_duration)
+        vocalization_long = features["vocalization_heavy"] and features["meaningful_char_count"] <= 12 and region_duration > 8.0
+        timing_recovery_needed = tiny_long or vocalization_long
+        if not has_meaningful_transcript(selected) or "prompt_leakage" in decision.selected.suspicion:
             decision.quality_state = "failed"
             decision.confidence = 0
+            decision.timing_quality = "timing_suspicious"
             continue
         try:
             aligned = aligner.align(audio=clip, text=selected, language=JAPANESE)[0]
@@ -682,21 +936,39 @@ def main() -> int:
             total_alignment_loss += integrity["omission_ratio"]
             if integrity["valid"]:
                 decision.alignment = "aligned"
+                decision.timing_quality = "timing_good"
                 groups = split_alignment(items)
             else:
                 alignment_integrity_failures += 1
                 alignment_timing_only_segments += 1
                 decision.alignment = "timing_only"
                 decision.quality_state = "review"
-                groups = [[{"text": selected, "start_time": items[0]["start_time"], "end_time": items[-1]["end_time"]}]]
+                aligned_duration = items[-1]["end_time"] - items[0]["start_time"]
+                if timing_recovery_needed and aligned_duration > 8.0:
+                    recovered_start, recovered_end, timing_state = recover_tiny_timing(
+                        clip[0], clip[1], decision.region.speech_probability, decision.region.classification
+                    )
+                    decision.timing_quality = timing_state
+                    groups = [[{"text": selected, "start_time": recovered_start, "end_time": recovered_end}]]
+                else:
+                    decision.timing_quality = "timing_good"
+                    groups = [[{"text": selected, "start_time": items[0]["start_time"], "end_time": items[-1]["end_time"]}]]
         except Exception:
             alignment_failures += 1
             decision.alignment = "vad_fallback"
             decision.quality_state = "review"
             clip_seconds = len(clip[0]) / clip[1]
-            groups = [[{"text": selected, "start_time": 0.0, "end_time": clip_seconds}]]
+            if timing_recovery_needed:
+                recovered_start, recovered_end, timing_state = recover_tiny_timing(
+                    clip[0], clip[1], decision.region.speech_probability, decision.region.classification
+                )
+                decision.timing_quality = timing_state
+                groups = [[{"text": selected, "start_time": recovered_start, "end_time": recovered_end}]]
+            else:
+                decision.timing_quality = "timing_vad_fallback"
+                groups = [[{"text": selected, "start_time": 0.0, "end_time": clip_seconds}]]
             integrity = alignment_integrity(selected, selected)
-        decision.confidence = confidence_for(decision, decision.alignment == "aligned")
+        decision.confidence = confidence_for(decision)
         if decision.confidence < 0.45:
             decision.quality_state = "review"
         base_seconds = decision.region.start / samplerate
@@ -717,13 +989,15 @@ def main() -> int:
             decision.quality_state = "review"
             clip_seconds = len(clip[0]) / clip[1]
             groups = [[{"text": selected, "start_time": 0.0, "end_time": clip_seconds}]]
+            decision.timing_quality = "timing_vad_fallback"
         for group in groups:
             text = "".join(item["text"] for item in group).strip()
             if not text:
                 continue
             start_ms = round((base_seconds + group[0]["start_time"]) * 1000)
             end_ms = round((base_seconds + group[-1]["end_time"]) * 1000)
-            end_ms = max(end_ms, start_ms + 350)
+            region_end_ms = round(decision.region.end / samplerate * 1000)
+            end_ms = min(region_end_ms, max(end_ms, start_ms + 350))
             record: dict[str, Any] = {
                 "start_ms": start_ms,
                 "end_ms": end_ms,
@@ -736,6 +1010,8 @@ def main() -> int:
                 "selected_model": decision.selected.model,
                 "comparison_score": round(decision.comparison_score, 3),
                 "alignment": decision.alignment,
+                "timing_quality_state": decision.timing_quality,
+                "suspicion_category": suspicion_category(selected, decision.selected.suspicion, decision.timing_quality),
             }
             if args.debug:
                 record["candidates"] = candidate_payload
@@ -746,6 +1022,19 @@ def main() -> int:
                 record["alignment_similarity"] = integrity["similarity"]
                 record["alignment_coverage"] = integrity["coverage"]
                 record["alignment_integrity_state"] = decision.alignment
+                record["meaningful_char_count"] = features["meaningful_char_count"]
+                record["vocalization_ratio"] = features["vocalization_ratio"]
+                record["lexical_ratio"] = features["lexical_ratio"]
+                record["region_duration"] = round(region_duration, 3)
+                record["tiny_transcript_long_region"] = tiny_long
+                record["vocalization_long_region"] = vocalization_long
+                record["reazon_eligible"] = decision.reazon_eligible
+                record["reazon_reason"] = decision.reazon_reason
+                record["reazon_nonempty"] = meaningful_candidate(decision.candidates.get("reazon"))
+                record["parent_vad_region_id"] = decision.region.parent_vad_region_id
+                record["split_index"] = decision.region.split_index
+                record["split_count"] = decision.region.split_count
+                record["split_strategy"] = decision.region.split_strategy
             output_segments.append(record)
         if index % 8 == 0:
             progress(62 + round(30 * (index + 1) / len(decisions)), "aligning")
@@ -755,6 +1044,14 @@ def main() -> int:
 
     output_segments.sort(key=lambda item: (item["start_ms"], item["end_ms"]))
     reazon_count = sum("reazon" in item.candidates for item in decisions)
+    reazon_nonempty = sum(meaningful_candidate(item.candidates.get("reazon")) for item in decisions)
+    reazon_empty = reazon_count - reazon_nonempty
+    reazon_selected = sum(item.selected.engine == "reazon" for item in decisions)
+    reazon_rejected = max(0, reazon_nonempty - reazon_selected)
+    reazon_reason_counts: dict[str, int] = {}
+    for index in fallback_indexes:
+        reason = decisions[index].reazon_reason or "high_accuracy_verification"
+        reazon_reason_counts[reason] = reazon_reason_counts.get(reason, 0) + 1
     whisper_count = sum("whisper" in item.candidates for item in decisions)
     review_count = sum(item.quality_state != "accepted" for item in decisions)
     leakage_segments = len(leakage_indexes)
@@ -766,6 +1063,20 @@ def main() -> int:
         for reason in decision.candidates["qwen3"].suspicion:
             suspicion_counts[reason] = suspicion_counts.get(reason, 0) + 1
     total_seconds = time.monotonic() - started
+    punctuation_only_segments = sum(bool(normalize_text(item.selected.text)) and not has_meaningful_transcript(item.selected.text) for item in decisions)
+    timing_quality_counts: dict[str, int] = {}
+    suspicion_category_counts: dict[str, int] = {}
+    for item in decisions:
+        timing_quality_counts[item.timing_quality] = timing_quality_counts.get(item.timing_quality, 0) + 1
+        category = suspicion_category(item.selected.text, item.selected.suspicion, item.timing_quality)
+        suspicion_category_counts[category] = suspicion_category_counts.get(category, 0) + 1
+    output_durations = [item["end_ms"] - item["start_ms"] for item in output_segments]
+    tiny_long_output = sum(
+        transcript_features(item["text"])["meaningful_char_count"] <= 3 and item["end_ms"] - item["start_ms"] > 10000
+        for item in output_segments
+    )
+    hard_max_splits = sum(item.region.split_strategy == "hard_max" for item in decisions)
+    energy_valley_splits = sum(item.region.split_strategy == "energy_valley" for item in decisions)
     payload = {
         "duration_ms": round(duration * 1000),
         "processed_ms": round(duration * 1000),
@@ -794,6 +1105,15 @@ def main() -> int:
             "qwen_segments": len(decisions),
             "reazon_fallback_segments": reazon_count,
             "reazon_fallback_percentage": round(reazon_count * 100 / len(decisions), 2),
+            "reazon_candidates": reazon_count,
+            "reazon_nonempty_candidates": reazon_nonempty,
+            "reazon_empty_candidates": reazon_empty,
+            "reazon_empty_percentage": round(reazon_empty * 100 / reazon_count, 2) if reazon_count else 0,
+            "reazon_selected_segments": reazon_selected,
+            "reazon_rejected_segments": reazon_rejected,
+            "reazon_corrected_segments": reazon_selected,
+            "fallback_benefit_percentage": round(reazon_selected * 100 / reazon_count, 2) if reazon_count else 0,
+            "reazon_reason_counts": reazon_reason_counts,
             "whisper_fallback_segments": whisper_count,
             "whisper_fallback_percentage": round(whisper_count * 100 / len(decisions), 2),
             "review_segments": review_count,
@@ -803,6 +1123,16 @@ def main() -> int:
             "alignment_timing_only_segments": alignment_timing_only_segments,
             "alignment_recovered_segments": alignment_recovered_segments,
             "alignment_text_loss_percentage": round(total_alignment_loss * 100 / len(decisions), 2),
+            "timing_quality_states": timing_quality_counts,
+            "suspicion_categories": suspicion_category_counts,
+            "subtitle_rows_over_10_seconds": sum(duration > 10000 for duration in output_durations),
+            "subtitle_rows_over_20_seconds": sum(duration > 20000 for duration in output_durations),
+            "subtitle_rows_over_30_seconds": sum(duration > 30000 for duration in output_durations),
+            "subtitle_rows_at_segment_limit": sum(abs(duration - args.max_segment_seconds * 1000) <= 100 for duration in output_durations),
+            "tiny_transcript_rows_over_10_seconds": tiny_long_output,
+            "punctuation_only_segments_suppressed": punctuation_only_segments,
+            "hard_max_split_regions": hard_max_splits,
+            "energy_valley_split_regions": energy_valley_splits,
             "prompt_leakage_segments": leakage_segments,
             "prompt_leakage_retries": len(leakage_indexes),
             "prompt_leakage_recovered": leakage_recovered,
