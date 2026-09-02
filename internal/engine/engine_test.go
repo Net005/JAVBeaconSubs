@@ -40,3 +40,20 @@ func TestValidateSegmentsAcceptsOrderedSubtitleRows(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestExistingArtifactOnlyReturnsRegularFiles(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "movie.en.srt")
+	if got := existingArtifact(path); got != "" {
+		t.Fatalf("missing artifact = %q", got)
+	}
+	if err := os.WriteFile(path, []byte("subtitle"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := existingArtifact(path); got != path {
+		t.Fatalf("existing artifact = %q, want %q", got, path)
+	}
+	if got := existingArtifact(root); got != "" {
+		t.Fatalf("directory artifact = %q", got)
+	}
+}

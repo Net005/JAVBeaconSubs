@@ -48,6 +48,7 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ### Fixed
 
+- Report existing-subtitle skips honestly instead of presenting an instant no-op as a successful Fast/Balanced rerun, and expose every previously generated artifact on the skipped result.
 - Enforced `max_segment_seconds` as a hard VAD-region limit so a quiet-valley split can never make Qwen exceed the 30-second validation boundary and cascade into whole-file fallbacks.
 - Prevented punctuation-only ASR output from becoming subtitles or translation requests, bounded pathological long timing for tiny vocalizations, and stopped Balanced mode spending Reazon work on repeated short replies and vocal reactions.
 - Isolated Qwen-ASR and NeMo/ReazonSpeech in separate Python environments because their required Transformers versions conflict, while retaining one shared PyTorch/CUDA runtime to avoid duplicating the largest image dependencies.

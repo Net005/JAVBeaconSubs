@@ -349,7 +349,29 @@ func (m *Manager) process(ctx context.Context, id string) {
 		m.jobs[id].Results = append(m.jobs[id].Results, result)
 		m.mu.Unlock()
 	}
-	m.finish(id, "complete", "")
+	status := "complete"
+	if allResultsSkipped(jobResultSnapshot(m, id)) {
+		status = "skipped"
+	}
+	m.finish(id, status, "")
+}
+
+func jobResultSnapshot(m *Manager, id string) []engine.Result {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return append([]engine.Result(nil), m.jobs[id].Results...)
+}
+
+func allResultsSkipped(results []engine.Result) bool {
+	if len(results) == 0 {
+		return false
+	}
+	for _, result := range results {
+		if !result.Skipped {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *Manager) finish(id, status, errorMessage string) {
@@ -363,8 +385,8 @@ func (m *Manager) finish(id, status, errorMessage string) {
 	job.Error = errorMessage
 	if errorMessage != "" {
 		job.Message = errorMessage
-	} else if status == "complete" {
-		job.Message = "All subtitles generated"
+	} else if status == "complete" || status == "skipped" {
+		job.Message = completionMessage(job.Results)
 	}
 	now := time.Now().UTC()
 	job.FinishedAt = &now
@@ -380,6 +402,22 @@ func (m *Manager) finish(id, status, errorMessage string) {
 	if status == "complete" && m.post != nil && m.post.Enabled() {
 		go m.runPostProcessing(id)
 	}
+}
+
+func completionMessage(results []engine.Result) string {
+	skipped := 0
+	for _, result := range results {
+		if result.Skipped {
+			skipped++
+		}
+	}
+	if skipped == 0 {
+		return "All subtitles generated"
+	}
+	if skipped == len(results) {
+		return fmt.Sprintf("Skipped %d existing file(s); enable Replace existing subtitles to rerun recognition or change accuracy", skipped)
+	}
+	return fmt.Sprintf("Generated %d file(s); skipped %d existing file(s)", len(results)-skipped, skipped)
 }
 
 func (m *Manager) runPostProcessing(id string) {
