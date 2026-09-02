@@ -22,7 +22,7 @@ func Clean(in []Segment) []Segment {
 	out := make([]Segment, 0, len(in))
 	for _, seg := range in {
 		seg.Text = strings.TrimSpace(spaceRE.ReplaceAllString(seg.Text, " "))
-		if seg.Text == "" || bracketNoiseRE.MatchString(seg.Text) || seg.EndMS <= seg.StartMS {
+		if !HasMeaningfulTranscript(seg.Text) || bracketNoiseRE.MatchString(seg.Text) || seg.EndMS <= seg.StartMS {
 			continue
 		}
 		if seg.StartMS < 0 {
@@ -46,6 +46,17 @@ func Clean(in []Segment) []Segment {
 		out = append(out, seg)
 	}
 	return out
+}
+
+// HasMeaningfulTranscript rejects punctuation, whitespace, and formatting-only
+// ASR output while retaining Japanese, Latin text, acronyms, and numbers.
+func HasMeaningfulTranscript(text string) bool {
+	for _, r := range text {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
+			return true
+		}
+	}
+	return false
 }
 
 func duplicate(a, b Segment) bool {

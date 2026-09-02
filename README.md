@@ -105,6 +105,10 @@ The job form has two explicit modes:
 
 The canonical content profiles are `standard`, `jav`, and `giga`; legacy `tokusatsu` and `akiba` inputs normalize to `giga`. Their Qwen hints are deliberately minimal Japanese-only strings to prevent prompt text leaking into subtitles. Profile and recognition accuracy can each be Auto, explicitly selected, or resolved independently per file by case-insensitive path mappings in the Profiles tab. **Also keep Japanese** writes `.ja.srt` and `.ja.ass` from the canonical Japanese transcript without another ASR pass.
 
+Pipeline `qwen-first-v2.1` rejects punctuation-only ASR output, splits oversized VAD regions near local energy valleys, and bounds tiny unaligned vocalizations around the strongest speech-like activity instead of displaying `あ`, `うん`, or `ん` for an entire 30-second region. Balanced mode now reserves Reazon for lexical/script anomalies and unresolved prompt leakage; ordinary repeated short replies and vocal reactions remain local. Diagnostics separately report ASR, alignment, and timing quality plus attempted/non-empty/selected Reazon counts.
+
+Compare an old and new debug export without printing dialogue using `PYTHONPATH=asr python3 asr/compare_diagnostics.py old.subtitles.json new.subtitles.json`. The report includes long/tiny/punctuation row counts, fallback benefit, alignment totals, runtime, and RTF.
+
 The Profiles tab also manages the bundled Japanese Recognition Vocabulary v1 and Translation Glossary v2. Recognition vocabulary contains Japanese recognition guidance only and is never blindly substituted or injected wholesale into Qwen. Translation mappings inherit Global plus JAV or GIGA scope and are filtered to terms occurring in the active translation window. Title/series overrides take precedence when present.
 
 The separate **Settings** tab switches between direct local translation, Japanese-only transcription, and higher-quality contextual translation. It stores the endpoint URL, model, key, batching, timeout, scene-gap threshold, translation-memory preference, and glossaries in SQLite. Saved API keys are never returned to the browser; leaving the key blank keeps the existing value.
@@ -131,7 +135,7 @@ The default `translation.mode=direct` uses local whisper.cpp and therefore consu
 
 The example contextual endpoint, `http://host.docker.internal:11434/v1`, is local Ollama. It also consumes no OpenAI usage. “OpenAI-compatible” describes the HTTP protocol; it does not mean requests automatically go to OpenAI.
 
-If `translation.base_url` is changed to `https://api.openai.com/v1` and an OpenAI API key is supplied, calls are billed to that API account using the selected model's input/output token rates. API billing and API rate limits are separate from ChatGPT/Codex plan limits. Exact usage depends on dialogue length; completed job results record `translation_input_tokens`, `translation_output_tokens`, and `translation_total_tokens` whenever the endpoint returns standard usage metadata. Logs also report translated, context, reused, and included-glossary row counts without dialogue text or credentials, making an old/new movie A/B comparison straightforward.
+If `translation.base_url` is changed to `https://api.openai.com/v1` and an OpenAI API key is supplied, calls are billed to that API account using the selected model's input/output token rates. API billing and API rate limits are separate from ChatGPT/Codex plan limits. Exact usage depends on dialogue length; completed job results record input/output/total tokens, batch and row counts, and tokens per source minute whenever the endpoint returns standard usage metadata. Enter the provider's current input/output price per million tokens in Settings to also record estimated cost and cost per source hour. Prices default to zero because an OpenAI-compatible endpoint does not identify its provider or billing rate reliably.
 
 ## CUDA recovery and VRAM behavior
 

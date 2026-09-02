@@ -1,8 +1,11 @@
 package engine
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -159,6 +162,25 @@ func TestTranslationMemoryExcludesShortReactions(t *testing.T) {
 	memory.store(" 今日は  晴れです ", "It is sunny today.")
 	if got, ok := memory.lookup("今日は 晴れです"); !ok || got != "It is sunny today." {
 		t.Fatalf("normalized exact memory lookup = %q, %v", got, ok)
+	}
+}
+
+func TestContextualTranslationSuppressesPunctuationBeforeAPI(t *testing.T) {
+	runner := &Runner{
+		cfg: config.Config{Translation: config.TranslationConfig{Mode: "contextual", BatchSize: 24}},
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	out, usage, err := runner.translate(
+		context.Background(),
+		[]subtitle.Segment{{StartMS: 0, EndMS: 30_000, Text: "。"}},
+		func(string, int, string) {},
+		NewTranslationMemory(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 0 || usage.Batches != 0 || usage.TotalTokens != 0 {
+		t.Fatalf("punctuation reached translation path: out=%#v usage=%#v", out, usage)
 	}
 }
 

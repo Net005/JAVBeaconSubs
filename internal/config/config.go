@@ -86,16 +86,18 @@ type WhisperConfig struct {
 }
 
 type TranslationConfig struct {
-	Mode               string              `json:"mode"`
-	BaseURL            string              `json:"base_url"`
-	APIKey             string              `json:"api_key"`
-	Model              string              `json:"model"`
-	BatchSize          int                 `json:"batch_size"`
-	TimeoutSec         int                 `json:"timeout_seconds"`
-	ContextGapMS       int64               `json:"context_gap_ms"`
-	TranslationMemory  bool                `json:"translation_memory"`
-	Glossary           string              `json:"glossary"`
-	StructuredGlossary *StructuredGlossary `json:"structured_glossary,omitempty"`
+	Mode                 string              `json:"mode"`
+	BaseURL              string              `json:"base_url"`
+	APIKey               string              `json:"api_key"`
+	Model                string              `json:"model"`
+	BatchSize            int                 `json:"batch_size"`
+	TimeoutSec           int                 `json:"timeout_seconds"`
+	ContextGapMS         int64               `json:"context_gap_ms"`
+	TranslationMemory    bool                `json:"translation_memory"`
+	InputCostPerMillion  float64             `json:"input_cost_per_million,omitempty"`
+	OutputCostPerMillion float64             `json:"output_cost_per_million,omitempty"`
+	Glossary             string              `json:"glossary"`
+	StructuredGlossary   *StructuredGlossary `json:"structured_glossary,omitempty"`
 }
 
 type StructuredGlossary struct {
@@ -441,6 +443,9 @@ func NormalizeTranslation(value *TranslationConfig) error {
 	}
 	if value.ContextGapMS > 3_600_000 {
 		return errors.New("translation.context_gap_ms cannot exceed 3600000")
+	}
+	if value.InputCostPerMillion < 0 || value.OutputCostPerMillion < 0 {
+		return errors.New("translation token costs cannot be negative")
 	}
 	if value.StructuredGlossary != nil {
 		styles := make([]string, 0, len(value.StructuredGlossary.Style))

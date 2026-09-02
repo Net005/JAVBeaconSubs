@@ -127,7 +127,7 @@ func TestTranslationSettingsArePersistentAndKeyIsWriteOnly(t *testing.T) {
 	}
 	post := jobs.NewPostProcessor(config.PostProcessingConfig{Mode: "none", TimeoutSec: 60}, logger)
 	handler := New(cfg, nil, runner, authManager, post, database, logger).Handler()
-	body := `{"translation":{"mode":"contextual","base_url":"http://llm/v1","api_key":"very-secret","model":"qwen","batch_size":12,"timeout_seconds":60,"context_gap_ms":5000,"translation_memory":true,"glossary":"Mio=Mio","structured_glossary":{"style":["Keep honorifics"],"terms":{"先生":"teacher"}}},"post_processing":{"mode":"none","timeout_seconds":60}}`
+	body := `{"translation":{"mode":"contextual","base_url":"http://llm/v1","api_key":"very-secret","model":"qwen","batch_size":12,"timeout_seconds":60,"context_gap_ms":5000,"translation_memory":true,"input_cost_per_million":1.25,"output_cost_per_million":10,"glossary":"Mio=Mio","structured_glossary":{"style":["Keep honorifics"],"terms":{"先生":"teacher"}}},"post_processing":{"mode":"none","timeout_seconds":60}}`
 	request := httptest.NewRequest(http.MethodPut, "/api/v1/settings", strings.NewReader(body))
 	request.Header.Set("Authorization", "Bearer test-api-token")
 	response := httptest.NewRecorder()
@@ -141,8 +141,11 @@ func TestTranslationSettingsArePersistentAndKeyIsWriteOnly(t *testing.T) {
 	if !strings.Contains(response.Body.String(), `"api_key_set":true`) {
 		t.Fatal("API did not report a saved key")
 	}
+	if !strings.Contains(response.Body.String(), `"input_cost_per_million":1.25`) || !strings.Contains(response.Body.String(), `"output_cost_per_million":10`) {
+		t.Fatalf("translation pricing was not persisted: %s", response.Body.String())
+	}
 	saved, ok, err := database.LoadTranslation()
-	if err != nil || !ok || saved.APIKey != "very-secret" || saved.Mode != "contextual" || saved.ContextGapMS != 5000 || !saved.TranslationMemory || saved.StructuredGlossary.Terms["先生"] != "teacher" {
+	if err != nil || !ok || saved.APIKey != "very-secret" || saved.Mode != "contextual" || saved.ContextGapMS != 5000 || !saved.TranslationMemory || saved.InputCostPerMillion != 1.25 || saved.OutputCostPerMillion != 10 || saved.StructuredGlossary.Terms["先生"] != "teacher" {
 		t.Fatalf("saved settings: %#v ok=%v err=%v", saved, ok, err)
 	}
 }
