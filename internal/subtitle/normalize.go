@@ -31,6 +31,10 @@ type NormalizationChange struct {
 	// "alignment_anchors" when real forced-alignment anchors were used, or
 	// "proportional_fallback" when none were trustworthy (see splitProportionally).
 	Method string
+	// PunctuationRepaired is true when repairOrphanEllipsisBoundaries had to
+	// relocate a leftover ellipsis fragment (a lone "." or "..") that
+	// semantic chunking left at the start of a child chunk.
+	PunctuationRepaired bool
 }
 
 func DefaultNormalizeOptions() NormalizeOptions {
@@ -98,6 +102,9 @@ func NormalizeSubtitles(input []Segment, options NormalizeOptions) ([]Segment, [
 			}
 			usingProportionalFallback = true
 		}
+		punctuationRepaired := false
+		chunks, punctuationRepaired = repairOrphanEllipsisBoundaries(chunks)
+
 		skipped := ""
 		if len(chunks) >= 2 && duration < options.MinCueDurationMS*int64(len(chunks)) {
 			skipped = "insufficient aligned duration"
@@ -126,7 +133,8 @@ func NormalizeSubtitles(input []Segment, options NormalizeOptions) ([]Segment, [
 		}
 		output = append(output, children...)
 		changes = append(changes, NormalizationChange{
-			SourceIndex: sourceIndex, DurationMS: duration, Characters: characters, OutputCues: len(children), Method: method,
+			SourceIndex: sourceIndex, DurationMS: duration, Characters: characters, OutputCues: len(children),
+			Method: method, PunctuationRepaired: punctuationRepaired,
 		})
 	}
 	return output, changes, nil
@@ -307,7 +315,16 @@ func boundaryPriority(runes []rune, index int) int {
 	}
 	previous := runes[index-1]
 	switch previous {
-	case '.', '!', '?', '。', '！', '？', '…':
+	case '.':
+		// Never cut in the middle of a multi-dot ellipsis ("...", ".."):
+		// only the final dot in a run is a valid sentence-boundary cut
+		// point. Cutting earlier would leave an orphaned "." or ".." at
+		// the start of the next chunk.
+		if index < len(runes) && runes[index] == '.' {
+			return 0
+		}
+		return 1
+	case '!', '?', '。', '！', '？', '…':
 		return 1
 	case ';', ':', '；', '：':
 		return 2
@@ -318,6 +335,51 @@ func boundaryPriority(runes []rune, index int) int {
 		return 4
 	}
 	return 0
+}
+
+// repairOrphanEllipsisBoundaries fixes a specific splitting artifact: a
+// child chunk beginning with a partial ellipsis (a lone "." or "..") left
+// behind when a boundary landed inside a "..." run (for example via the
+// unconditional hard-cut fallback in semanticChunks, or after chunks were
+// merged by coalesceChunks). It relocates the orphaned dots onto the end of
+// the preceding chunk rather than deleting them: concatenating chunks in
+// order produces the exact same character sequence either way, so the
+// text-conservation invariant (NormalizeWhitespace equality) is unaffected.
+// A complete ellipsis ("..." or the single "…" rune) that legitimately
+// opens a chunk is left untouched. The first chunk is never modified: its
+// leading text is original, not a splitting artifact.
+func repairOrphanEllipsisBoundaries(chunks []string) ([]string, bool) {
+	if len(chunks) < 2 {
+		return chunks, false
+	}
+	result := make([]string, 0, len(chunks))
+	repaired := false
+	for i, chunk := range chunks {
+		if i == 0 {
+			result = append(result, chunk)
+			continue
+		}
+		runes := []rune(chunk)
+		dots := 0
+		for dots < len(runes) && runes[dots] == '.' {
+			dots++
+		}
+		if dots == 0 || dots >= 3 {
+			result = append(result, chunk)
+			continue
+		}
+		rest := strings.TrimLeft(string(runes[dots:]), " \t")
+		prevIndex := len(result) - 1
+		result[prevIndex] = strings.TrimRight(result[prevIndex], " \t") + string(runes[:dots])
+		repaired = true
+		if rest == "" {
+			// The chunk was nothing but leftover dots; its text has been
+			// relocated in full, so drop the now-empty chunk.
+			continue
+		}
+		result = append(result, rest)
+	}
+	return result, repaired
 }
 
 func splitAtAlignmentAnchors(source Segment, chunks []string, anchors []int64) []Segment {
@@ -389,8 +451,12 @@ func wrapTwoLines(text string, options NormalizeOptions) string {
 		return text
 	}
 	runes := []rune(text)
-	target := len(runes) / 2
-	best, distance := 0, len(runes)+1
+	// Pick the whitespace boundary that minimizes the visible-length
+	// difference between the two resulting lines, rather than the one
+	// closest to the raw rune-index midpoint: a wide character (CJK) or an
+	// uneven word length can otherwise leave one very short line next to a
+	// much longer one even though a more balanced split was available.
+	best, distance := 0, -1
 	for i, r := range runes {
 		if !unicode.IsSpace(r) {
 			continue
@@ -400,10 +466,11 @@ func wrapTwoLines(text string, options NormalizeOptions) string {
 		if left == "" || right == "" {
 			continue
 		}
-		if visibleCharacters(left) > options.MaxCharsPerLine || visibleCharacters(right) > options.MaxCharsPerLine {
+		leftChars, rightChars := visibleCharacters(left), visibleCharacters(right)
+		if leftChars > options.MaxCharsPerLine || rightChars > options.MaxCharsPerLine {
 			continue
 		}
-		if d := abs(i - target); d < distance {
+		if d := abs(leftChars - rightChars); distance < 0 || d < distance {
 			best, distance = i, d
 		}
 	}

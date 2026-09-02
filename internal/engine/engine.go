@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"javbeaconsubs/internal/buildinfo"
 	"javbeaconsubs/internal/config"
@@ -495,10 +496,75 @@ func (r *Runner) normalizeSubtitles(track, input string, segments []subtitle.Seg
 		for _, change := range changes {
 			r.log.Debug("subtitle normalizer", "track", track, "source_index", change.SourceIndex,
 				"duration_ms", change.DurationMS, "characters", change.Characters,
-				"output_cues", change.OutputCues, "skipped", change.Skipped, "method", change.Method)
+				"output_cues", change.OutputCues, "skipped", change.Skipped, "method", change.Method,
+				"punctuation_repaired", change.PunctuationRepaired)
 		}
+		summary := summarizeNormalization(normalized, changes, options)
+		r.log.Debug("subtitle normalizer summary", "track", track,
+			"cues", len(normalized),
+			"lines_over_target", summary.linesOverTarget,
+			"lines_over_hard_target", summary.linesOverHardTarget,
+			"max_line_chars", summary.maxLineChars,
+			"alignment_anchor_splits", summary.alignmentAnchorSplits,
+			"proportional_fallback_splits", summary.proportionalFallbackSplits,
+			"skipped_splits", summary.skippedSplits,
+			"punctuation_repairs", summary.punctuationRepairs,
+		)
 	}
 	return normalized, nil
+}
+
+// normalizationSummary holds diagnostic-only aggregate counters over one
+// track's normalization pass. These never influence splitting or wrapping
+// behavior; they exist purely to make regressions (an unusually high
+// over-target line count, an unexpected surge in proportional-fallback
+// splits) visible in debug logs without re-deriving them by hand.
+type normalizationSummary struct {
+	linesOverTarget            int
+	linesOverHardTarget        int
+	maxLineChars               int
+	alignmentAnchorSplits      int
+	proportionalFallbackSplits int
+	skippedSplits              int
+	punctuationRepairs         int
+}
+
+func summarizeNormalization(segments []subtitle.Segment, changes []subtitle.NormalizationChange, options subtitle.NormalizeOptions) normalizationSummary {
+	var summary normalizationSummary
+	for _, segment := range segments {
+		for _, line := range strings.Split(segment.Text, "\n") {
+			chars := 0
+			for _, r := range line {
+				if !unicode.IsSpace(r) {
+					chars++
+				}
+			}
+			if chars > summary.maxLineChars {
+				summary.maxLineChars = chars
+			}
+			if chars > options.TargetCharsPerLine {
+				summary.linesOverTarget++
+			}
+			if chars > options.MaxCharsPerLine {
+				summary.linesOverHardTarget++
+			}
+		}
+	}
+	for _, change := range changes {
+		switch change.Method {
+		case "alignment_anchors":
+			summary.alignmentAnchorSplits++
+		case "proportional_fallback":
+			summary.proportionalFallbackSplits++
+		}
+		if change.Skipped != "" {
+			summary.skippedSplits++
+		}
+		if change.PunctuationRepaired {
+			summary.punctuationRepairs++
+		}
+	}
+	return summary
 }
 
 func (r *Runner) writeSRT(result *Result, path, language, transcriptionBackend, translationBackend string, segments []subtitle.Segment) error {

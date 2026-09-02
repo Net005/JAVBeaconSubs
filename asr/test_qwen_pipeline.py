@@ -20,7 +20,10 @@ SPEC.loader.exec_module(pipeline)
 
 
 class PipelineUtilitiesTest(unittest.TestCase):
-    def run_synthetic_pipeline(self, transcript, align_side_effect=None, mode="balanced", retry_transcript=None):
+    def run_synthetic_pipeline(
+        self, transcript, align_side_effect=None, mode="balanced", retry_transcript=None,
+        speech_probability=0.55, classification="speech",
+    ):
         samplerate = 1000
         audio = np.zeros(samplerate * 30, dtype=np.float32)
         audio[samplerate * 12 : samplerate * 13] = 0.04
@@ -30,8 +33,8 @@ class PipelineUtilitiesTest(unittest.TestCase):
             fake_soundfile = types.SimpleNamespace(read=lambda *_args, **_kwargs: (audio, samplerate))
             aligner = mock.Mock()
             aligner.align.side_effect = align_side_effect
-            reasons = pipeline.suspicion_reasons(transcript, 30.0, 0.55, pipeline.PROFILE_CONTEXT["jav"])
-            eligible, retry_reason = pipeline.should_retry_qwen(transcript, reasons, "speech", 0.55)
+            reasons = pipeline.suspicion_reasons(transcript, 30.0, speech_probability, pipeline.PROFILE_CONTEXT["jav"])
+            eligible, retry_reason = pipeline.should_retry_qwen(transcript, reasons, classification, speech_probability)
             wants_retry = "prompt_leakage" in reasons or (mode != "fast" and eligible)
             retry_value = retry_transcript if retry_transcript is not None else transcript
             arguments = [
@@ -40,7 +43,10 @@ class PipelineUtilitiesTest(unittest.TestCase):
             ]
             with (
                 mock.patch.object(sys, "argv", arguments),
-                mock.patch.object(pipeline, "detect_regions", return_value=[pipeline.Region(0, len(audio), 0.55, "speech")]),
+                mock.patch.object(
+                    pipeline, "detect_regions",
+                    return_value=[pipeline.Region(0, len(audio), speech_probability, classification)],
+                ),
                 mock.patch.object(
                     pipeline,
                     "qwen_worker_transcribe",
@@ -302,6 +308,86 @@ class PipelineUtilitiesTest(unittest.TestCase):
         self.assertTrue(result["metrics"]["qwen_model_deleted"])
         self.assertIn("gpu_used_mb_after_qwen_cleanup", result["metrics"])
         self.assertIn("gpu_used_mb_before_aligner", result["metrics"])
+
+    def test_retry_is_low_evidence_vocalization_requires_tiny_token_and_weak_evidence(self):
+        tiny_tokens = ["はい", "うん", "あ", "え", "ん"]
+        for token in tiny_tokens:
+            retry = pipeline.Candidate("qwen_retry", "q", token, [])
+            with self.subTest(token=token, evidence="ambiguous_classification"):
+                self.assertTrue(pipeline.retry_is_low_evidence_vocalization(retry, 0.8, "ambiguous_vocalization"))
+            with self.subTest(token=token, evidence="weak_speech_probability"):
+                self.assertTrue(pipeline.retry_is_low_evidence_vocalization(retry, 0.1, "speech"))
+            with self.subTest(token=token, evidence="strong"):
+                # Real timing/audio confidence (clear speech classification,
+                # high VAD speech probability) must let the vocalization be
+                # preserved rather than treated as ambiguous.
+                self.assertFalse(pipeline.retry_is_low_evidence_vocalization(retry, 0.8, "speech"))
+        # A genuine short utterance recovered from a leaked prompt is not a
+        # tiny generic vocalization and must never be classified this way,
+        # regardless of how weak the surrounding evidence looks.
+        substantive = pipeline.Candidate("qwen_retry", "q", "エアコンの温度を一十五度に。", [])
+        self.assertFalse(pipeline.retry_is_low_evidence_vocalization(substantive, 0.1, "ambiguous_vocalization"))
+
+    def test_qwen_retry_improves_withholds_recovery_for_weak_evidence_vocalization(self):
+        original_text = "日本語・成人向け映像。"
+        original_reasons = pipeline.suspicion_reasons(original_text, 2.0, 0.8, pipeline.PROFILE_CONTEXT["jav"])
+        original = pipeline.Candidate("qwen3", "q", original_text, original_reasons)
+        self.assertIn("prompt_leakage", original.suspicion)
+
+        retry_reasons = pipeline.suspicion_reasons("あ", 2.0, 0.1, "")
+        retry = pipeline.Candidate("qwen_retry", "q", "あ", retry_reasons)
+        self.assertNotIn("prompt_leakage", retry.suspicion)
+
+        # Weak/ambiguous evidence: do not automatically accept the retry as
+        # recovered.
+        self.assertFalse(
+            pipeline.qwen_retry_improves(
+                original, retry, 2.0, speech_probability=0.1, classification="ambiguous_vocalization"
+            )
+        )
+        # The same tiny vocalization with strong timing/audio confidence
+        # behind it (clear speech classification, high speech probability)
+        # is still preserved as a recovered retry.
+        self.assertTrue(
+            pipeline.qwen_retry_improves(
+                original, retry, 2.0, speech_probability=0.9, classification="speech"
+            )
+        )
+        # Calling with no speech_probability/classification at all (the
+        # original call shape) keeps prior behavior: recovery is accepted.
+        self.assertTrue(pipeline.qwen_retry_improves(original, retry, 2.0))
+
+    def test_ambiguous_vocalization_prompt_leak_retry_prefers_no_subtitle(self):
+        result, _ = self.run_synthetic_pipeline(
+            "日本語・成人向け映像。",
+            RuntimeError("alignment failed"),
+            mode="balanced",
+            retry_transcript="あ",
+            speech_probability=0.1,
+            classification="ambiguous_vocalization",
+        )
+        self.assertEqual(result["metrics"]["prompt_leakage_detected"], 1)
+        self.assertEqual(result["metrics"]["prompt_leakage_retry_attempted"], 1)
+        self.assertEqual(result["metrics"]["prompt_leakage_retry_selected"], 0)
+        self.assertEqual(result["metrics"]["prompt_leakage_retry_ambiguous_vocalization"], 1)
+        self.assertEqual(result["metrics"]["prompt_leakage_escalated_to_whisper"], 0)
+        # No usable evidence either way: prefer silence over surfacing the
+        # leaked prompt text or an unsupported guess.
+        self.assertEqual(result["segments"], [])
+
+    def test_strong_evidence_vocalization_prompt_leak_retry_is_still_preserved(self):
+        result, _ = self.run_synthetic_pipeline(
+            "日本語・成人向け映像。",
+            RuntimeError("alignment failed"),
+            mode="balanced",
+            retry_transcript="あ",
+            speech_probability=0.9,
+            classification="speech",
+        )
+        self.assertEqual(result["metrics"]["prompt_leakage_retry_selected"], 1)
+        self.assertEqual(result["metrics"]["prompt_leakage_retry_ambiguous_vocalization"], 0)
+        self.assertEqual(result["segments"][0]["selected_engine"], "qwen_retry")
+        self.assertEqual(result["segments"][0]["text"], "あ")
 
     def test_malformed_retry_remains_balanced_whisper_eligible(self):
         retry = pipeline.Candidate(
