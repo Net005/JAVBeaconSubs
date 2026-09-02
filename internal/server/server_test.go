@@ -44,20 +44,20 @@ func TestSupportedUploadExtension(t *testing.T) {
 }
 
 func TestOptionalFormBool(t *testing.T) {
-	if value, err := optionalFormBool(""); err != nil || value != nil {
+	if value, err := optionalFormBool("keep_japanese", ""); err != nil || value != nil {
 		t.Fatalf("empty value = %v, %v", value, err)
 	}
-	if value, err := optionalFormBool("false"); err != nil || value == nil || *value {
+	if value, err := optionalFormBool("keep_japanese", "false"); err != nil || value == nil || *value {
 		t.Fatalf("false value = %v, %v", value, err)
 	}
-	if _, err := optionalFormBool("sometimes"); err == nil {
+	if _, err := optionalFormBool("keep_japanese", "sometimes"); err == nil {
 		t.Fatal("invalid boolean was accepted")
 	}
 }
 
 func TestSingleFileUploadCreatesPersistedJob(t *testing.T) {
 	root := t.TempDir()
-	cfg := config.Config{UploadDir: filepath.Join(root, "uploads"), MaxUploadGB: 1, APIToken: "test-api-token"}
+	cfg := config.Config{UploadDir: filepath.Join(root, "uploads"), MaxUploadGB: 1, APIToken: "test-api-token", Output: config.OutputConfig{WriteASS: true}}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	database, err := store.Open(filepath.Join(root, "jobs.db"))
 	if err != nil {
@@ -84,6 +84,7 @@ func TestSingleFileUploadCreatesPersistedJob(t *testing.T) {
 	_, _ = file.Write([]byte("fake media"))
 	_ = writer.WriteField("external_id", "movie-42")
 	_ = writer.WriteField("keep_japanese", "true")
+	_ = writer.WriteField("write_ass", "false")
 	if err := writer.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +100,7 @@ func TestSingleFileUploadCreatesPersistedJob(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &job); err != nil {
 		t.Fatal(err)
 	}
-	if job.ExternalID != "movie-42" || len(job.Files) != 1 || !job.KeepJapanese {
+	if job.ExternalID != "movie-42" || len(job.Files) != 1 || !job.KeepJapanese || job.WriteASS {
 		t.Fatalf("unexpected job: %#v", job)
 	}
 	if _, err := os.Stat(job.Files[0]); err != nil {

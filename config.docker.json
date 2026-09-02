@@ -92,6 +92,7 @@
     "japanese_ass_suffix": ".ja.ass",
     "project_json_suffix": ".subtitles.json",
     "keep_japanese": false,
+    "write_ass": true,
     "overwrite": false,
     "subtitle_normalization_enabled": true,
     "subtitle_target_chars_per_line": 40,

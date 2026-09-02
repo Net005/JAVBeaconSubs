@@ -2,7 +2,7 @@
 
 A Go subtitle service optimized for Japanese dialogue in JAV, GIGA/tokusatsu heroine action, and similarly difficult material. It accepts a browser upload, exact media files, or folders; queues jobs; extracts clean mono audio with FFmpeg; runs a Japanese-forced Qwen-first recognition pipeline; and writes atomic SRT, ASS, and diagnostic JSON outputs. Jobs survive restarts in an embedded SQLite database.
 
-Generated SRT files are strict subtitle payloads beginning directly with cue `1`; generator comments are intentionally excluded because non-standard headers can prevent players such as Haruna from loading them. Readability normalization runs after translation, preserves every word, and uses Qwen forced-alignment anchors when an oversized cue can safely be split. Without trustworthy anchors it wraps text only and never invents timing from character counts.
+Generated SRT files are strict subtitle payloads beginning directly with cue `1`; generator comments are intentionally excluded because non-standard headers can prevent players such as Haruna from loading them. Readability normalization runs after translation, preserves every word, and splits oversized cues using, in order: existing Qwen forced-alignment anchors, then, when no trustworthy anchors exist, proportional redistribution of the original timing envelope by visible-character weight. It never invents text and always keeps every child cue inside its source cue's start/end. Splitting only happens when the source duration can hold every child at the configured minimum cue duration; otherwise the cue is wrapped to two lines and left at its original timing.
 
 Generator identity and integrity live primarily in the existing `.subtitles.json` project/job metadata. When enabled, a portable `<name>.srt.json` sidecar contains the same `javbeaconsubs.subtitle-provenance.v1` record and SHA-256 of the exact SRT bytes. A matching hash is `valid`; edited subtitles are `modified`; the old first-line marker is recognized read-only as `legacy` and is never written to new files.
 
@@ -113,7 +113,7 @@ Authentication and translation credentials have separate purposes:
 
 The job form has two explicit modes:
 
-- **Upload one file** streams one video/audio file into managed storage. When processing finishes, English SRT/ASS, optional Japanese SRT/ASS, and diagnostic JSON downloads appear on its job card.
+- **Upload one file** streams one video/audio file into managed storage. When processing finishes, English SRT/ASS, optional Japanese SRT/ASS, and diagnostic JSON downloads appear on its job card. `.ass` export is on by default and can be turned off per job (or by default for every job via `output.write_ass` in configuration) to generate only `.srt` files.
 - **Server paths** accepts one or more exact files and/or folders already visible to the service. Folder traversal happens only when requested.
 
 The canonical content profiles are `standard`, `jav`, and `giga`; legacy `tokusatsu` and `akiba` inputs normalize to `giga`. Their Qwen hints are deliberately minimal Japanese-only strings to prevent prompt text leaking into subtitles. Profile and recognition accuracy can each be Auto, explicitly selected, or resolved independently per file by case-insensitive path mappings in the Profiles tab. **Also keep Japanese** writes `.ja.srt` and `.ja.ass` from the canonical Japanese transcript without another ASR pass.
@@ -179,6 +179,7 @@ curl --fail-with-body --request POST 'http://localhost:8097/api/v1/jobs' \
     "recursive": true,
     "overwrite": false,
     "keep_japanese": true,
+    "write_ass": true,
     "asr_mode": "balanced",
     "profile": "jav",
     "debug_mode": false
@@ -199,6 +200,7 @@ Content-Type: application/json
   "recursive": true,
   "overwrite": false,
   "keep_japanese": true,
+  "write_ass": false,
   "asr_mode": "high_accuracy",
   "profile": "giga",
   "debug_mode": true,
@@ -217,7 +219,7 @@ The response is `202 Accepted`, includes the job, and sets `Location: /api/v1/jo
 - `GET /api/v1/health` — dependency and model readiness.
 - `GET /api/v1/settings` and `PUT /api/v1/settings` — read/update persistent translation and post-processing settings (credentials are write-only).
 
-The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, `overwrite`, `keep_japanese`, `asr_mode`, `profile`, and `debug_mode` fields. The legacy `asr_profile` field remains accepted as an alias. For JSON and multipart jobs, omitting `keep_japanese` uses `output.keep_japanese` from service configuration. Generated files are available through `GET /api/v1/jobs/{id}/outputs/{zeroBasedResultIndex}/{en|ja|en-ass|ja-ass|json|en-provenance|ja-provenance}`.
+The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, `overwrite`, `keep_japanese`, `write_ass`, `asr_mode`, `profile`, and `debug_mode` fields. The legacy `asr_profile` field remains accepted as an alias. For JSON and multipart jobs, omitting `keep_japanese` uses `output.keep_japanese` from service configuration, and omitting `write_ass` uses `output.write_ass` (`true` by default). Set `"write_ass": false` (or uncheck **Also export `.ass` subtitles** in the web UI) to generate only `.srt` files without the matching `.ass` track. Generated files are available through `GET /api/v1/jobs/{id}/outputs/{zeroBasedResultIndex}/{en|ja|en-ass|ja-ass|json|en-provenance|ja-provenance}`; the `-ass` outputs return `404` for a job that had ASS export disabled.
 
 If `callback_url` is supplied, the terminal job document is POSTed there. `external_id` round-trips unchanged so JAVBeacon can associate it with its own movie or task record.
 

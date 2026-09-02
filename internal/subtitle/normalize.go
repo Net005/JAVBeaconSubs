@@ -27,6 +27,10 @@ type NormalizationChange struct {
 	Characters  int
 	OutputCues  int
 	Skipped     string
+	// Method records which timing source produced the child cues:
+	// "alignment_anchors" when real forced-alignment anchors were used, or
+	// "proportional_fallback" when none were trustworthy (see splitProportionally).
+	Method string
 }
 
 func DefaultNormalizeOptions() NormalizeOptions {
@@ -81,10 +85,21 @@ func NormalizeSubtitles(input []Segment, options NormalizeOptions) ([]Segment, [
 		if len(anchors) > 0 && len(chunks) > len(anchors)+1 {
 			chunks = coalesceChunks(chunks, len(anchors)+1)
 		}
+		// No trustworthy forced-alignment anchors exist for this cue. Rather
+		// than leaving one oversized cue on screen, fall back to proportional
+		// redistribution of the existing timing envelope: the last resort in
+		// the project's timing-source priority order. Still cap the number of
+		// children to what the envelope can physically hold at the configured
+		// minimum cue duration.
+		usingProportionalFallback := false
+		if len(anchors) == 0 && len(chunks) >= 2 {
+			if maximum := durationChunkCap(duration, options.MinCueDurationMS); len(chunks) > maximum {
+				chunks = coalesceChunks(chunks, maximum)
+			}
+			usingProportionalFallback = true
+		}
 		skipped := ""
-		if len(chunks) >= 2 && len(anchors) < len(chunks)-1 {
-			skipped = "no trustworthy alignment anchors"
-		} else if len(chunks) >= 2 && duration < options.MinCueDurationMS*int64(len(chunks)) {
+		if len(chunks) >= 2 && duration < options.MinCueDurationMS*int64(len(chunks)) {
 			skipped = "insufficient aligned duration"
 		}
 		if len(chunks) < 2 || skipped != "" {
@@ -98,13 +113,20 @@ func NormalizeSubtitles(input []Segment, options NormalizeOptions) ([]Segment, [
 			}
 			continue
 		}
-		children := splitAtAlignmentAnchors(source, chunks, anchors)
+		var children []Segment
+		method := "alignment_anchors"
+		if usingProportionalFallback {
+			children = splitProportionally(source, chunks)
+			method = "proportional_fallback"
+		} else {
+			children = splitAtAlignmentAnchors(source, chunks, anchors)
+		}
 		for i := range children {
 			children[i].Text = wrapTwoLines(children[i].Text, options)
 		}
 		output = append(output, children...)
 		changes = append(changes, NormalizationChange{
-			SourceIndex: sourceIndex, DurationMS: duration, Characters: characters, OutputCues: len(children),
+			SourceIndex: sourceIndex, DurationMS: duration, Characters: characters, OutputCues: len(children), Method: method,
 		})
 	}
 	return output, changes, nil
@@ -124,6 +146,65 @@ func coalesceChunks(chunks []string, maximum int) []string {
 		chunks = append(chunks[:bestIndex+1], chunks[bestIndex+2:]...)
 	}
 	return chunks
+}
+
+// durationChunkCap returns the most child cues a source duration can hold
+// while keeping every child at least minCueDurationMS long.
+func durationChunkCap(duration, minCueDurationMS int64) int {
+	if minCueDurationMS < 1 {
+		return 1
+	}
+	if capacity := int(duration / minCueDurationMS); capacity > 1 {
+		return capacity
+	}
+	return 1
+}
+
+// splitProportionally redistributes a source cue's timing envelope across
+// child cues by visible-character weight. It is the last-resort timing
+// source in the project's priority order: used only once no trustworthy
+// forced-alignment anchors exist. It never invents or drops text, and every
+// child stays within [source.StartMS, source.EndMS].
+func splitProportionally(source Segment, chunks []string) []Segment {
+	weights := make([]int64, len(chunks))
+	var totalWeight int64
+	for i, chunk := range chunks {
+		weight := int64(visibleCharacters(chunk))
+		if weight < 1 {
+			weight = 1
+		}
+		weights[i] = weight
+		totalWeight += weight
+	}
+	total := source.EndMS - source.StartMS
+	boundaries := make([]int64, len(chunks)+1)
+	boundaries[0] = source.StartMS
+	boundaries[len(chunks)] = source.EndMS
+	var cumulative int64
+	for i := 0; i < len(chunks)-1; i++ {
+		cumulative += weights[i]
+		boundaries[i+1] = source.StartMS + int64(math.Round(float64(total)*float64(cumulative)/float64(totalWeight)))
+	}
+	// Deterministic rounding can occasionally produce a non-increasing
+	// boundary; enforce a strictly increasing, in-envelope sequence.
+	for i := 1; i < len(boundaries); i++ {
+		if boundaries[i] <= boundaries[i-1] {
+			boundaries[i] = boundaries[i-1] + 1
+		}
+	}
+	for i := len(boundaries) - 2; i >= 0; i-- {
+		if boundaries[i] >= boundaries[i+1] {
+			boundaries[i] = boundaries[i+1] - 1
+		}
+	}
+	if boundaries[0] < source.StartMS {
+		boundaries[0] = source.StartMS
+	}
+	result := make([]Segment, len(chunks))
+	for i, chunk := range chunks {
+		result[i] = Segment{StartMS: boundaries[i], EndMS: boundaries[i+1], Text: chunk}
+	}
+	return result
 }
 
 func joinSemanticText(left, right string) string {

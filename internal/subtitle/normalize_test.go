@@ -56,21 +56,70 @@ func TestNormalizeOversizedCueUsesOnlyAlignmentAnchors(t *testing.T) {
 	}
 }
 
-func TestNormalizeWithoutAlignmentAnchorsNeverInventsTiming(t *testing.T) {
+func TestNormalizeWithoutAlignmentAnchorsFallsBackToProportionalSplit(t *testing.T) {
+	// Without trustworthy alignment anchors the normalizer must not leave one
+	// oversized cue on screen: it falls back to proportional redistribution
+	// of the existing timing envelope (the last-resort timing source).
 	text := strings.Repeat("A long translated phrase with no trustworthy timing anchor. ", 5)
 	source := Segment{StartMS: 1000, EndMS: 29000, Text: text}
 	got, changes, err := NormalizeSubtitles([]Segment{source}, DefaultNormalizeOptions())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0].StartMS != source.StartMS || got[0].EndMS != source.EndMS {
-		t.Fatalf("normalizer invented timestamps without anchors: %#v", got)
+	assertCleanSplit(t, source, got)
+	if len(changes) != 1 || changes[0].OutputCues != len(got) || changes[0].Skipped != "" || changes[0].Method != "proportional_fallback" {
+		t.Fatalf("missing proportional-fallback diagnostic: %#v", changes)
 	}
-	if len(changes) != 1 || changes[0].Skipped != "no trustworthy alignment anchors" {
-		t.Fatalf("missing explicit normalization diagnostic: %#v", changes)
+	if compactText(joinCueText(got)) != compactText(text) {
+		t.Fatal("text changed while using the proportional timing fallback")
 	}
-	if compactText(got[0].Text) != compactText(text) {
-		t.Fatal("text changed while splitting was unavailable")
+}
+
+// TestNormalizeADN803RegressionSplitsOversizedCueWithoutAnchors is a
+// regression fixture for the ADN-803 English track, where a 28.42s cue with
+// no alignment anchors previously survived normalization as one giant block
+// that rendered as a four-line subtitle wall in Haruna.
+func TestNormalizeADN803RegressionSplitsOversizedCueWithoutAnchors(t *testing.T) {
+	text := "I saw Toyama on a security camera near my house, so... Ah, I saw it on the news and was going to ask you about it, but they still haven't found her. The police came by the other day and asked me all sorts of questions, but unfortunately, I don't know anything. Sorry I couldn't be of help."
+	source := Segment{StartMS: 3_086_860, EndMS: 3_115_280, Text: text}
+	got, changes, err := NormalizeSubtitles([]Segment{source}, DefaultNormalizeOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) < 2 {
+		t.Fatalf("ADN-803 regression: oversized cue survived as one giant block: %#v", got)
+	}
+	assertCleanSplit(t, source, got)
+	if len(changes) != 1 || changes[0].OutputCues != len(got) {
+		t.Fatalf("ADN-803 regression: missing normalization diagnostic: %#v", changes)
+	}
+	if compactText(joinCueText(got)) != compactText(text) {
+		t.Fatalf("ADN-803 regression: translated text was lost or duplicated:\nwant %q\n got %q", text, joinCueText(got))
+	}
+}
+
+// assertCleanSplit checks the timing invariants every normalized split must
+// hold regardless of which timing source produced it: the envelope is
+// preserved, children are contiguous with no gaps, overlap, or invalid
+// timestamps, and no cue renders as more than two lines.
+func assertCleanSplit(t *testing.T, source Segment, got []Segment) {
+	t.Helper()
+	if len(got) == 0 {
+		t.Fatal("normalization produced no cues")
+	}
+	if got[0].StartMS != source.StartMS || got[len(got)-1].EndMS != source.EndMS {
+		t.Fatalf("timing envelope changed: %#v", got)
+	}
+	for index, cue := range got {
+		if cue.EndMS <= cue.StartMS || cue.StartMS < source.StartMS || cue.EndMS > source.EndMS {
+			t.Fatalf("invalid child timing: %#v", cue)
+		}
+		if index > 0 && cue.StartMS != got[index-1].EndMS {
+			t.Fatalf("child cues are not contiguous (gap or overlap): %#v", got)
+		}
+		if strings.Count(cue.Text, "\n") > 1 {
+			t.Fatalf("cue exceeds two display lines: %q", cue.Text)
+		}
 	}
 }
 

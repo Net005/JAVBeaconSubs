@@ -79,6 +79,33 @@ func TestDiscoverAllowsAnyReadablePath(t *testing.T) {
 	}
 }
 
+func TestCreateResolvesWriteASSDefaultAndOverride(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "one.mp4")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{Output: config.OutputConfig{WriteASS: true}}
+	m := &Manager{cfg: cfg, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 2), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+
+	byDefault, err := m.Create(Request{Inputs: []string{path}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !byDefault.WriteASS {
+		t.Fatalf("job did not inherit output.write_ass default: %#v", byDefault)
+	}
+
+	disabled := false
+	overridden, err := m.Create(Request{Inputs: []string{path}, WriteASS: &disabled})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overridden.WriteASS {
+		t.Fatalf("per-job write_ass override was ignored: %#v", overridden)
+	}
+}
+
 func TestCreateResolvesMixedRecursiveFilesIndependently(t *testing.T) {
 	root := t.TempDir()
 	javDir, gigaDir := filepath.Join(root, "JAV"), filepath.Join(root, "GIGA")

@@ -69,6 +69,19 @@ func TestWebUIExposesJapaneseSidecarAndOwnershipSetup(t *testing.T) {
 	}
 }
 
+func TestWebUIProvidesASSExportToggle(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{"writeAss", "write_ass", "Also export"} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("web UI is missing the ASS export toggle %q", required)
+		}
+	}
+}
+
 func TestWebUIExplainsPrimaryJapaneseASR(t *testing.T) {
 	html, err := assets.ReadFile("web/index.html")
 	if err != nil {
