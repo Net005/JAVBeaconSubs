@@ -28,7 +28,7 @@ from typing import Any
 import numpy as np
 
 
-PIPELINE_VERSION = "qwen-first-v2.3"
+PIPELINE_VERSION = "qwen-first-v2.4"
 JAPANESE = "Japanese"
 PROFILE_CONTEXT = {
     "standard": "日本語",
@@ -122,6 +122,16 @@ class WhisperBatchResult:
     stdout_summary: str = ""
     duration_seconds: float = 0.0
     failure_reason: str = "not_attempted"
+    cuda_attempted: bool = False
+    cuda_failed: bool = False
+    cuda_failure_reason: str = ""
+    cuda_stderr: str = ""
+    cpu_fallback_attempted: bool = False
+    cpu_fallback_succeeded: bool = False
+    cpu_fallback_seconds: float = 0.0
+    cpu_fallback_timeout: int = 0
+    cpu_fallback_candidate_count: int = 0
+    execution_device: str = "not_attempted"
 
 
 def normalize_text(value: str) -> str:
@@ -515,17 +525,92 @@ def recover_tiny_timing(
     return start_seconds, end_seconds, "timing_bounded"
 
 
-def release_cuda() -> None:
-    gc.collect()
+def release_cuda() -> dict[str, Any]:
+    actions: dict[str, Any] = {
+        "qwen_gc_collected": gc.collect(),
+        "cuda_cache_cleared": False,
+        "cuda_ipc_collected": False,
+    }
     try:
         import torch
 
         if torch.cuda.is_available():
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
-            torch.cuda.ipc_collect()
+            actions["cuda_cache_cleared"] = True
+            try:
+                torch.cuda.ipc_collect()
+                actions["cuda_ipc_collected"] = True
+            except Exception:
+                pass
     except Exception:
         pass
+    return actions
+
+
+def dispose_qwen(model: Any) -> dict[str, Any]:
+    """Break Qwen's owned model/processor references before clearing CUDA."""
+    actions: dict[str, Any] = {
+        "qwen_model_moved_to_cpu": False,
+        "qwen_model_reference_cleared": False,
+        "qwen_processor_reference_cleared": False,
+        "qwen_generation_state_cleared": False,
+    }
+    inner_model = getattr(model, "model", None)
+    if inner_model is not None:
+        try:
+            inner_model.to("cpu")
+            actions["qwen_model_moved_to_cpu"] = True
+        except Exception:
+            pass
+    for attribute, metric in (
+        ("forced_aligner", "qwen_generation_state_cleared"),
+        ("sampling_params", "qwen_generation_state_cleared"),
+        ("processor", "qwen_processor_reference_cleared"),
+        ("model", "qwen_model_reference_cleared"),
+    ):
+        if hasattr(model, attribute):
+            try:
+                setattr(model, attribute, None)
+                actions[metric] = True
+            except Exception:
+                pass
+    del inner_model
+    actions.update(release_cuda())
+    return actions
+
+
+def gpu_snapshot() -> dict[str, Any]:
+    """Return plain-data NVIDIA memory/process diagnostics without retaining tensors."""
+    snapshot: dict[str, Any] = {"available": False, "total_mb": None, "used_mb": None, "free_mb": None, "processes": []}
+    try:
+        memory = subprocess.run(
+            [
+                "nvidia-smi", "--query-gpu=memory.total,memory.used,memory.free",
+                "--format=csv,noheader,nounits", "--id=0",
+            ],
+            check=False, capture_output=True, text=True, timeout=10,
+        )
+        if memory.returncode != 0:
+            snapshot["error"] = normalize_text(memory.stderr)[:1024]
+            return snapshot
+        values = [int(float(item.strip())) for item in memory.stdout.splitlines()[0].split(",")]
+        snapshot.update({"available": True, "total_mb": values[0], "used_mb": values[1], "free_mb": values[2]})
+        processes = subprocess.run(
+            [
+                "nvidia-smi", "--query-compute-apps=pid,process_name,used_memory",
+                "--format=csv,noheader,nounits", "--id=0",
+            ],
+            check=False, capture_output=True, text=True, timeout=10,
+        )
+        if processes.returncode == 0:
+            for line in processes.stdout.splitlines()[:32]:
+                parts = [item.strip() for item in line.split(",", 2)]
+                if len(parts) == 3:
+                    snapshot["processes"].append({"pid": parts[0], "name": os.path.basename(parts[1]), "used_mb": parts[2]})
+    except (OSError, ValueError, IndexError, subprocess.TimeoutExpired) as error:
+        snapshot["error"] = normalize_text(str(error))[:1024]
+    return snapshot
 
 
 def torch_settings(device: str) -> tuple[Any, str]:
@@ -562,14 +647,18 @@ def qwen_transcribe(model, clips: list[tuple[np.ndarray, int]], context: str, ba
                 return_time_stamps=False,
             )
             out.extend(normalize_text(item.text) for item in results)
+            del results
         except Exception:
             # Isolate a malformed/problematic segment instead of losing the movie.
             for clip in batch:
                 try:
                     result = model.transcribe(audio=clip, context=context, language=JAPANESE)[0]
                     out.append(normalize_text(result.text))
+                    del result
                 except Exception:
                     out.append("")
+        finally:
+            del batch
     return out
 
 
@@ -704,6 +793,27 @@ def reazon_batch_transcribe(
         return {int(item["index"]): normalize_text(item.get("text", "")) for item in payload.get("results", [])}
 
 
+def whisper_cuda_oom(stderr: str) -> bool:
+    value = normalize_text(stderr).casefold()
+    return any(fragment in value for fragment in (
+        "cudamalloc failed: out of memory",
+        "cuda out of memory",
+        "failed to allocate cuda buffer",
+        "ggml cuda allocation failed",
+        "cuda error 2",
+    ))
+
+
+def whisper_cuda_failure(stderr: str) -> bool:
+    value = normalize_text(stderr).casefold()
+    return whisper_cuda_oom(value) or any(fragment in value for fragment in (
+        "cuda initialization failure",
+        "failed to initialize cuda",
+        "no cuda-capable device",
+        "cuda driver version is insufficient",
+    ))
+
+
 def whisper_batch_transcribe(
     binary: str,
     model: str,
@@ -712,6 +822,8 @@ def whisper_batch_transcribe(
     language: str,
     device: str = "cpu",
     max_segment_seconds: float = 30.0,
+    cpu_fallback: bool = True,
+    cpu_timeout_seconds: int = 7200,
 ) -> WhisperBatchResult:
     """Run whisper.cpp once for safely split fallback files.
 
@@ -724,13 +836,18 @@ def whisper_batch_transcribe(
         return result
     started = time.monotonic()
 
-    def fail(reason: str, stderr: str = "", exit_code: int | None = None) -> WhisperBatchResult:
+    def fail(
+        reason: str,
+        stderr: str = "",
+        exit_code: int | None = None,
+        candidate_reason: str | None = None,
+    ) -> WhisperBatchResult:
         result.failure_reason = reason
         result.stderr = normalize_text(stderr)[:8192]
         result.exit_code = exit_code
         result.duration_seconds = round(time.monotonic() - started, 3)
         for candidate_index in indexes:
-            result.candidate_errors.setdefault(candidate_index, reason)
+            result.candidate_errors.setdefault(candidate_index, candidate_reason or reason)
         return result
 
     try:
@@ -794,26 +911,65 @@ def whisper_batch_transcribe(
             detail["whisper_result_indexes"] = [inputs.index(item) for item in candidate_inputs]
             detail["input_count"] = sum(item[0] == candidate_index for item in inputs)
             detail["input_valid"] = candidate_index in valid_indexes
-        command = [binary, "-m", model, "-l", language, "-ojf", "-nt"]
-        for _, audio_path, _ in inputs:
-            command.extend(["-f", audio_path])
-        for _, _, prefix in inputs:
-            command.extend(["-of", prefix])
-        if device != "cuda":
-            command.append("-ng")
-        try:
-            completed = subprocess.run(
-                command,
+
+        def command_for(execution_device: str) -> list[str]:
+            command = [binary, "-m", model, "-l", language, "-ojf", "-nt"]
+            for _, audio_path, _ in inputs:
+                command.extend(["-f", audio_path])
+            for _, _, prefix in inputs:
+                command.extend(["-of", prefix])
+            if execution_device != "cuda":
+                command.append("-ng")
+            return command
+
+        def launch(execution_device: str, timeout: float):
+            result.execution_device = execution_device
+            return subprocess.run(
+                command_for(execution_device),
                 check=False,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                timeout=max(300.0, min(1800.0, len(inputs) * 20.0)),
+                timeout=timeout,
             )
+
+        requested_device = "cuda" if device in {"auto", "cuda"} else "cpu"
+        result.cuda_attempted = requested_device == "cuda"
+        try:
+            completed = launch(requested_device, max(300.0, min(1800.0, len(inputs) * 20.0)))
         except subprocess.TimeoutExpired as error:
-            return fail("whisper_timeout", str(error))
+            return fail("whisper_timeout", str(error), candidate_reason="whisper_batch_failed")
         except OSError as error:
-            return fail("whisper_execution_failed", str(error))
+            return fail("whisper_execution_failed", str(error), candidate_reason="whisper_batch_failed")
+        if requested_device == "cuda" and completed.returncode != 0:
+            cuda_stderr = normalize_text(completed.stderr)[:8192]
+            result.cuda_failed = True
+            result.cuda_stderr = cuda_stderr
+            result.cuda_failure_reason = (
+                "whisper_cuda_oom" if whisper_cuda_oom(cuda_stderr) else
+                "whisper_cuda_initialization_failed" if whisper_cuda_failure(cuda_stderr) else
+                "whisper_execution_failed"
+            )
+            if cpu_fallback and result.cuda_failure_reason in {"whisper_cuda_oom", "whisper_cuda_initialization_failed"}:
+                result.cpu_fallback_attempted = True
+                result.cpu_fallback_candidate_count = len(valid_indexes)
+                result.cpu_fallback_timeout = max(300, cpu_timeout_seconds)
+                for _, _, prefix in inputs:
+                    try:
+                        os.remove(prefix + ".json")
+                    except FileNotFoundError:
+                        pass
+                cpu_started = time.monotonic()
+                try:
+                    completed = launch("cpu", result.cpu_fallback_timeout)
+                except subprocess.TimeoutExpired as error:
+                    result.cpu_fallback_seconds = round(time.monotonic() - cpu_started, 3)
+                    return fail("whisper_timeout", str(error), candidate_reason="whisper_batch_failed")
+                except OSError as error:
+                    result.cpu_fallback_seconds = round(time.monotonic() - cpu_started, 3)
+                    return fail("whisper_execution_failed", str(error), candidate_reason="whisper_batch_failed")
+                result.cpu_fallback_seconds = round(time.monotonic() - cpu_started, 3)
+                result.cpu_fallback_succeeded = completed.returncode == 0
         result.exit_code = completed.returncode
         result.stderr = normalize_text(completed.stderr)[:8192]
         # whisper-cli can print recognized dialogue to stdout, so retain only a
@@ -821,7 +977,12 @@ def whisper_batch_transcribe(
         stdout = completed.stdout or ""
         result.stdout_summary = f"{len(stdout.encode('utf-8'))} bytes captured"
         if completed.returncode != 0:
-            return fail("whisper_execution_failed", completed.stderr, completed.returncode)
+            reason = (
+                result.cuda_failure_reason if result.execution_device == "cuda" else
+                "whisper_cpu_fallback_failed" if result.cpu_fallback_attempted else
+                "whisper_execution_failed"
+            )
+            return fail(reason, completed.stderr, completed.returncode, "whisper_batch_failed")
         result.success = True
         result.failure_reason = ""
         results: dict[int, list[str]] = {index: [] for index in indexes}
@@ -1049,6 +1210,10 @@ def main() -> int:
     parser.add_argument("--reazon-script", default="reazon_batch_worker.py")
     parser.add_argument("--whisper-binary", default="whisper-cli")
     parser.add_argument("--whisper-model", default="")
+    parser.add_argument("--whisper-device", choices=("auto", "cuda", "cpu"), default="auto")
+    parser.add_argument("--whisper-cpu-timeout", type=int, default=7200)
+    parser.add_argument("--whisper-runtime-status", default="")
+    parser.add_argument("--disable-whisper-cpu-fallback", action="store_true")
     parser.add_argument("--disable-reazon", action="store_true")
     parser.add_argument("--disable-whisper", action="store_true")
     parser.add_argument("--batch-size", type=int, default=4)
@@ -1065,6 +1230,7 @@ def main() -> int:
     args.profile = normalize_profile(args.profile)
 
     started = time.monotonic()
+    gpu_lifecycle: dict[str, Any] = {}
     if args.download_only:
         # Hugging Face cache semantics avoid downloading unchanged revisions.
         from huggingface_hub import snapshot_download
@@ -1103,7 +1269,9 @@ def main() -> int:
 
     progress(8, "loading_qwen")
     qwen_started = time.monotonic()
+    gpu_lifecycle["before_qwen"] = gpu_snapshot()
     qwen = load_qwen(args.qwen_model, args.qwen_revision, args.device, args.batch_size)
+    gpu_lifecycle["after_qwen"] = gpu_snapshot()
     # Keep ASR conditioning deliberately tiny.  --context remains accepted for
     # backward-compatible command lines, but legacy prose is never sent to the
     # recognizer because it can be echoed into the transcript.
@@ -1112,6 +1280,7 @@ def main() -> int:
         args.recognition_vocabulary, args.profile, args.title
     )
     qwen_texts = qwen_transcribe(qwen, clips, context, max(1, args.batch_size))
+    gpu_lifecycle["after_qwen_asr"] = gpu_snapshot()
     qwen_primary_seconds = time.monotonic() - qwen_started
     retry_indexes: list[int] = []
     retry_reasons: dict[int, str] = {}
@@ -1132,8 +1301,11 @@ def main() -> int:
         retries = qwen_transcribe(qwen, [clips[index] for index in retry_indexes], "", max(1, args.batch_size))
         retry_results = dict(zip(retry_indexes, retries))
         qwen_retry_seconds = time.monotonic() - retry_started
+    gpu_lifecycle["after_qwen_retries"] = gpu_snapshot()
+    qwen_cleanup = dispose_qwen(qwen)
+    qwen_model_deleted = True
     del qwen
-    release_cuda()
+    gpu_lifecycle["after_qwen_cleanup"] = gpu_snapshot()
     decisions: list[Decision] = []
     previous: list[str] = []
     for index, (region, text) in enumerate(zip(regions, qwen_texts)):
@@ -1206,6 +1378,7 @@ def main() -> int:
     whisper_result = WhisperBatchResult()
     if whisper_indexes:
         progress(45, "whisper_lexical_fallback")
+        gpu_lifecycle["before_whisper"] = gpu_snapshot()
         whisper_started = time.monotonic()
         whisper_result = whisper_batch_transcribe(
             args.whisper_binary,
@@ -1213,15 +1386,19 @@ def main() -> int:
             clips,
             whisper_indexes,
             "ja",
-            args.device,
+            "cpu" if args.device == "cpu" else args.whisper_device,
             args.max_segment_seconds,
+            not args.disable_whisper_cpu_fallback,
+            args.whisper_cpu_timeout,
         )
         whisper_seconds = time.monotonic() - whisper_started
+        gpu_lifecycle["after_whisper"] = gpu_snapshot()
         print(
             "Whisper fallback process: "
             f"exit={whisper_result.exit_code} success={whisper_result.success} "
             f"duration={whisper_result.duration_seconds:.3f}s candidates={len(whisper_indexes)} "
-            f"failure={whisper_result.failure_reason or 'none'}",
+            f"device={whisper_result.execution_device} failure={whisper_result.failure_reason or 'none'} "
+            f"cuda_failure={whisper_result.cuda_failure_reason or 'none'}",
             file=sys.stderr,
             flush=True,
         )
@@ -1262,6 +1439,16 @@ def main() -> int:
             "whisper_process_stdout_summary": whisper_result.stdout_summary,
             "whisper_process_duration_seconds": whisper_result.duration_seconds,
             "whisper_process_failure_reason": whisper_result.failure_reason,
+            "whisper_cuda_attempted": whisper_result.cuda_attempted,
+            "whisper_cuda_failed": whisper_result.cuda_failed,
+            "whisper_cuda_failure_reason": whisper_result.cuda_failure_reason,
+            "whisper_cuda_stderr": whisper_result.cuda_stderr,
+            "whisper_cpu_fallback_attempted": whisper_result.cpu_fallback_attempted,
+            "whisper_cpu_fallback_succeeded": whisper_result.cpu_fallback_succeeded,
+            "whisper_execution_device": whisper_result.execution_device,
+            "cpu_fallback_seconds": whisper_result.cpu_fallback_seconds,
+            "cpu_fallback_timeout": whisper_result.cpu_fallback_timeout,
+            "cpu_fallback_candidate_count": whisper_result.cpu_fallback_candidate_count,
             "source_start_ms": decision.fallback_audio.get("fallback_audio_source_start_ms"),
             "source_end_ms": decision.fallback_audio.get("fallback_audio_source_end_ms"),
             **whisper_result.candidate_details.get(index, {}),
@@ -1277,6 +1464,7 @@ def main() -> int:
 
     progress(62, "aligning")
     align_started = time.monotonic()
+    gpu_lifecycle["before_aligner"] = gpu_snapshot()
     aligner = load_aligner(args.aligner_model, args.aligner_revision, args.device)
     output_segments: list[dict[str, Any]] = []
     alignment_failures = 0
@@ -1431,6 +1619,7 @@ def main() -> int:
             progress(62 + round(30 * (index + 1) / len(decisions)), "aligning")
     del aligner
     release_cuda()
+    gpu_lifecycle["after_aligner"] = gpu_snapshot()
     alignment_seconds = time.monotonic() - align_started
 
     output_segments.sort(key=lambda item: (item["start_ms"], item["end_ms"]))
@@ -1498,6 +1687,10 @@ def main() -> int:
         warnings.append("whisper_all_candidates_empty")
     if whisper_count >= 20 and whisper_seconds < 3.0:
         warnings.append("whisper_runtime_suspiciously_low")
+    if whisper_result.cuda_failure_reason == "whisper_cuda_oom":
+        warnings.append("whisper_cuda_oom")
+        if not whisper_result.success:
+            warnings.append("whisper_batch_failed_cuda_oom")
     if leakage_segments >= 20 and leakage_recovered / max(1, leakage_segments) < 0.2:
         warnings.append("prompt_leak_recovery_regressed")
     high_accuracy_reasons = {
@@ -1507,6 +1700,16 @@ def main() -> int:
     }
     if args.mode == "high_accuracy" and not any(item.whisper_reason in high_accuracy_reasons for item in decisions):
         warnings.append("high_accuracy_same_as_balanced")
+    before_qwen_used = gpu_lifecycle.get("before_qwen", {}).get("used_mb")
+    before_whisper_used = gpu_lifecycle.get("before_whisper", {}).get("used_mb")
+    if (
+        before_qwen_used is not None and before_whisper_used is not None
+        and before_whisper_used > before_qwen_used + 512
+    ):
+        warnings.append("qwen_vram_not_released_before_whisper")
+
+    def gpu_used(stage: str) -> int | None:
+        return gpu_lifecycle.get(stage, {}).get("used_mb")
     payload = {
         "duration_ms": round(duration * 1000),
         "processed_ms": round(duration * 1000),
@@ -1567,6 +1770,31 @@ def main() -> int:
             "whisper_process_stdout_summary": whisper_result.stdout_summary,
             "whisper_process_duration_seconds": whisper_result.duration_seconds,
             "whisper_process_failure_reason": whisper_result.failure_reason,
+            "whisper_cuda_attempted": whisper_result.cuda_attempted,
+            "whisper_cuda_failed": whisper_result.cuda_failed,
+            "whisper_cuda_failure_reason": whisper_result.cuda_failure_reason,
+            "whisper_cuda_stderr": whisper_result.cuda_stderr,
+            "whisper_cpu_fallback_attempted": whisper_result.cpu_fallback_attempted,
+            "whisper_cpu_fallback_succeeded": whisper_result.cpu_fallback_succeeded,
+            "whisper_execution_device": whisper_result.execution_device,
+            "cpu_fallback_seconds": whisper_result.cpu_fallback_seconds,
+            "cpu_fallback_timeout": whisper_result.cpu_fallback_timeout,
+            "cpu_fallback_candidate_count": whisper_result.cpu_fallback_candidate_count,
+            "gpu_used_mb_before_qwen": gpu_used("before_qwen"),
+            "gpu_used_mb_after_qwen": gpu_used("after_qwen"),
+            "gpu_used_mb_after_qwen_asr": gpu_used("after_qwen_asr"),
+            "gpu_used_mb_after_qwen_retries": gpu_used("after_qwen_retries"),
+            "gpu_used_mb_after_qwen_cleanup": gpu_used("after_qwen_cleanup"),
+            "gpu_used_mb_before_whisper": gpu_used("before_whisper"),
+            "gpu_used_mb_after_whisper": gpu_used("after_whisper"),
+            "gpu_used_mb_before_aligner": gpu_used("before_aligner"),
+            "gpu_used_mb_after_aligner": gpu_used("after_aligner"),
+            "whisper_gpu_total_mb_before_launch": gpu_lifecycle.get("before_whisper", {}).get("total_mb"),
+            "whisper_gpu_used_mb_before_launch": before_whisper_used,
+            "whisper_gpu_free_mb_before_launch": gpu_lifecycle.get("before_whisper", {}).get("free_mb"),
+            "whisper_gpu_processes_before_launch": gpu_lifecycle.get("before_whisper", {}).get("processes", []),
+            "qwen_model_deleted": qwen_model_deleted,
+            **qwen_cleanup,
             "review_segments": review_count,
             "low_confidence_percentage": round(review_count * 100 / len(decisions), 2),
             "alignment_failures": alignment_failures,
@@ -1605,6 +1833,22 @@ def main() -> int:
         },
         "segments": output_segments,
     }
+    if args.whisper_runtime_status and whisper_indexes:
+        try:
+            os.makedirs(os.path.dirname(args.whisper_runtime_status) or ".", exist_ok=True)
+            write_json(args.whisper_runtime_status, {
+                "updated_unix": round(time.time()),
+                "last_load_result": (
+                    "cpu_fallback_success" if whisper_result.cpu_fallback_succeeded else
+                    "success" if whisper_result.success else whisper_result.failure_reason
+                ),
+                "last_cuda_failure": whisper_result.cuda_failure_reason,
+                "execution_device": whisper_result.execution_device,
+                "cpu_fallback_available": not args.disable_whisper_cpu_fallback,
+            })
+        except OSError as error:
+            payload["metrics"]["runtime_warnings"].append("whisper_runtime_status_write_failed")
+            payload["metrics"]["whisper_runtime_status_error"] = normalize_text(str(error))[:1024]
     write_json(args.output, payload)
     progress(100, "complete")
     return 0

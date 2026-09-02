@@ -50,6 +50,8 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ### Fixed
 
+- Hardened the Qwen → Whisper → ForcedAligner GPU lifecycle with explicit model deletion/cache collection and staged VRAM/process diagnostics; classified CUDA OOM separately and retries the complete selective Whisper batch once on CPU when enabled (`qwen-first-v2.4`).
+- Added configurable Whisper `auto`/`cuda`/`cpu` policy and CPU timeout, plus concise model path/type/quantization/size, preferred-device, last-load, CUDA-failure, and fallback availability metadata in Models.
 - Fixed swallowed Whisper fallback failures by validating the model and per-candidate PCM WAVs, preserving bounded process diagnostics, explicitly reporting execution/timeout/parser failures, and mapping every multi-file result back to its source segment.
 - Restored clean no-context Qwen prompt-leak retries even when the corrected utterance is much shorter, prevented unresolved prompt leakage alone from flooding Whisper, and made High Accuracy verification broader than Balanced while retaining vocalization/timing exclusions (`qwen-first-v2.3`).
 - Report existing-subtitle skips honestly instead of presenting an instant no-op as a successful Fast/Balanced rerun, and expose every previously generated artifact on the skipped result.

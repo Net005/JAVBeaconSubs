@@ -231,7 +231,7 @@ func (r *Runner) applyCatalogs(title string) {
 }
 
 func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapanese bool, progress ProgressFunc, memory *TranslationMemory) (Result, error) {
-	result := Result{Input: input, Profile: r.cfg.Whisper.Profile, ASRMode: r.cfg.Whisper.Mode, PipelineVersion: "qwen-first-v2.3", Models: map[string]string{
+	result := Result{Input: input, Profile: r.cfg.Whisper.Profile, ASRMode: r.cfg.Whisper.Mode, PipelineVersion: "qwen-first-v2.4", Models: map[string]string{
 		"asr_primary":      modelIdentity(r.cfg.Whisper.QwenModel, r.cfg.Whisper.QwenRevision),
 		"asr_retry_engine": modelIdentity(r.cfg.Whisper.QwenModel, r.cfg.Whisper.QwenRevision),
 		"aligner":          modelIdentity(r.cfg.Whisper.AlignerModel, r.cfg.Whisper.AlignerRevision),
@@ -481,6 +481,9 @@ func (r *Runner) transcribeQwen(ctx context.Context, wav, prefix string, useGPU 
 		"--context", c.Prompt,
 		"--aligner-model", c.AlignerModel, "--aligner-revision", c.AlignerRevision,
 		"--whisper-binary", c.Binary, "--whisper-model", c.Model,
+		"--whisper-device", c.WhisperDevice,
+		"--whisper-cpu-timeout", strconv.Itoa(c.WhisperCPUTimeout),
+		"--whisper-runtime-status", c.WhisperStatusPath,
 		"--batch-size", strconv.Itoa(c.ASRBatchSize),
 		"--vad-threshold", fmt.Sprintf("%.3f", c.VADEnergyFactor),
 		"--vad-min-speech-ms", strconv.Itoa(c.MinSpeechMS),
@@ -489,6 +492,9 @@ func (r *Runner) transcribeQwen(ctx context.Context, wav, prefix string, useGPU 
 		"--vad-post-roll-ms", strconv.Itoa(c.VADPostRollMS),
 		"--max-segment-seconds", strconv.Itoa(c.MaxSegmentSec),
 		"--disable-reazon",
+	}
+	if !c.GPUFallbackCPU {
+		args = append(args, "--disable-whisper-cpu-fallback")
 	}
 	if r.cfg.RecognitionVocabularyPath != "" {
 		args = append(args, "--recognition-vocabulary", r.cfg.RecognitionVocabularyPath)
