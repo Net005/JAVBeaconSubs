@@ -45,7 +45,11 @@ class PipelineUtilitiesTest(unittest.TestCase):
                     return_value=[transcript],
                 ),
                 mock.patch.object(pipeline, "load_aligner", return_value=aligner),
-                mock.patch.object(pipeline, "release_cuda"),
+                mock.patch.object(
+                    pipeline, "release_cuda",
+                    return_value={"qwen_gc_collected": 0, "cuda_cache_cleared": False, "cuda_ipc_collected": False},
+                ),
+                mock.patch.object(pipeline, "gpu_snapshot", return_value={"available": False}),
                 mock.patch.object(pipeline, "progress"),
                 mock.patch.dict(sys.modules, {"soundfile": fake_soundfile}),
             ):
@@ -251,6 +255,9 @@ class PipelineUtilitiesTest(unittest.TestCase):
         self.assertEqual(result["metrics"]["prompt_leakage_escalated_to_whisper"], 0)
         self.assertEqual(result["segments"][0]["selected_engine"], "qwen_retry")
         self.assertNotEqual(result["segments"][0]["suspicion_category"], "META")
+        self.assertTrue(result["metrics"]["qwen_model_deleted"])
+        self.assertIn("gpu_used_mb_after_qwen_cleanup", result["metrics"])
+        self.assertIn("gpu_used_mb_before_aligner", result["metrics"])
 
     def test_malformed_retry_remains_balanced_whisper_eligible(self):
         retry = pipeline.Candidate(
@@ -369,12 +376,77 @@ class PipelineUtilitiesTest(unittest.TestCase):
             with mock.patch.dict(sys.modules, {"soundfile": fake_soundfile}), mock.patch.object(
                 pipeline.subprocess, "run", return_value=completed
             ):
-                result = pipeline.whisper_batch_transcribe("whisper-cli", str(model), [(audio, 1000)], [0], "ja")
+                result = pipeline.whisper_batch_transcribe(
+                    "whisper-cli", str(model), [(audio, 1000)], [0], "ja", "cuda", 30, False
+                )
         self.assertFalse(result.success)
         self.assertEqual(result.exit_code, 3)
-        self.assertEqual(result.failure_reason, "whisper_execution_failed")
-        self.assertEqual(result.candidate_errors[0], "whisper_execution_failed")
+        self.assertEqual(result.failure_reason, "whisper_cuda_initialization_failed")
+        self.assertEqual(result.candidate_errors[0], "whisper_batch_failed")
         self.assertLessEqual(len(result.stderr), 8192)
+
+    def test_whisper_cuda_oom_retries_whole_batch_once_on_cpu(self):
+        audio = np.ones(1000, dtype=np.float32) * 0.02
+        with tempfile.TemporaryDirectory() as directory:
+            model = pathlib.Path(directory) / "large-v3.bin"
+            model.write_bytes(b"model")
+            fake_soundfile = types.SimpleNamespace(
+                write=lambda path, *_args, **_kwargs: pathlib.Path(path).write_bytes(b"RIFF" + b"0" * 128),
+                info=lambda _path: types.SimpleNamespace(
+                    frames=1000, channels=1, samplerate=1000, subtype="PCM_16", duration=1.0
+                ),
+            )
+
+            def launch(command, **_kwargs):
+                if "-ng" not in command:
+                    return types.SimpleNamespace(
+                        returncode=-6, stdout="", stderr="cudaMalloc failed: out of memory"
+                    )
+                prefix = command[command.index("-of") + 1]
+                pathlib.Path(prefix + ".json").write_text(
+                    json.dumps({"transcription": [{"text": "これはテストです"}]}), encoding="utf-8"
+                )
+                return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+            with mock.patch.dict(sys.modules, {"soundfile": fake_soundfile}), mock.patch.object(
+                pipeline.subprocess, "run", side_effect=launch
+            ) as run:
+                result = pipeline.whisper_batch_transcribe(
+                    "whisper-cli", str(model), [(audio, 1000)], [0], "ja", "cuda", 30, True, 900
+                )
+        self.assertEqual(run.call_count, 2)
+        self.assertTrue(result.success)
+        self.assertTrue(result.cuda_attempted)
+        self.assertTrue(result.cuda_failed)
+        self.assertEqual(result.cuda_failure_reason, "whisper_cuda_oom")
+        self.assertTrue(result.cpu_fallback_attempted)
+        self.assertTrue(result.cpu_fallback_succeeded)
+        self.assertEqual(result.execution_device, "cpu")
+        self.assertEqual(result.texts[0], "これはテストです")
+        self.assertNotIn(0, result.candidate_errors)
+
+    def test_whisper_does_not_cpu_retry_non_cuda_failure(self):
+        audio = np.ones(1000, dtype=np.float32) * 0.02
+        with tempfile.TemporaryDirectory() as directory:
+            model = pathlib.Path(directory) / "large-v3.bin"
+            model.write_bytes(b"model")
+            fake_soundfile = types.SimpleNamespace(
+                write=lambda path, *_args, **_kwargs: pathlib.Path(path).write_bytes(b"RIFF" + b"0" * 128),
+                info=lambda _path: types.SimpleNamespace(
+                    frames=1000, channels=1, samplerate=1000, subtype="PCM_16", duration=1.0
+                ),
+            )
+            completed = types.SimpleNamespace(returncode=2, stdout="", stderr="unknown command-line option")
+            with mock.patch.dict(sys.modules, {"soundfile": fake_soundfile}), mock.patch.object(
+                pipeline.subprocess, "run", return_value=completed
+            ) as run:
+                result = pipeline.whisper_batch_transcribe(
+                    "whisper-cli", str(model), [(audio, 1000)], [0], "ja", "cuda", 30, True, 900
+                )
+        self.assertEqual(run.call_count, 1)
+        self.assertFalse(result.cpu_fallback_attempted)
+        self.assertEqual(result.failure_reason, "whisper_execution_failed")
+        self.assertEqual(result.candidate_errors[0], "whisper_batch_failed")
 
     def test_invalid_whisper_wav_rejects_only_its_candidate(self):
         clips = [(np.zeros(1000, dtype=np.float32), 1000), (np.ones(1000, dtype=np.float32) * 0.02, 1000)]
@@ -452,6 +524,12 @@ class PipelineUtilitiesTest(unittest.TestCase):
             "ja",
             os.getenv("JAVBEACONSUBS_WHISPER_SMOKE_DEVICE", "cuda"),
         )
+        print(json.dumps({
+            "whisper_process_success": result.success,
+            "whisper_execution_device": result.execution_device,
+            "whisper_cuda_failure": result.cuda_failure_reason,
+            "whisper_process_duration_seconds": result.duration_seconds,
+        }))
         self.assertTrue(result.success, result.stderr)
         self.assertEqual(result.exit_code, 0)
         for index, (waveform, samplerate) in enumerate(clips):
@@ -460,6 +538,44 @@ class PipelineUtilitiesTest(unittest.TestCase):
             self.assertTrue(
                 pipeline.validate_whisper_candidate(candidate, candidate, len(waveform) / samplerate)[0]
             )
+
+    @unittest.skipUnless(
+        os.getenv("JAVBEACONSUBS_POST_QWEN_SMOKE") == "1"
+        and os.getenv("JAVBEACONSUBS_WHISPER_SMOKE_WAV")
+        and os.getenv("JAVBEACONSUBS_WHISPER_SMOKE_MODEL"),
+        "set post-Qwen smoke flag plus Whisper WAV/model paths to run the GPU lifecycle test",
+    )
+    def test_post_qwen_cleanup_whisper_smoke(self):
+        import soundfile as sf
+
+        waveform, samplerate = sf.read(
+            os.environ["JAVBEACONSUBS_WHISPER_SMOKE_WAV"], dtype="float32", always_2d=False
+        )
+        if waveform.ndim > 1:
+            waveform = waveform.mean(axis=1)
+        clip = (waveform[: samplerate * 30], samplerate)
+        before = pipeline.gpu_snapshot()
+        qwen = pipeline.load_qwen(
+            "Qwen/Qwen3-ASR-1.7B", "7278e1e70fe206f11671096ffdd38061171dd6e5", "cuda", 1
+        )
+        pipeline.qwen_transcribe(qwen, [clip], pipeline.PROFILE_CONTEXT["jav"], 1)
+        cleanup = pipeline.dispose_qwen(qwen)
+        del qwen
+        after_cleanup = pipeline.gpu_snapshot()
+        result = pipeline.whisper_batch_transcribe(
+            os.getenv("JAVBEACONSUBS_WHISPER_SMOKE_BINARY", "whisper-cli"),
+            os.environ["JAVBEACONSUBS_WHISPER_SMOKE_MODEL"],
+            [clip], [0], "ja", "cuda", 30, True, 7200,
+        )
+        print(json.dumps({
+            "gpu_used_mb_before_qwen": before.get("used_mb"),
+            "gpu_used_mb_after_qwen_cleanup": after_cleanup.get("used_mb"),
+            "cleanup": cleanup,
+            "whisper_cuda_failure": result.cuda_failure_reason,
+            "whisper_execution_device": result.execution_device,
+        }))
+        self.assertTrue(result.success, result.stderr or result.cuda_stderr)
+        self.assertTrue(pipeline.has_meaningful_transcript(result.texts.get(0, "")))
 
     def test_fallback_audio_stats_preserve_sample_offsets(self):
         audio = np.array([0.0, 0.25, -0.5, 0.0], dtype=np.float32)

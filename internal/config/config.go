@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -58,6 +59,9 @@ type WhisperConfig struct {
 	DebugMode         bool    `json:"debug_mode"`
 	Binary            string  `json:"binary"`
 	Model             string  `json:"model"`
+	WhisperDevice     string  `json:"whisper_device"`
+	WhisperCPUTimeout int     `json:"whisper_cpu_timeout_seconds"`
+	WhisperStatusPath string  `json:"whisper_runtime_status_path"`
 	ReazonPython      string  `json:"reazon_python"`
 	ReazonScript      string  `json:"reazon_script"`
 	ReazonBatchScript string  `json:"reazon_batch_script"`
@@ -141,8 +145,9 @@ func defaults() Config {
 			ChunkSeconds: 45, OverlapSeconds: 2, MaxSegmentSec: 30, FallbackWhisper: true,
 			BeamSize: 5, VAD: true, VADThreshold: .42, MinSpeechMS: 100,
 			MinSilenceMS: 500, SpeechPadMS: 320, VADPreRollMS: 350, VADPostRollMS: 600, VADEnergyFactor: 1.45, GPUPreflight: true,
-			GPUFallbackCPU: true,
-			Prompt:         "",
+			GPUFallbackCPU: true, WhisperDevice: "auto", WhisperCPUTimeout: 7200,
+			WhisperStatusPath: "./data/whisper-runtime.json",
+			Prompt:            "",
 		},
 		Translation:    TranslationConfig{Mode: "direct", BatchSize: 24, TimeoutSec: 120, ContextGapMS: 8000},
 		PostProcessing: PostProcessingConfig{Mode: "none", TimeoutSec: 60},
@@ -241,6 +246,17 @@ func Load(path string) (Config, error) {
 	if value := os.Getenv("JAVBEACONSUBS_WHISPER_MODEL"); value != "" {
 		cfg.Whisper.Model = value
 	}
+	if value := os.Getenv("JAVBEACONSUBS_WHISPER_DEVICE"); value != "" {
+		cfg.Whisper.WhisperDevice = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_WHISPER_CPU_TIMEOUT_SECONDS"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			cfg.Whisper.WhisperCPUTimeout = parsed
+		}
+	}
+	if value := os.Getenv("JAVBEACONSUBS_WHISPER_RUNTIME_STATUS_PATH"); value != "" {
+		cfg.Whisper.WhisperStatusPath = value
+	}
 	if value := os.Getenv("JAVBEACONSUBS_VAD_MODEL"); value != "" {
 		cfg.Whisper.VADModel = value
 	}
@@ -327,6 +343,16 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Whisper.MaxSegmentSec < 1 {
 		cfg.Whisper.MaxSegmentSec = 60
+	}
+	cfg.Whisper.WhisperDevice = strings.ToLower(strings.TrimSpace(cfg.Whisper.WhisperDevice))
+	if cfg.Whisper.WhisperDevice == "" {
+		cfg.Whisper.WhisperDevice = "auto"
+	}
+	if cfg.Whisper.WhisperDevice != "auto" && cfg.Whisper.WhisperDevice != "cuda" && cfg.Whisper.WhisperDevice != "cpu" {
+		return cfg, errors.New("whisper.whisper_device must be auto, cuda, or cpu")
+	}
+	if cfg.Whisper.WhisperCPUTimeout < 300 {
+		cfg.Whisper.WhisperCPUTimeout = 7200
 	}
 	if cfg.Profiles.DefaultProfile == "" {
 		cfg.Profiles.DefaultProfile = cfg.Whisper.Profile

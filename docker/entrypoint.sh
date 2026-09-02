@@ -43,9 +43,16 @@ download_model() {
   fi
 }
 
-download_model "${JAVBEACONSUBS_WHISPER_MODEL:-/models/ggml-large-v3.bin}" \
-  "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin?download=true" \
-  "ad82bf6a9043ceed055076d0fd39f5f186ff8062"
+whisper_model="${JAVBEACONSUBS_WHISPER_MODEL:-/models/ggml-large-v3.bin}"
+if [[ "$whisper_model" == "/models/ggml-large-v3.bin" ]]; then
+  download_model "$whisper_model" \
+    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin?download=true" \
+    "ad82bf6a9043ceed055076d0fd39f5f186ff8062"
+elif [[ ! -s "$whisper_model" ]]; then
+  echo "Missing custom Whisper model: $whisper_model" >&2
+  echo "Mount a whisper.cpp-compatible model at that path or select /models/ggml-large-v3.bin." >&2
+  exit 1
+fi
 download_model "${JAVBEACONSUBS_VAD_MODEL:-/models/ggml-silero-v6.2.0.bin}" \
   "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin?download=true"
 
