@@ -99,3 +99,16 @@ func TestWebUIUsesJAVBeaconBrandAndNoPurpleTheme(t *testing.T) {
 		}
 	}
 }
+
+func TestWebUIShowsVersionAndProvenanceDownloads(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{"appVersion", "h.version", "en-provenance", "ja-provenance", "EN proof", "JA proof"} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("version/provenance UI is missing %q", required)
+		}
+	}
+}

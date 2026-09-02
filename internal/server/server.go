@@ -551,6 +551,10 @@ func (s *Server) downloadOutput(w http.ResponseWriter, r *http.Request) {
 		path = job.Results[index].JapaneseASS
 	case "json":
 		path = job.Results[index].ProjectJSON
+	case "en-provenance":
+		path = job.Results[index].EnglishSRTProvenance
+	case "ja-provenance":
+		path = job.Results[index].JapaneseSRTProvenance
 	default:
 		writeJSON(w, 404, map[string]string{"error": "language output not found"})
 		return
@@ -665,13 +669,13 @@ func (s *Server) exportJobs(w http.ResponseWriter, r *http.Request) {
 func exportArtifactPaths(result engine.Result, content string) []string {
 	var paths []string
 	if content == "all" || content == "japanese" || content == "subtitles_diagnostics" {
-		paths = append(paths, result.JapaneseSRT)
+		paths = append(paths, result.JapaneseSRT, result.JapaneseSRTProvenance)
 		if content == "all" {
 			paths = append(paths, result.JapaneseASS)
 		}
 	}
 	if content == "all" || content == "english" || content == "subtitles_diagnostics" {
-		paths = append(paths, result.EnglishSRT)
+		paths = append(paths, result.EnglishSRT, result.EnglishSRTProvenance)
 		if content == "all" {
 			paths = append(paths, result.EnglishASS)
 		}

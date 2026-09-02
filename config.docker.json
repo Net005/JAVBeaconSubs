@@ -32,6 +32,7 @@
     "model": "/models/ggml-large-v3.bin",
     "whisper_device": "auto",
     "whisper_cpu_timeout_seconds": 7200,
+    "whisper_cuda_safe_minimum_mb": 4096,
     "whisper_runtime_status_path": "/data/whisper-runtime.json",
     "reazon_python": "/opt/reazon/bin/python",
     "reazon_script": "/app/asr/reazon_worker.py",
@@ -43,9 +44,10 @@
     "fallback_whisper": true,
     "vad_model": "/models/ggml-silero-v6.2.0.bin",
     "language": "ja",
-    "threads": 8,
+    "threads": 12,
     "use_gpu": false,
     "beam_size": 5,
+    "best_of": 5,
     "vad": true,
     "vad_threshold": 0.42,
     "vad_min_speech_ms": 100,
@@ -91,7 +93,14 @@
     "project_json_suffix": ".subtitles.json",
     "keep_japanese": false,
     "overwrite": false,
-    "max_line_chars": 42,
-    "max_lines": 2
+    "subtitle_normalization_enabled": true,
+    "subtitle_target_chars_per_line": 40,
+    "max_line_chars": 46,
+    "max_lines": 2,
+    "subtitle_target_chars_per_cue": 80,
+    "subtitle_max_duration_ms": 6000,
+    "subtitle_min_duration_ms": 1000,
+    "subtitle_target_cps": 17,
+    "subtitle_write_provenance_sidecar": true
   }
 }

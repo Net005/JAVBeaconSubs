@@ -42,11 +42,27 @@ func TestHasMeaningfulTranscriptAndCleanSuppressFormattingOnlyRows(t *testing.T)
 }
 
 func TestRenderSRT(t *testing.T) {
-	got := RenderSRT([]Segment{{StartMS: 1234, EndMS: 3661001, Text: "A deliberately long subtitle line that should wrap cleanly"}}, 30, 2, "; generated-by=javbeaconsubs")
-	for _, want := range []string{"; generated-by=javbeaconsubs", "00:00:01,234 --> 01:01:01,001", "\n\n"} {
+	got := RenderSRT([]Segment{{StartMS: 1234, EndMS: 3661001, Text: "A deliberately long subtitle line that should wrap cleanly"}}, 30, 2)
+	for _, want := range []string{"1\n00:00:01,234 --> 01:01:01,001", "\n\n"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %q in %q", want, got)
 		}
+	}
+	// A custom line before cue 1 was confirmed to prevent Haruna from loading
+	// generated subtitles. Keep the serialized payload strictly conventional.
+	if !strings.HasPrefix(got, "1\n") || strings.Contains(got, "; generated-by=javbeaconsubs-v1") {
+		t.Fatalf("SRT contains a non-standard header: %q", got)
+	}
+}
+
+func TestRenderSRTPreservesTrustworthyTiming(t *testing.T) {
+	got := RenderSRT([]Segment{
+		{StartMS: 2000, EndMS: 4000, Text: "Second"},
+		{StartMS: 1000, EndMS: 2500, Text: "First"},
+	}, 40, 2)
+	if !strings.Contains(got, "00:00:01,000 --> 00:00:02,500") ||
+		!strings.Contains(got, "00:00:02,000 --> 00:00:04,000") {
+		t.Fatalf("serializer altered aligned timestamps: %q", got)
 	}
 }
 
