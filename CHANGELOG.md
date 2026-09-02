@@ -32,6 +32,8 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ### Changed
 
+- Redesigned Balanced recognition as Qwen → targeted no-context Qwen retry → batched Whisper Large-v3 verification; Reazon remains compatible and independently selectable but is inactive in normal Qwen production jobs.
+- Promoted Whisper to the CUDA-capable Balanced fallback role, added deterministic candidate validation/scoring and hard 30-second fallback chunking, and advanced diagnostics to `qwen-first-v2.2`.
 - Replaced verbose English Qwen profile prompts with minimal Japanese-only hints and made `standard`, `jav`, and `giga` the only persisted profile values.
 - Made selected ASR text canonical: forced alignment now supplies timing and cannot silently truncate or replace Japanese dialogue.
 - Tightened Balanced/High Accuracy fallback eligibility so empty candidates and minor disagreement cannot trigger Whisper.
@@ -69,6 +71,7 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ### Added
 
+- Added Qwen-retry and Whisper correction/benefit metrics, explicit fallback-chain metadata, candidate rejection reasons, and fallback-audio duration/RMS/peak/nonzero/source-offset diagnostics.
 - Added permanent SQLite-backed translation settings to the web interface and REST API, with write-only API-key handling.
 - Added current path, filename, file number, live Whisper progress, and ETA to activity jobs.
 - Added automatic CPU fallback when CUDA preflight or inference fails.

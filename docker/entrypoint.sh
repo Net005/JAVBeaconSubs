@@ -71,7 +71,7 @@ if [[ "${JAVBEACONSUBS_ASR_BACKEND:-qwen}" == "qwen" ]]; then
   fi
 fi
 
-if [[ "${JAVBEACONSUBS_ASR_BACKEND:-qwen}" == "reazon" ]] || [[ "${JAVBEACONSUBS_REAZON_ENABLED:-true}" == "true" ]]; then
+if [[ "${JAVBEACONSUBS_ASR_BACKEND:-qwen}" == "reazon" ]] || [[ "${JAVBEACONSUBS_REAZON_ENABLED:-false}" == "true" ]]; then
   reazon_model="${JAVBEACONSUBS_REAZON_MODEL:-reazon-research/reazonspeech-nemo-v2}"
   reazon_marker="${JAVBEACONSUBS_REAZON_READY_MARKER:-/models/reazonspeech/.javbeaconsubs-ready}"
   if [[ ! -f "$reazon_marker" ]] || [[ "$(<"$reazon_marker")" != "$reazon_model" ]]; then

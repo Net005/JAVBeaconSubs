@@ -6,7 +6,7 @@ A Go subtitle service optimized for Japanese dialogue in JAV, GIGA/tokusatsu her
 
 The old implementation auto-detected the language, removed short lines, and sent isolated fragments to MyMemory/Google-free translation. The primary pipeline now forces Japanese in Qwen3-ASR-1.7B, uses recall-biased padded dialogue detection, validates suspicious text before timing it, and rejects impossible or out-of-order timestamps instead of silently collapsing hours of audio into one subtitle.
 
-Balanced mode (the default) runs [Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B) for every detected region, ReazonSpeech NeMo v2 only when a result is suspicious, and Whisper Large-v3 only for meaningful unresolved lexical competition. Whisper fallback clips are grouped into one model invocation instead of reloading Large-v3 per segment. [Qwen3-ForcedAligner-0.6B](https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B) supplies timing without replacing canonical ASR text; material aligner omissions fall back to timing-only or VAD timing. Fast mode skips normal secondary ASR, while prompt leakage still receives one no-context Qwen retry. Models run in separate lifecycle phases so they do not all occupy GPU memory at once.
+Balanced mode (the default) runs [Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B) for every detected region, retries only genuinely suspicious lexical output once without context, and then verifies unresolved candidates with Whisper Large-v3. Whisper clips are hard-bounded to 30 seconds and grouped into one CUDA-capable process instead of reloading Large-v3 per segment. [Qwen3-ForcedAligner-0.6B](https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B) supplies timing without replacing canonical ASR text; material aligner omissions fall back to timing-only or VAD timing. Fast skips normal fallback ASR, while prompt leakage still receives its existing no-context Qwen retry. Models run in separate lifecycle phases so they do not all occupy GPU memory at once.
 
 Two English modes are available:
 
@@ -14,7 +14,7 @@ Two English modes are available:
 - `contextual`: the validated Japanese transcript is translated through an OpenAI-compatible chat endpoint with neighboring dialogue and an optional glossary. This is the recommended high-quality mode. Ollama's `/v1`, LocalAI, vLLM, and compatible hosted APIs work.
 - `none`: Japanese transcription only.
 
-Go remains the service and orchestration layer. The Qwen/Reazon pipeline runs in a dedicated Python worker process per media file; `whisper.cpp` remains a tertiary fallback and powers legacy direct translation.
+Go remains the service and orchestration layer. The Qwen-first pipeline runs in a dedicated Python worker process per media file; `whisper.cpp` is the targeted Balanced fallback and also powers legacy direct translation. Reazon remains available as an experimental standalone compatibility backend but is inactive in normal Qwen jobs.
 
 ## Docker Compose for NVIDIA GPUs (CUDA)
 
@@ -22,7 +22,7 @@ The default Compose stack is NVIDIA/CUDA accelerated and uses host GPU device `0
 
 The CUDA image defaults to architecture targets `75;86` and two compiler workers. `CUDA_ARCHITECTURES` can be changed for a different NVIDIA generation, and `WHISPER_BUILD_JOBS` can be raised on build hosts with more memory. The conservative defaults prevent GitHub-hosted runners from being overwhelmed by simultaneous CUDA compiler processes.
 
-Compose bind-mounts the configurable `JAVBEACONSUBS_MODELS_PATH` at `/models`. Qwen3-ASR-1.7B, Qwen3-ForcedAligner-0.6B, ReazonSpeech NeMo v2, the checksum-verified Whisper fallback, and Silero assets are downloaded on first startup into that persistent cache. Hugging Face snapshots and ready markers reuse unchanged model revisions across container rebuilds; model weights are never baked into the image. `JAVBEACONSUBS_DATA_PATH` is mounted at `/data` for SQLite and uploaded files.
+Compose bind-mounts the configurable `JAVBEACONSUBS_MODELS_PATH` at `/models`. Qwen3-ASR-1.7B, Qwen3-ForcedAligner-0.6B, the checksum-verified Whisper fallback, and Silero assets are downloaded on first startup into that persistent cache. ReazonSpeech weights are cached only when its standalone backend or explicit compatibility flag is enabled. Hugging Face snapshots and ready markers reuse unchanged model revisions across container rebuilds; model weights are never baked into the image. `JAVBEACONSUBS_DATA_PATH` is mounted at `/data` for SQLite and uploaded files.
 
 Qwen ASR/aligner and ReazonSpeech are Apache-2.0 licensed. Qwen integration uses the official `qwen-asr` 0.0.6 package, while ReazonSpeech tooling is pinned to its official v3.0.0 commit. Qwen and NeMo run in isolated Python environments because they require different Transformers releases; both reuse one shared PyTorch/CUDA runtime. The first image build is substantially larger than whisper.cpp-only because it includes PyTorch and NVIDIA NeMo; subsequent GHCR builds reuse BuildKit layers, while model weights remain in the host-mounted cache rather than the image.
 
@@ -76,7 +76,7 @@ JAVBeacon can then address this API by its Compose service name, `http://javbeac
 
 ## Native install
 
-Requirements: Go 1.25+, FFmpeg, Python 3, `qwen-asr` 0.0.6, Qwen3-ASR-1.7B, Qwen3-ForcedAligner-0.6B, ReazonSpeech NeMo ASR v3 tooling, and ReazonSpeech NeMo v2. `whisper-cli` plus multilingual `large-v3` are required when tertiary fallback or legacy direct translation is enabled.
+Requirements: Go 1.25+, FFmpeg, Python 3, `qwen-asr` 0.0.6, Qwen3-ASR-1.7B, Qwen3-ForcedAligner-0.6B, and `whisper-cli` with multilingual `large-v3`. ReazonSpeech NeMo tooling remains optional for the experimental standalone backend.
 
 ```sh
 cp config.example.json config.json
@@ -105,7 +105,7 @@ The job form has two explicit modes:
 
 The canonical content profiles are `standard`, `jav`, and `giga`; legacy `tokusatsu` and `akiba` inputs normalize to `giga`. Their Qwen hints are deliberately minimal Japanese-only strings to prevent prompt text leaking into subtitles. Profile and recognition accuracy can each be Auto, explicitly selected, or resolved independently per file by case-insensitive path mappings in the Profiles tab. **Also keep Japanese** writes `.ja.srt` and `.ja.ass` from the canonical Japanese transcript without another ASR pass.
 
-Pipeline `qwen-first-v2.1` rejects punctuation-only ASR output, splits oversized VAD regions near local energy valleys, and bounds tiny unaligned vocalizations around the strongest speech-like activity instead of displaying `あ`, `うん`, or `ん` for an entire 30-second region. Balanced mode now reserves Reazon for lexical/script anomalies and unresolved prompt leakage; ordinary repeated short replies and vocal reactions remain local. Diagnostics separately report ASR, alignment, and timing quality plus attempted/non-empty/selected Reazon counts.
+Pipeline `qwen-first-v2.2` rejects punctuation-only ASR output, splits oversized VAD and fallback regions near local energy valleys, and bounds tiny unaligned vocalizations around the strongest speech-like activity. Fast uses Qwen plus alignment only, except its existing no-context prompt-leak recovery. Balanced retries genuinely suspicious lexical Qwen output once without context, then sends only unresolved lexical candidates to one batched Whisper Large-v3 process. Vocalizations and timing/alignment-only problems never invoke Whisper. Diagnostics report Qwen retry benefit, validated/selected/rejected Whisper candidates, strict correction benefit, fallback-audio sanity, ASR/alignment/timing quality, and the explicit active fallback chain.
 
 Compare an old and new debug export without printing dialogue using `PYTHONPATH=asr python3 asr/compare_diagnostics.py old.subtitles.json new.subtitles.json`. The report includes long/tiny/punctuation row counts, fallback benefit, alignment totals, runtime, and RTF.
 
@@ -139,7 +139,7 @@ If `translation.base_url` is changed to `https://api.openai.com/v1` and an OpenA
 
 ## CUDA recovery and VRAM behavior
 
-Each media file runs in a separate ASR worker process. When it exits—even after cancellation—the OS and NVIDIA driver destroy that process's CUDA context. Within a normal job, Qwen ASR is explicitly released before Reazon fallback or the forced aligner is loaded; CUDA caches and IPC allocations are cleared between phases. Models are reused across the relevant segment batch but are not kept resident between jobs. The service also probes `nvidia-smi` before inference and logs memory state afterward.
+Each media file runs in a separate ASR worker process. When it exits—even after cancellation—the OS and NVIDIA driver destroy that process's CUDA context. Within a normal job, Qwen ASR is explicitly released before the batched Whisper fallback is started, Whisper exits before the forced aligner loads, and CUDA caches and IPC allocations are cleared between phases. Models are reused across the relevant segment batch but are not kept resident between jobs. The service also probes `nvidia-smi` before inference and logs memory state afterward.
 
 Automatic GPU reset is disabled by default because NVIDIA refuses to reset a primary/display GPU. If the Qwen worker fails, its process exit first releases its CUDA context; configured CPU and whole-file compatibility fallbacks can then run. Whisper output is rejected when a segment exceeds the configured safety limit, preventing the observed multi-hour tail from being reported as successful.
 

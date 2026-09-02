@@ -19,7 +19,7 @@ SPEC.loader.exec_module(pipeline)
 
 
 class PipelineUtilitiesTest(unittest.TestCase):
-    def run_synthetic_pipeline(self, transcript, align_side_effect=None):
+    def run_synthetic_pipeline(self, transcript, align_side_effect=None, mode="balanced"):
         samplerate = 1000
         audio = np.zeros(samplerate * 30, dtype=np.float32)
         audio[samplerate * 12 : samplerate * 13] = 0.04
@@ -31,7 +31,7 @@ class PipelineUtilitiesTest(unittest.TestCase):
             aligner.align.side_effect = align_side_effect
             arguments = [
                 "qwen_pipeline.py", "--input", str(input_path), "--output", str(output_path),
-                "--device", "cpu", "--disable-reazon", "--disable-whisper", "--debug",
+                "--device", "cpu", "--mode", mode, "--disable-reazon", "--disable-whisper", "--debug",
             ]
             with (
                 mock.patch.object(sys, "argv", arguments),
@@ -127,15 +127,15 @@ class PipelineUtilitiesTest(unittest.TestCase):
     def test_balanced_fallback_is_lexical_aware(self):
         for value in ["はい", "うん", "あ", "ん", "ははは", "うん。うん。うん。うん。うん。"]:
             reasons = pipeline.suspicion_reasons(value, 30, 0.2)
-            eligible, _ = pipeline.should_use_reazon_fallback(value, reasons + ["identical_neighbors"], "ambiguous_vocalization", 0.2)
+            eligible, _ = pipeline.should_retry_qwen(value, reasons + ["identical_neighbors"], "ambiguous_vocalization", 0.2)
             self.assertFalse(eligible, value)
         reasons = pipeline.suspicion_reasons("あ、啥。", 0.35, 0.8)
         self.assertIn("script_anomaly", reasons)
-        self.assertTrue(pipeline.should_use_reazon_fallback("あ、啥。", reasons, "speech", 0.8)[0])
+        self.assertTrue(pipeline.should_retry_qwen("あ、啥。", reasons, "speech", 0.8)[0])
         malformed = "言ってんだ。あず、あずして..."
         reasons = pipeline.suspicion_reasons(malformed, 3.0, 0.7)
         self.assertIn("malformed_lexical_repetition", reasons)
-        self.assertTrue(pipeline.should_use_reazon_fallback(malformed, reasons, "speech", 0.7)[0])
+        self.assertTrue(pipeline.should_retry_qwen(malformed, reasons, "speech", 0.7)[0])
 
     def test_adn803_recorded_regressions_classify_as_expected(self):
         fixture = pathlib.Path(__file__).with_name("testdata") / "adn803_balanced_regressions.json"
@@ -145,7 +145,7 @@ class PipelineUtilitiesTest(unittest.TestCase):
             self.assertEqual(pipeline.has_meaningful_transcript(case["text"]), case["meaningful"], case)
             self.assertEqual(features["vocalization_heavy"], case["vocalization_heavy"], case)
             reasons = pipeline.suspicion_reasons(case["text"], case["duration_seconds"], 0.5)
-            eligible, _ = pipeline.should_use_reazon_fallback(case["text"], reasons, "speech", 0.5)
+            eligible, _ = pipeline.should_retry_qwen(case["text"], reasons, "speech", 0.5)
             self.assertEqual(eligible, case["reazon_eligible"], case)
 
     def test_comparison_ignores_only_superficial_formatting(self):
@@ -199,14 +199,87 @@ class PipelineUtilitiesTest(unittest.TestCase):
         self.assertTrue(pipeline.detect_prompt_leakage("inventing", pipeline.PROFILE_CONTEXT["jav"])[0])
         self.assertFalse(pipeline.detect_prompt_leakage("日本語が上手ですね", pipeline.PROFILE_CONTEXT["standard"])[0])
 
-    def test_whisper_requires_meaningful_unresolved_competition(self):
+    def test_whisper_requires_meaningful_unresolved_lexical_suspicion(self):
         suspicious = pipeline.Candidate("qwen3", "q", "もうダメ", ["weak_speech_conflict"])
         clean = pipeline.Candidate("qwen3", "q", "もうダメ")
-        empty = pipeline.Candidate("reazon", "r", "", ["empty_transcript"])
-        different = pipeline.Candidate("reazon", "r", "気持ちいい")
-        self.assertFalse(pipeline.should_use_whisper(suspicious, empty))
-        self.assertFalse(pipeline.should_use_whisper(clean, different))
-        self.assertTrue(pipeline.should_use_whisper(suspicious, different))
+        vocalization = pipeline.Candidate("qwen3", "q", "うん", ["identical_neighbors"])
+        self.assertTrue(pipeline.should_use_whisper(suspicious, "speech", 0.8)[0])
+        self.assertFalse(pipeline.should_use_whisper(clean, "speech", 0.8)[0])
+        self.assertFalse(pipeline.should_use_whisper(vocalization, "ambiguous_vocalization", 0.2)[0])
+        self.assertFalse(pipeline.mode_allows_whisper("fast"))
+        self.assertTrue(pipeline.mode_allows_whisper("balanced"))
+        self.assertTrue(pipeline.mode_allows_whisper("high_accuracy"))
+
+    def test_qwen_retry_resolves_script_anomaly_before_whisper(self):
+        original = pipeline.Candidate("qwen3", "q", "あ、啥。", ["script_anomaly"])
+        retry = pipeline.Candidate("qwen_retry", "q", "あ、そう。", [])
+        self.assertTrue(pipeline.qwen_retry_improves(original, retry, 1.2))
+        self.assertFalse(pipeline.should_use_whisper(retry, "speech", 0.8)[0])
+
+    def test_fast_never_runs_normal_retry_or_fallback_for_script_anomaly(self):
+        result, _ = self.run_synthetic_pipeline("あ、啥。", RuntimeError("alignment failed"), mode="fast")
+        self.assertEqual(result["metrics"]["qwen_retry_attempted"], 0)
+        self.assertEqual(result["metrics"]["whisper_candidates"], 0)
+        self.assertNotIn("reazon_candidates", result["metrics"])
+
+    def test_balanced_attempts_targeted_qwen_retry_for_script_anomaly(self):
+        result, _ = self.run_synthetic_pipeline("あ、啥。", RuntimeError("alignment failed"), mode="balanced")
+        self.assertEqual(result["metrics"]["qwen_retry_attempted"], 1)
+        self.assertEqual(result["metrics"]["qwen_retry_unresolved"], 1)
+        self.assertNotIn("reazon_candidates", result["metrics"])
+
+    def test_whisper_only_wins_when_it_clearly_improves_original_issue(self):
+        original = pipeline.Candidate("qwen3", "q", "言ってんだ。あず、あずして。", ["malformed_lexical_repetition"])
+        whisper = pipeline.Candidate("whisper", "w", "言ってるんだ。外して。", [])
+        chosen, _, corrected, rejection = pipeline.choose_balanced_candidate(original, original, whisper, 3.0)
+        self.assertEqual(chosen.engine, "whisper")
+        self.assertTrue(corrected)
+        self.assertEqual(rejection, "")
+
+    def test_vocabulary_support_scores_but_never_replaces_text(self):
+        supported = pipeline.Candidate("whisper", "w", "ムーンエンジェルが来た", [])
+        other = pipeline.Candidate("qwen3", "q", "誰かが来た", [])
+        terms = {"ムーンエンジェル", "スパンデクサー", "テラリウム鉱石", "コントラ"}
+        self.assertGreater(pipeline.candidate_score(supported, 2.0, terms), pipeline.candidate_score(other, 2.0, terms))
+        self.assertEqual(supported.text, "ムーンエンジェルが来た")
+
+    def test_whisper_splits_188780ms_into_one_multi_file_model_invocation(self):
+        samplerate = 1000
+        audio = np.ones(188780, dtype=np.float32) * 0.02
+        written_lengths = []
+
+        def write_audio(_path, child, _rate, subtype=None):
+            self.assertEqual(subtype, "PCM_16")
+            written_lengths.append(len(child))
+
+        def complete_whisper(command, **_kwargs):
+            prefixes = [command[index + 1] for index, value in enumerate(command) if value == "-of"]
+            for prefix in prefixes:
+                pathlib.Path(prefix + ".json").write_text(
+                    json.dumps({"transcription": [{"text": "テスト"}]}), encoding="utf-8"
+                )
+
+        fake_soundfile = types.SimpleNamespace(write=write_audio)
+        with (
+            mock.patch.dict(sys.modules, {"soundfile": fake_soundfile}),
+            mock.patch.object(pipeline.subprocess, "run", side_effect=complete_whisper) as run,
+        ):
+            result = pipeline.whisper_batch_transcribe("whisper-cli", "large-v3", [(audio, samplerate)], [0], "ja", "cuda", 30)
+        self.assertTrue(written_lengths)
+        self.assertTrue(all(length <= 30000 for length in written_lengths))
+        self.assertGreater(len(written_lengths), 1)
+        self.assertEqual(run.call_count, 1)
+        self.assertNotIn("-ng", run.call_args.args[0])
+        self.assertEqual(result[0], "テスト" * len(written_lengths))
+
+    def test_fallback_audio_stats_preserve_sample_offsets(self):
+        audio = np.array([0.0, 0.25, -0.5, 0.0], dtype=np.float32)
+        region = pipeline.Region(16000, 48000, 0.8, "speech")
+        stats = pipeline.fallback_audio_stats(audio, 16000, region)
+        self.assertEqual(stats["fallback_audio_source_start_ms"], 1000)
+        self.assertEqual(stats["fallback_audio_source_end_ms"], 3000)
+        self.assertEqual(stats["fallback_audio_nonzero_percentage"], 50.0)
+        self.assertEqual(stats["fallback_audio_peak"], 0.5)
 
     def test_alignment_integrity_preserves_real_regression_cases(self):
         damaged = [
