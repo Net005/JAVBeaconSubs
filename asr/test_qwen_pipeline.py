@@ -94,6 +94,18 @@ class PipelineUtilitiesTest(unittest.TestCase):
         self.assertLessEqual(parts[0][1], samplerate * 29)
         self.assertEqual(parts[-1][1], len(audio))
 
+    def test_energy_valley_never_extends_past_hard_maximum(self):
+        samplerate = 1000
+        maximum = samplerate * 30
+        audio = np.ones(samplerate * 65, dtype=np.float32) * 0.02
+        # This is the deepest nearby valley, but it is beyond the first hard
+        # boundary and therefore must not produce an oversized ASR region.
+        audio[samplerate * 34 : samplerate * 35] = 0.00001
+        parts = pipeline.split_oversized_region(audio, samplerate, 0, len(audio), maximum)
+        self.assertTrue(parts)
+        self.assertTrue(all(end - start <= maximum for start, end, _ in parts))
+        self.assertEqual(parts[0][1], maximum)
+
     def test_tiny_transcript_long_region_uses_local_energy(self):
         samplerate = 1000
         audio = np.zeros(samplerate * 30, dtype=np.float32)
