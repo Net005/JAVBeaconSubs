@@ -357,6 +357,211 @@ class PipelineUtilitiesTest(unittest.TestCase):
         # original call shape) keeps prior behavior: recovery is accepted.
         self.assertTrue(pipeline.qwen_retry_improves(original, retry, 2.0))
 
+    def run_synthetic_pipeline_sequence(self, entries, mode="balanced", region_seconds=3.0):
+        """Like run_synthetic_pipeline, but lays out several sequential VAD
+        regions (one per entry) instead of a single region, so local
+        repetition across nearby prompt-leak retries can be exercised
+        end-to-end. Each entry is a dict with keys: transcript,
+        retry_transcript (optional), speech_probability, classification
+        (optional, defaults to "speech")."""
+        samplerate = 1000
+        region_samples = int(region_seconds * samplerate)
+        audio = np.zeros(region_samples * len(entries), dtype=np.float32)
+        context = pipeline.PROFILE_CONTEXT["jav"]
+        with tempfile.TemporaryDirectory() as directory:
+            input_path = pathlib.Path(directory) / "input.wav"
+            output_path = pathlib.Path(directory) / "output.json"
+            fake_soundfile = types.SimpleNamespace(read=lambda *_args, **_kwargs: (audio, samplerate))
+            aligner = mock.Mock()
+            aligner.align.side_effect = RuntimeError("alignment failed")
+            regions = []
+            primary_texts = {}
+            retry_results = []
+            retry_reasons = {}
+            for index, entry in enumerate(entries):
+                start = index * region_samples
+                end = start + region_samples
+                classification = entry.get("classification", "speech")
+                regions.append(pipeline.Region(start, end, entry["speech_probability"], classification))
+                primary_texts[index] = entry["transcript"]
+                reasons = pipeline.suspicion_reasons(
+                    entry["transcript"], region_seconds, entry["speech_probability"], context
+                )
+                eligible, retry_reason = pipeline.should_retry_qwen(
+                    entry["transcript"], reasons, classification, entry["speech_probability"]
+                )
+                wants_retry = "prompt_leakage" in reasons or (mode != "fast" and eligible)
+                if wants_retry:
+                    retry_value = entry.get("retry_transcript", entry["transcript"])
+                    retry_results.append({"index": index, "text": retry_value})
+                    retry_reasons[str(index)] = (
+                        "prompt_leakage_unresolved" if "prompt_leakage" in reasons else retry_reason
+                    )
+            arguments = [
+                "qwen_pipeline.py", "--input", str(input_path), "--output", str(output_path),
+                "--device", "cpu", "--mode", mode, "--disable-reazon", "--disable-whisper", "--debug",
+            ]
+            with (
+                mock.patch.object(sys, "argv", arguments),
+                mock.patch.object(pipeline, "detect_regions", return_value=regions),
+                mock.patch.object(
+                    pipeline, "qwen_worker_transcribe",
+                    return_value=(primary_texts, {"retry_results": retry_results, "retry_reasons": retry_reasons}),
+                ),
+                mock.patch.object(pipeline, "load_aligner", return_value=aligner),
+                mock.patch.object(
+                    pipeline, "release_cuda",
+                    return_value={"qwen_gc_collected": 0, "cuda_cache_cleared": False, "cuda_ipc_collected": False},
+                ),
+                mock.patch.object(pipeline, "gpu_snapshot", return_value={"available": False}),
+                mock.patch.object(pipeline, "progress"),
+                mock.patch.dict(sys.modules, {"soundfile": fake_soundfile}),
+            ):
+                self.assertEqual(pipeline.main(), 0)
+            return json.loads(output_path.read_text(encoding="utf-8")), aligner
+
+    def test_case_d_direct_vocalization_without_prompt_leakage_is_unaffected(self):
+        # PRIORITY 6/9 CASE D: a direct Qwen recognition of a tiny
+        # vocalization with no prompt leakage must never enter this
+        # suppression path.
+        result, _ = self.run_synthetic_pipeline(
+            "はい。", RuntimeError("alignment failed"), mode="balanced",
+            speech_probability=0.65, classification="speech",
+        )
+        self.assertEqual(result["metrics"]["qwen_retry_attempted"], 0)
+        self.assertEqual(result["segments"][0]["text"], "はい。")
+        self.assertEqual(result["segments"][0]["selected_engine"], "qwen3")
+
+    def test_ambiguous_vocalization_cases_a_through_h(self):
+        leaked_original = pipeline.Candidate("qwen3", "q", "日本語・成人向け映像。", ["prompt_leakage"])
+        leaked_original_with_neighbors = pipeline.Candidate(
+            "qwen3", "q", "日本語・成人向け映像。", ["prompt_leakage", "identical_neighbors"]
+        )
+
+        # CASE A: weak speech probability plus a weak/ambiguous VAD
+        # classification (the closest pre-alignment proxy available for
+        # "poor timing evidence" -- real alignment state does not exist yet
+        # at retry-decision time) -> reject.
+        retry_a = pipeline.Candidate("qwen_retry", "q", "はい。", [])
+        self.assertTrue(pipeline.retry_is_low_evidence_vocalization(
+            retry_a, 0.37, "ambiguous_vocalization", leaked_original,
+            region_duration=3.0, local_repetition_count=0,
+        ))
+
+        # CASE B: moderate speech probability with a clean "speech"
+        # classification, but the same token repeats nearby -> reject.
+        retry_b = pipeline.Candidate("qwen_retry", "q", "はい。", [])
+        self.assertTrue(pipeline.retry_is_low_evidence_vocalization(
+            retry_b, 0.42, "speech", leaked_original,
+            region_duration=3.0, local_repetition_count=2,
+        ))
+
+        # CASE C: strong speech probability, clean speech classification,
+        # isolated occurrence -> preserve.
+        retry_c = pipeline.Candidate("qwen_retry", "q", "はい。", [])
+        self.assertFalse(pipeline.retry_is_low_evidence_vocalization(
+            retry_c, 0.82, "speech", leaked_original,
+            region_duration=3.0, local_repetition_count=0,
+        ))
+
+        # CASE E: substantive prompt-leak retry text is not a tiny
+        # vocalization at all -- this suppression path never applies, no
+        # matter how weak the surrounding evidence looks, and normal
+        # recovery still proceeds.
+        substantive = pipeline.Candidate("qwen_retry", "q", "エアコンの温度を十五度に。", [])
+        self.assertFalse(pipeline.retry_is_low_evidence_vocalization(
+            substantive, 0.1, "ambiguous_vocalization", leaked_original,
+            region_duration=3.0, local_repetition_count=5,
+        ))
+        self.assertTrue(pipeline.qwen_retry_improves(leaked_original, substantive, 2.0))
+
+        # CASE F: うん, weak/ambiguous evidence plus repetition -> reject.
+        retry_f = pipeline.Candidate("qwen_retry", "q", "うん", [])
+        self.assertTrue(pipeline.retry_is_low_evidence_vocalization(
+            retry_f, 0.40, "speech", leaked_original,
+            region_duration=3.0, local_repetition_count=3,
+        ))
+
+        # CASE G: あ, strong speech evidence, isolated -> preserve.
+        retry_g = pipeline.Candidate("qwen_retry", "q", "あ", [])
+        self.assertFalse(pipeline.retry_is_low_evidence_vocalization(
+            retry_g, 0.9, "speech", leaked_original,
+            region_duration=3.0, local_repetition_count=0,
+        ))
+
+        # CASE H: the retry token is not in the generic vocalization set --
+        # this suppression path must not apply regardless of how weak the
+        # evidence looks.
+        retry_h = pipeline.Candidate("qwen_retry", "q", "多分そう思う", [])
+        self.assertFalse(pipeline.retry_is_low_evidence_vocalization(
+            retry_h, 0.1, "ambiguous_vocalization", leaked_original,
+            region_duration=3.0, local_repetition_count=5,
+        ))
+
+        # identical_neighbors on the original is one more signal that can
+        # combine with a moderate probability to cross the threshold.
+        retry_neighbors = pipeline.Candidate("qwen_retry", "q", "ん", [])
+        self.assertTrue(pipeline.retry_is_low_evidence_vocalization(
+            retry_neighbors, 0.40, "speech", leaked_original_with_neighbors,
+            region_duration=3.0, local_repetition_count=1,
+        ))
+
+    def test_local_prompt_leak_vocalization_repetition_counts(self):
+        # Three "はい" entries close together (by position and by time)
+        # should see each other; a lone "うん" and a distant "はい" should not.
+        candidates = [
+            (0, "はい", 0.0, 1.0),
+            (1, "はい", 3.0, 4.0),
+            (2, "うん", 6.0, 7.0),
+            (3, "はい", 9.0, 10.0),
+            (10, "はい", 200.0, 201.0),
+        ]
+        counts = pipeline.local_prompt_leak_vocalization_repetition_counts(
+            candidates, window_segments=3, window_seconds=20.0
+        )
+        self.assertEqual(counts[0], 2)
+        self.assertEqual(counts[1], 2)
+        self.assertEqual(counts[2], 0)
+        self.assertEqual(counts[3], 2)
+        self.assertEqual(counts[10], 0)
+
+    def test_prompt_leak_vocalization_repetition_regression_sequence(self):
+        # PRIORITY 10: a synthetic sequence resembling the ADN-803 pattern --
+        # several prompt-leak retries in a row all resolving to the same
+        # weak-evidence "はい", interleaved with real lexical speech and one
+        # clearly strong, isolated "はい".
+        weak = {"transcript": "日本語・成人向け映像。", "retry_transcript": "はい。"}
+        entries = [
+            {**weak, "speech_probability": 0.40},
+            {**weak, "speech_probability": 0.38},
+            {**weak, "speech_probability": 0.42},
+            {**weak, "speech_probability": 0.36},
+            {
+                "transcript": "今日は少し遅くなりました",
+                "speech_probability": 0.75,
+            },
+            {**weak, "speech_probability": 0.44},
+            {**weak, "speech_probability": 0.39},
+            {
+                "transcript": "日本語・成人向け映像。",
+                "retry_transcript": "はい。",
+                "speech_probability": 0.88,
+            },
+        ]
+        result, _ = self.run_synthetic_pipeline_sequence(entries, mode="balanced")
+
+        texts = [segment["text"] for segment in result["segments"]]
+        self.assertIn("今日は少し遅くなりました", texts)
+        self.assertEqual(texts.count("はい。"), 1, texts)
+
+        metrics = result["metrics"]
+        self.assertGreaterEqual(metrics["prompt_leakage_retry_vocalization_repetition_rejected"], 5)
+        self.assertGreaterEqual(metrics["prompt_leakage_retry_vocalization_strong_evidence_preserved"], 1)
+        self.assertEqual(metrics["prompt_leakage_unresolved"], 0)
+        # PRIORITY 7: none of this ever escalates to Whisper in Balanced.
+        self.assertEqual(metrics["prompt_leakage_escalated_to_whisper"], 0)
+        self.assertEqual(metrics["whisper_candidates"], 0)
+
     def test_ambiguous_vocalization_prompt_leak_retry_prefers_no_subtitle(self):
         result, _ = self.run_synthetic_pipeline(
             "日本語・成人向け映像。",

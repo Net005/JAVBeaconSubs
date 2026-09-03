@@ -59,6 +59,17 @@ VOCALIZATION_TOKENS = {
     "はい", "はぁ", "はあ", "はは", "ふふ", "へへ", "やっ", "いや", "わっ", "きゃ", "きゃっ",
 }
 VOCALIZATION_CHARACTERS = set("あいうえおんっぁぃぅぇぉゃゅょー～〜はふへわきゃ")
+# Tuning for the prompt-leak tiny-vocalization suspicion score below. A
+# "local repetition" window: how close (by segment position or by time)
+# two prompt-leak retries that both resolved to the same tiny generic
+# vocalization need to be before that repetition counts as evidence of a
+# phantom pattern rather than two independent genuine utterances.
+PROMPT_LEAK_VOCALIZATION_REPETITION_WINDOW_SEGMENTS = 3
+PROMPT_LEAK_VOCALIZATION_REPETITION_WINDOW_SECONDS = 20.0
+# Suspicion-score threshold at or above which a prompt-leak retry that
+# resolved to a tiny generic vocalization is withheld from automatic
+# recovery (see prompt_leak_vocalization_suspicion_score).
+PROMPT_LEAK_VOCALIZATION_REJECTION_THRESHOLD = 2
 # Conservative Chinese-specific forms observed in malformed Japanese ASR. This
 # is intentionally tiny; uncommon Japanese kanji are not errors by default.
 ATYPICAL_JAPANESE_CJK = set("啥这吗们说没给让从还")
@@ -103,6 +114,9 @@ class Decision:
     qwen_retry_similarity: float = 0.0
     qwen_retry_recovered: bool = False
     qwen_retry_ambiguous_vocalization: bool = False
+    # "" (n/a), "rejected_repetition", "rejected_weak_evidence", or
+    # "preserved_strong_evidence" -- see PRIORITY 8's structured-reason note.
+    qwen_retry_vocalization_outcome: str = ""
     whisper_eligible: bool = False
     whisper_reason: str = ""
     whisper_candidate_valid: bool = False
@@ -824,25 +838,130 @@ def candidate_score(
     return round(score, 4)
 
 
-def retry_is_low_evidence_vocalization(retry: Candidate, speech_probability: float, classification: str) -> bool:
+def is_tiny_generic_vocalization_candidate(retry_text: str) -> bool:
+    """The narrow "could this be a phantom filler-word guess" gate: a tiny
+    generic vocalization token (e.g. はい/うん/あ/え/ん), with almost no
+    lexical content. This gate alone says nothing about whether the token
+    should be trusted -- see prompt_leak_vocalization_suspicion_score for
+    that -- it only decides whether this suppression path applies at all.
+    A genuine short utterance or a token outside VOCALIZATION_TOKENS never
+    enters this path (Priority 6/8: direct vocalization recognition without
+    prompt leakage, and substantive retry text, are untouched)."""
+    features = transcript_features(retry_text)
+    token = meaningful_characters(retry_text).casefold()
+    return (
+        token in VOCALIZATION_TOKENS
+        and features["meaningful_char_count"] <= 2
+        and features["lexical_ratio"] <= 0.05
+    )
+
+
+def local_prompt_leak_vocalization_repetition_counts(
+    candidates: list[tuple[int, str, float, float]],
+    window_segments: int = PROMPT_LEAK_VOCALIZATION_REPETITION_WINDOW_SEGMENTS,
+    window_seconds: float = PROMPT_LEAK_VOCALIZATION_REPETITION_WINDOW_SECONDS,
+) -> dict[int, int]:
+    """The strongest real-world evidence that a prompt-leak "tiny
+    vocalization" recovery is a phantom guess is not any single occurrence,
+    it's the same token being produced by nearby prompt-leak retries over
+    and over (see PRIORITY 3). `candidates` holds one (segment_index, token,
+    start_seconds, end_seconds) entry per segment where the original leaked
+    its prompt AND the context-free retry resolved to a tiny generic
+    vocalization, in segment order. Returns, per segment_index, how many
+    OTHER nearby candidates (within window_segments positions, or within
+    window_seconds of start time) share the identical token. This is a
+    plain deterministic count over already-computed data -- no new model,
+    no randomness -- scoped only to this specific prompt-leak retry path,
+    never to ordinary dialogue."""
+    counts: dict[int, int] = {}
+    for index, token, start, _end in candidates:
+        nearby = 0
+        for other_index, other_token, other_start, _other_end in candidates:
+            if other_index == index or other_token != token:
+                continue
+            # Compare actual segment index distance, not position within
+            # this already-filtered candidate list: unrelated dialogue can
+            # sit between two prompt-leak retries, and that should not make
+            # them look artificially "adjacent".
+            if abs(other_index - index) <= window_segments or abs(other_start - start) <= window_seconds:
+                nearby += 1
+        counts[index] = nearby
+    return counts
+
+
+def prompt_leak_vocalization_suspicion_score(
+    retry: Candidate,
+    original: Candidate,
+    speech_probability: float,
+    classification: str,
+    region_duration: float,
+    local_repetition_count: int = 0,
+) -> int:
+    """Deterministic multi-signal suspicion score for a prompt-leak retry
+    that resolved to nothing but a tiny generic vocalization. No single weak
+    signal decides alone (PRIORITY 19); several must combine before the
+    recovery is withheld, and strong direct evidence overrides the rest
+    (PRIORITY 2).
+
+    Real post-alignment timing state (aligned vs. vad_fallback vs.
+    energy-recovered) is not available yet at this point in the pipeline --
+    retry acceptance is decided before forced alignment runs -- so "weak
+    timing/audio evidence" is approximated with the VAD-level signals that
+    ARE already available this early: speech_probability, region
+    classification, and how the tiny transcript compares to the region's
+    own duration (PRIORITY 4)."""
+    features = transcript_features(retry.text)
+    score = 0
+    if speech_probability < 0.28:
+        score += 2
+    elif speech_probability < 0.45:
+        score += 1
+    if classification == "ambiguous_vocalization":
+        score += 2
+    if is_tiny_transcript_long_region(retry.text, region_duration):
+        score += 1
+    if features["vocalization_heavy"] and features["meaningful_char_count"] <= 12 and region_duration > 8.0:
+        score += 1
+    if "identical_neighbors" in original.suspicion:
+        score += 1
+    if local_repetition_count >= 1:
+        score += 2
+    # Strong, direct evidence of real speech overrides everything above: a
+    # clearly audible utterance must not be suppressed just because it also
+    # happens to be short and generic-sounding (PRIORITY 2/18).
+    if classification == "speech" and speech_probability >= 0.70:
+        score -= 2
+    return score
+
+
+def retry_is_low_evidence_vocalization(
+    retry: Candidate,
+    speech_probability: float,
+    classification: str,
+    original: Candidate | None = None,
+    region_duration: float = 0.0,
+    local_repetition_count: int = 0,
+) -> bool:
     """A prompt-leak retry that comes back as nothing more than a tiny
     generic vocalization (e.g. はい/うん/あ/え/ん) is not, by itself, strong
     enough evidence of real speech to accept automatically -- especially
-    when the VAD region is itself ambiguous or the speech signal is weak.
-    Those tokens are exactly the kind of thing background noise or a stray
-    breath gets misheard as. Distinguish that case from a genuine short
-    utterance recovered from a leaked prompt, which should still be kept."""
-    features = transcript_features(retry.text)
-    token = meaningful_characters(retry.text).casefold()
-    if token not in VOCALIZATION_TOKENS:
+    when several weak signals line up (weak/moderate speech probability, an
+    ambiguous VAD classification, a tiny transcript on a long region, or the
+    same token recurring nearby). Those tokens are exactly the kind of thing
+    background noise or a stray breath gets misheard as. Distinguish that
+    case from a genuine short utterance recovered from a leaked prompt, or
+    one backed by strong isolated evidence, which should still be kept."""
+    if not is_tiny_generic_vocalization_candidate(retry.text):
         return False
-    if features["meaningful_char_count"] > 2:
-        return False
-    if features["lexical_ratio"] > 0.05:
-        return False
-    # Reuses the same weak-speech threshold as "weak_speech_conflict" above,
-    # so "weak evidence" means the same thing everywhere in this module.
-    return classification == "ambiguous_vocalization" or speech_probability < 0.28
+    if original is None:
+        # No decision context available (e.g. a direct call without the
+        # original candidate): fall back to the two strongest individual
+        # signals only, each of which was already sufficient on its own.
+        return classification == "ambiguous_vocalization" or speech_probability < 0.28
+    score = prompt_leak_vocalization_suspicion_score(
+        retry, original, speech_probability, classification, region_duration, local_repetition_count
+    )
+    return score >= PROMPT_LEAK_VOCALIZATION_REJECTION_THRESHOLD
 
 
 def qwen_retry_improves(
@@ -853,6 +972,8 @@ def qwen_retry_improves(
     title_terms: set[str] | None = None,
     speech_probability: float = 1.0,
     classification: str = "speech",
+    region_duration: float = 0.0,
+    local_repetition_count: int = 0,
 ) -> bool:
     if not meaningful_candidate(retry):
         return False
@@ -862,7 +983,9 @@ def qwen_retry_improves(
     # defect before applying the normal content-loss guard, otherwise clean
     # short retries are rejected merely because they removed leaked prompt.
     if "prompt_leakage" in original_critical and "prompt_leakage" not in retry_critical:
-        if retry_is_low_evidence_vocalization(retry, speech_probability, classification):
+        if retry_is_low_evidence_vocalization(
+            retry, speech_probability, classification, original, region_duration, local_repetition_count
+        ):
             # Do not automatically mark this prompt leak as recovered. The
             # caller is expected to classify it as an ambiguous vocalization
             # and prefer no subtitle instead of surfacing either the leaked
@@ -1526,6 +1649,27 @@ def main() -> int:
     qwen_cleanup["qwen_worker_process_exited"] = True
     qwen_model_deleted = True
     gpu_lifecycle["after_qwen_cleanup"] = gpu_snapshot()
+    # Precompute, for every prompt-leak retry that resolved to a tiny
+    # generic vocalization, how often nearby prompt-leak retries resolved to
+    # the exact same token (PRIORITY 3/4). This only reads data already
+    # produced above (regions, qwen_texts, retry_results) and is a plain
+    # deterministic count -- no new model, no lookahead beyond what the
+    # pipeline already computed for this file.
+    prompt_leak_vocalization_positions: list[tuple[int, str, float, float]] = []
+    for index, (region, text) in enumerate(zip(regions, qwen_texts)):
+        if index not in retry_results:
+            continue
+        if "prompt_leakage" not in suspicion_reasons(text, (region.end - region.start) / samplerate, region.speech_probability, context):
+            continue
+        retry_text = retry_results[index]
+        if not is_tiny_generic_vocalization_candidate(retry_text):
+            continue
+        token = meaningful_characters(retry_text).casefold()
+        prompt_leak_vocalization_positions.append(
+            (index, token, region.start / samplerate, region.end / samplerate)
+        )
+    prompt_leak_vocalization_indexes = {item[0] for item in prompt_leak_vocalization_positions}
+    local_repetition_counts = local_prompt_leak_vocalization_repetition_counts(prompt_leak_vocalization_positions)
     decisions: list[Decision] = []
     previous: list[str] = []
     for index, (region, text) in enumerate(zip(regions, qwen_texts)):
@@ -1546,6 +1690,7 @@ def main() -> int:
         retry_selected = False
         retry_recovered = False
         retry_ambiguous_vocalization = False
+        retry_vocalization_outcome = ""
         retry_similarity = 0.0
         eligibility_candidate = selected
         if index in retry_results:
@@ -1554,31 +1699,42 @@ def main() -> int:
             retry = Candidate("qwen_retry", args.qwen_model, retry_text, retry_suspicion, retry_without_context=True)
             candidates["qwen_retry"] = retry
             retry_similarity = similarity(text, retry_text)
+            is_tiny_vocalization_candidate = index in prompt_leak_vocalization_indexes
+            local_repetition_count = local_repetition_counts.get(index, 0)
             if qwen_retry_improves(
                 original, retry, seconds, profile_terms, title_terms,
                 region.speech_probability, region.classification,
+                seconds, local_repetition_count,
             ):
                 selected = retry
                 eligibility_candidate = retry
                 retry_selected = True
                 retry_recovered = not bool(set(retry.suspicion) & (LEXICAL_REASONS | {"prompt_leakage"}))
+                if is_tiny_vocalization_candidate:
+                    retry_vocalization_outcome = "preserved_strong_evidence"
             elif "prompt_leakage" in original.suspicion and retry_is_low_evidence_vocalization(
-                retry, region.speech_probability, region.classification
+                retry, region.speech_probability, region.classification,
+                original, seconds, local_repetition_count,
             ):
                 # The retry only recovered a tiny, low-confidence
                 # vocalization from a leaked prompt, with no strong
-                # timing/audio evidence of real speech behind it. Prefer no
-                # subtitle over surfacing either the leaked prompt text or an
-                # unsupported guess: an empty selection is treated the same
-                # as any other unusable transcript in the alignment pass
-                # below (has_meaningful_transcript is False -> "failed",
-                # segment dropped).
+                # timing/audio evidence of real speech behind it (often
+                # confirmed by the same token repeating in nearby prompt-leak
+                # retries -- PRIORITY 3). Prefer no subtitle over surfacing
+                # either the leaked prompt text or an unsupported guess: an
+                # empty selection is treated the same as any other unusable
+                # transcript in the alignment pass below
+                # (has_meaningful_transcript is False -> "failed", segment
+                # dropped).
                 selected = Candidate(
                     "ambiguous_vocalization", original.model, "",
                     ["ambiguous_vocalization_low_evidence"],
                 )
                 eligibility_candidate = selected
                 retry_ambiguous_vocalization = True
+                retry_vocalization_outcome = (
+                    "rejected_repetition" if local_repetition_count >= 1 else "rejected_weak_evidence"
+                )
             elif meaningful_candidate(retry):
                 # A still-suspicious lexical retry is the best evidence for
                 # fallback eligibility, without making it canonical output.
@@ -1608,6 +1764,7 @@ def main() -> int:
                 qwen_retry_similarity=retry_similarity,
                 qwen_retry_recovered=retry_recovered,
                 qwen_retry_ambiguous_vocalization=retry_ambiguous_vocalization,
+                qwen_retry_vocalization_outcome=retry_vocalization_outcome,
                 whisper_eligible=whisper_eligible,
                 whisper_reason=whisper_reason,
                 fallback_audio=fallback_audio_stats(clips[index][0], clips[index][1], region) if whisper_eligible else {},
@@ -1949,6 +2106,15 @@ def main() -> int:
     leakage_ambiguous_vocalization = sum(
         decisions[index].qwen_retry_ambiguous_vocalization for index in leakage_indexes
     )
+    leakage_repetition_rejected = sum(
+        decisions[index].qwen_retry_vocalization_outcome == "rejected_repetition" for index in leakage_indexes
+    )
+    leakage_weak_timing_rejected = sum(
+        decisions[index].qwen_retry_vocalization_outcome == "rejected_weak_evidence" for index in leakage_indexes
+    )
+    leakage_strong_evidence_preserved = sum(
+        decisions[index].qwen_retry_vocalization_outcome == "preserved_strong_evidence" for index in leakage_indexes
+    )
     suspicion_counts: dict[str, int] = {}
     for decision in decisions:
         for reason in decision.candidates["qwen3"].suspicion:
@@ -2144,6 +2310,9 @@ def main() -> int:
             "prompt_leakage_retry_failed": leakage_segments - leakage_retry_clean,
             "prompt_leakage_escalated_to_whisper": leakage_escalated,
             "prompt_leakage_retry_ambiguous_vocalization": leakage_ambiguous_vocalization,
+            "prompt_leakage_retry_vocalization_repetition_rejected": leakage_repetition_rejected,
+            "prompt_leakage_retry_vocalization_weak_timing_rejected": leakage_weak_timing_rejected,
+            "prompt_leakage_retry_vocalization_strong_evidence_preserved": leakage_strong_evidence_preserved,
             "prompt_leakage_retries": len(leakage_indexes),
             "prompt_leakage_recovered": leakage_recovered,
             "prompt_leakage_unresolved": leakage_segments - leakage_recovered,
