@@ -4,6 +4,12 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-03
+
+### Fixed
+
+- Fixed the prompt-leak tiny-vocalization guard (added in 0.5.0) under-suppressing phantom "Yes."/「はい」 recoveries in the 0.35-0.47 speech-probability band. Replaced the single `speech_probability < 0.28` threshold with a deterministic multi-signal suspicion score: weak/moderate speech probability, an ambiguous VAD classification, a tiny transcript on a long region, `identical_neighbors` on the original, and — the dominant signal — the same generic vocalization token recurring across nearby prompt-leak retries within a local segment/time window. Strong direct evidence (clean "speech" classification with high speech probability) overrides the score and still preserves the recovery. Direct Qwen vocalization recognition without prompt leakage, and substantive prompt-leak retry text, are unaffected; suppressed cases still never escalate to Whisper in Balanced. Added `prompt_leakage_retry_vocalization_repetition_rejected`, `..._weak_timing_rejected`, and `..._strong_evidence_preserved` diagnostics.
+
 ## [0.5.0] - 2026-09-02
 
 ### Fixed
