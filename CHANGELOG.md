@@ -4,6 +4,21 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-04
+
+### Added
+
+- Added a post-translation mixed-script QA pass (Stage 3 of the post-0.6.0 combined TODO): after contextual translation, every row is scanned for leftover Japanese script (hiragana/katakana/kanji) that leaked into the English output. Only the flagged rows - never the whole file - are sent through one selective re-translation batch with a stricter, script-forbidding system prompt (same glossary/release-context composition as the main prompt, so repaired rows stay terminology-consistent). A repair that still contains script, errors, or omits a row leaves the original translated text untouched rather than risk corrupting output. New `mixed_script_qa_enabled` config flag (`translation.mixed_script_qa_enabled`, default `true`) disables the pass entirely.
+- Added `translation_rows_with_japanese_script`, `translation_rows_retranslated_for_validation`, and `translation_retranslation_success` diagnostics to the job result.
+- Added a canonical text/time density QA check: the final (post-normalization) Japanese cues are scanned for characters-per-second density beyond a configurable `subtitle_extreme_cps` threshold (default `40`). This catches a specific gap in the existing normalizer - a cue can be short enough in total duration and character count to never be considered for splitting, yet still pack an unreadable number of characters into a very brief window (e.g. ~50+ characters in ~1 second) - without ever inventing timing, splitting cues, or rewriting canonical text; it is purely a diagnostic flag for review. New `canonical_rows_over_extreme_cps` count and `canonical_density_anomalies` (index/timing/character-density detail per flagged cue) diagnostics on the job result; set `subtitle_extreme_cps` to `0` to disable.
+- Job cards in the web UI now show a compact "Translation QA" summary line (script-leakage rows flagged/fixed, extreme-density rows flagged) aggregated across a job's files, only rendered when there is something to report.
+
+### Notes
+
+- Translation-only: recognition (Qwen/Whisper/ForcedAligner/VAD), the subtitle normalizer's splitting/timing architecture, provenance hashing, and the prompt-leak vocalization filter are unchanged. Density QA never alters segment timing or text - detection only.
+- Proper-name variant consistency (e.g. "Spandexer/Spadeksa"-style drift) and a job-local terminology memory structure remain explicitly out of scope, for the same fabrication-risk reasons Stage 2 deferred a similar item: reliable detection needs either fuzzy-matching heuristics this project deliberately avoids or a curated per-file reference list that doesn't yet exist. Per-file release metadata for batch jobs, further Activity/job-detail UI work, and provenance sidecar fields are also out of scope for this stage.
+- This is Stage 3 of 3, completing the post-0.6.0 combined TODO's primary goals.
+
 ## [0.8.0] - 2026-09-04
 
 ### Added

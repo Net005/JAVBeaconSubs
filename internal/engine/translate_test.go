@@ -6,12 +6,94 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"javbeaconsubs/internal/config"
 	"javbeaconsubs/internal/subtitle"
 )
+
+// fakeTranslationCall records one request the fake translation server
+// received, decoded into its system prompt and the set of row ids the
+// request asked to have translated (t=1).
+type fakeTranslationCall struct {
+	System string
+	IDs    []int
+}
+
+// newFakeTranslationServer starts a fake OpenAI-chat-compatible server for
+// exercising (r *Runner).translate/repairMixedScriptLeaks end-to-end.
+// respond is invoked once per request and returns the id->text map to send
+// back as the translation result; every call is recorded and returned via
+// the *[]fakeTranslationCall pointer so tests can assert on call count,
+// order, and exactly which rows were requested.
+func newFakeTranslationServer(t *testing.T, respond func(call fakeTranslationCall) map[int]string) (*httptest.Server, *[]fakeTranslationCall) {
+	t.Helper()
+	calls := &[]fakeTranslationCall{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		var req chatRequest
+		if err := json.Unmarshal(body, &req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		var system, userPayload string
+		for _, m := range req.Messages {
+			switch m.Role {
+			case "system":
+				system = m.Content
+			case "user":
+				userPayload = m.Content
+			}
+		}
+		var rows [][3]any
+		if err := json.Unmarshal([]byte(userPayload), &rows); err != nil {
+			t.Fatalf("decode payload: %v", err)
+		}
+		var ids []int
+		for _, row := range rows {
+			id := int(row[0].(float64))
+			if translate, ok := row[1].(float64); ok && translate == 1 {
+				ids = append(ids, id)
+			}
+		}
+		call := fakeTranslationCall{System: system, IDs: ids}
+		*calls = append(*calls, call)
+		texts := respond(call)
+		translations := make([]map[string]any, 0, len(texts))
+		for id, text := range texts {
+			translations = append(translations, map[string]any{"id": id, "text": text})
+		}
+		content, err := json.Marshal(map[string]any{"translations": translations})
+		if err != nil {
+			t.Fatalf("marshal fake translation content: %v", err)
+		}
+		respBody, err := json.Marshal(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"role": "assistant", "content": string(content)}}},
+			"usage":   map[string]any{"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+		})
+		if err != nil {
+			t.Fatalf("marshal fake response: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write(respBody); err != nil {
+			t.Fatalf("write fake response: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server, calls
+}
+
+// isRepairCall reports whether a captured request was the mixed-script
+// repair pass rather than the main translation batch, by checking for text
+// unique to mixedScriptRepairSystemPrompt.
+func isRepairCall(call fakeTranslationCall) bool {
+	return strings.Contains(call.System, "leftover Japanese script")
+}
 
 func continuousSegments(count int) []subtitle.Segment {
 	segments := make([]subtitle.Segment, count)
@@ -233,6 +315,151 @@ func TestTranslationMemoryExcludesShortReactions(t *testing.T) {
 	memory.store(" 今日は  晴れです ", "It is sunny today.")
 	if got, ok := memory.lookup("今日は 晴れです"); !ok || got != "It is sunny today." {
 		t.Fatalf("normalized exact memory lookup = %q, %v", got, ok)
+	}
+}
+
+func TestContainsJapaneseScriptDetectsHiraganaKatakanaKanji(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want bool
+	}{
+		{"hiragana", "こんにちは", true},
+		{"katakana", "アイウエオ", true},
+		{"kanji", "先生", true},
+		{"mixed leak", "Hello こんにちは", true},
+		{"empty", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := containsJapaneseScript(tc.text); got != tc.want {
+				t.Fatalf("containsJapaneseScript(%q) = %v, want %v", tc.text, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestContainsJapaneseScriptIgnoresCleanEnglish(t *testing.T) {
+	cases := []string{
+		"Hello, world!",
+		"Spandexer-san said goodbye.",
+		"Room 42B, level III",
+		"MVSD-610",
+		"café naïve résumé",
+	}
+	for _, text := range cases {
+		if containsJapaneseScript(text) {
+			t.Fatalf("containsJapaneseScript(%q) = true, want false (no Japanese script, digits/uppercase must not false-positive)", text)
+		}
+	}
+}
+
+func newRepairTestRunner(baseURL string, mixedScriptQA bool) *Runner {
+	return &Runner{
+		cfg: config.Config{Translation: config.TranslationConfig{
+			Mode: "contextual", BatchSize: 24, BaseURL: baseURL, Model: "test-model",
+			ContextGapMS: 8000, MixedScriptQA: mixedScriptQA,
+		}},
+		client: &http.Client{},
+		log:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+}
+
+func repairTestSegments() []subtitle.Segment {
+	return []subtitle.Segment{
+		{StartMS: 0, EndMS: 1000, Text: "こんにちは"},
+		{StartMS: 20_000, EndMS: 21_000, Text: "さようなら"},
+	}
+}
+
+func TestRepairMixedScriptLeaksFixesFlaggedRowsOnly(t *testing.T) {
+	server, calls := newFakeTranslationServer(t, func(call fakeTranslationCall) map[int]string {
+		if isRepairCall(call) {
+			if len(call.IDs) != 1 || call.IDs[0] != 0 {
+				t.Fatalf("repair call requested unexpected rows: %v (clean row must never be resent)", call.IDs)
+			}
+			return map[int]string{0: "Hello"}
+		}
+		return map[int]string{0: "こんにちは leaked", 1: "Goodbye"}
+	})
+	runner := newRepairTestRunner(server.URL, true)
+
+	out, usage, err := runner.translate(context.Background(), repairTestSegments(), func(string, int, string) {}, NewTranslationMemory())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 2 || out[0].Text != "Hello" || out[1].Text != "Goodbye" {
+		t.Fatalf("unexpected output: %#v", out)
+	}
+	if usage.RowsWithJapaneseScript != 1 || usage.RowsRepaired != 1 {
+		t.Fatalf("usage = %#v, want RowsWithJapaneseScript=1 RowsRepaired=1", usage)
+	}
+	if len(*calls) != 2 {
+		t.Fatalf("call count = %d, want 2 (one main batch, one repair batch)", len(*calls))
+	}
+}
+
+func TestRepairMixedScriptLeaksKeepsOriginalWhenRepairStillLeaks(t *testing.T) {
+	const leaked = "こんにちは leaked"
+	server, _ := newFakeTranslationServer(t, func(call fakeTranslationCall) map[int]string {
+		if isRepairCall(call) {
+			return map[int]string{0: "まだ leaked"}
+		}
+		return map[int]string{0: leaked, 1: "Goodbye"}
+	})
+	runner := newRepairTestRunner(server.URL, true)
+
+	out, usage, err := runner.translate(context.Background(), repairTestSegments(), func(string, int, string) {}, NewTranslationMemory())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out[0].Text != leaked {
+		t.Fatalf("out[0].Text = %q, want original leaked text %q preserved (do not corrupt output)", out[0].Text, leaked)
+	}
+	if usage.RowsWithJapaneseScript != 1 || usage.RowsRepaired != 0 {
+		t.Fatalf("usage = %#v, want RowsWithJapaneseScript=1 RowsRepaired=0", usage)
+	}
+}
+
+func TestRepairMixedScriptLeaksSkippedWhenDisabled(t *testing.T) {
+	server, calls := newFakeTranslationServer(t, func(call fakeTranslationCall) map[int]string {
+		return map[int]string{0: "こんにちは leaked", 1: "Goodbye"}
+	})
+	runner := newRepairTestRunner(server.URL, false)
+
+	out, usage, err := runner.translate(context.Background(), repairTestSegments(), func(string, int, string) {}, NewTranslationMemory())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out[0].Text != "こんにちは leaked" {
+		t.Fatalf("out[0].Text = %q, want the leaked text left untouched when QA is disabled", out[0].Text)
+	}
+	if usage.RowsWithJapaneseScript != 0 || usage.RowsRepaired != 0 {
+		t.Fatalf("usage = %#v, want zero (disabled QA never even detects)", usage)
+	}
+	if len(*calls) != 1 {
+		t.Fatalf("call count = %d, want 1 (no repair call when disabled)", len(*calls))
+	}
+}
+
+func TestRepairMixedScriptLeaksNoOpWhenNothingFlagged(t *testing.T) {
+	server, calls := newFakeTranslationServer(t, func(call fakeTranslationCall) map[int]string {
+		return map[int]string{0: "Hello", 1: "Goodbye"}
+	})
+	runner := newRepairTestRunner(server.URL, true)
+
+	out, usage, err := runner.translate(context.Background(), repairTestSegments(), func(string, int, string) {}, NewTranslationMemory())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out[0].Text != "Hello" || out[1].Text != "Goodbye" {
+		t.Fatalf("unexpected output: %#v", out)
+	}
+	if usage.RowsWithJapaneseScript != 0 || usage.RowsRepaired != 0 {
+		t.Fatalf("usage = %#v, want zero", usage)
+	}
+	if len(*calls) != 1 {
+		t.Fatalf("call count = %d, want 1 (no repair call when nothing is flagged)", len(*calls))
 	}
 }
 

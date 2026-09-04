@@ -40,6 +40,10 @@ type tokenUsage struct {
 	TranslatedRows   int `json:"-"`
 	ContextRows      int `json:"-"`
 	ReusedRows       int `json:"-"`
+	// RowsWithJapaneseScript and RowsRepaired are set once, after
+	// translate()'s main loop, by repairMixedScriptLeaks (TODO Part 23-25).
+	RowsWithJapaneseScript int `json:"-"`
+	RowsRepaired           int `json:"-"`
 }
 type translationResult struct {
 	Translations []struct {
@@ -306,6 +310,99 @@ func releaseContextInstructions(title, story string) string {
 	return strings.Join(lines, "\n")
 }
 
+// containsJapaneseScript reports whether text contains hiragana, katakana,
+// or kanji. Used to detect Japanese script that leaked into an English
+// translation (TODO Part 23). Deliberately narrower than
+// profile.containsRecognitionCharacters, which also matches digits and
+// uppercase Latin - those are normal in English proper nouns and must not
+// false-positive here.
+func containsJapaneseScript(text string) bool {
+	for _, r := range text {
+		if unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana) {
+			return true
+		}
+	}
+	return false
+}
+
+const mixedScriptRepairSystemPrompt = `The following rows were already translated from Japanese to English, but the English output incorrectly contains leftover Japanese script (hiragana, katakana, or kanji) instead of a natural English translation. Re-translate only the flagged rows (t=1) into natural English. Context rows (t=0) are for reference only, do not translate them. Preserve the original meaning exactly; do not invent, omit, or merge content. Return English text only, unless a specific proper noun genuinely requires keeping part of the original script by convention. Return every t=1 id exactly once. Output strict JSON only: {"translations":[{"id":number,"text":"English"}]}.`
+
+// repairMixedScriptLeaks scans out for rows still containing Japanese
+// script after translation and attempts one selective re-translation pass
+// for just those rows (TODO Part 23-25). It never retranslates rows that
+// are already clean, never touches source or timing, and on any failure
+// (HTTP error, missing id, or a repair that still contains script) leaves
+// the original translated text in out unchanged - the repair pass is
+// best-effort QA, not part of the required translation path.
+func (r *Runner) repairMixedScriptLeaks(ctx context.Context, source []subtitle.Segment, out []subtitle.Segment, glossaryIndex structuredGlossaryIndex, releaseContext string) (detected, repaired int, usage tokenUsage, err error) {
+	if !r.cfg.Translation.MixedScriptQA || len(source) == 0 {
+		return 0, 0, tokenUsage{}, nil
+	}
+	flagged := make(map[int]bool)
+	for i := range out {
+		if containsJapaneseScript(out[i].Text) {
+			flagged[i] = true
+		}
+	}
+	detected = len(flagged)
+	if detected == 0 {
+		return 0, 0, tokenUsage{}, nil
+	}
+	batchSize := r.cfg.Translation.BatchSize
+	for start := 0; start < len(source); start += batchSize {
+		end := start + batchSize
+		if end > len(source) {
+			end = len(source)
+		}
+		chunkIDs := make(map[int]bool)
+		for i := start; i < end; i++ {
+			if flagged[i] {
+				chunkIDs[i] = true
+			}
+		}
+		if len(chunkIDs) == 0 {
+			continue
+		}
+		window := buildTranslationWindow(source, start, end, r.cfg.Translation.ContextGapMS, chunkIDs)
+		window = fitWindowToLegacyPayloadBudget(window, source, start, end)
+		payload, marshalErr := compactTranslationPayload(window)
+		if marshalErr != nil {
+			return detected, repaired, usage, marshalErr
+		}
+		glossary, _ := glossaryInstructionsIndexed(r.cfg.Translation.Glossary, glossaryIndex, window.Rows)
+		system := mixedScriptRepairSystemPrompt
+		if glossary != "" {
+			system += "\n" + glossary
+		}
+		if releaseContext != "" {
+			system += "\n" + releaseContext
+		}
+		requestBody := chatRequest{Model: r.cfg.Translation.Model, Messages: []chatMessage{{Role: "system", Content: system}, {Role: "user", Content: string(payload)}}, ResponseFormat: map[string]string{"type": "json_object"}}
+		var repairedResult translationResult
+		callUsage, callErr := r.chat(ctx, requestBody, &repairedResult)
+		if callErr != nil {
+			r.log.Warn("mixed-script repair batch failed", "rows", start+1, "end", end, "error", callErr)
+			continue
+		}
+		usage.PromptTokens += callUsage.PromptTokens
+		usage.CompletionTokens += callUsage.CompletionTokens
+		usage.TotalTokens += callUsage.TotalTokens
+		byID := make(map[int]string, len(repairedResult.Translations))
+		for _, item := range repairedResult.Translations {
+			byID[item.ID] = strings.TrimSpace(item.Text)
+		}
+		for id := range chunkIDs {
+			text, ok := byID[id]
+			if !ok || text == "" || containsJapaneseScript(text) {
+				continue
+			}
+			out[id].Text = text
+			repaired++
+		}
+	}
+	return detected, repaired, usage, nil
+}
+
 func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progress ProgressFunc, memory *TranslationMemory) ([]subtitle.Segment, tokenUsage, error) {
 	// Defense in depth: punctuation-only ASR artifacts must never consume paid
 	// translation tokens even if a future caller bypasses the ASR cleanup path.
@@ -392,7 +489,17 @@ func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progr
 	totalUsage.TranslatedRows = translatedRows
 	totalUsage.ContextRows = contextRows
 	totalUsage.ReusedRows = reusedRows
-	r.log.Info("contextual translation usage", "input_tokens", totalUsage.PromptTokens, "output_tokens", totalUsage.CompletionTokens, "total_tokens", totalUsage.TotalTokens, "translated_rows", translatedRows, "context_rows", contextRows, "reused_rows", reusedRows, "glossary_entries", glossaryEntries)
+	detected, repairedCount, repairUsage, repairErr := r.repairMixedScriptLeaks(ctx, source, out, glossaryIndex, releaseContext)
+	if repairErr != nil {
+		r.log.Warn("mixed-script repair pass failed", "error", repairErr)
+	} else {
+		totalUsage.PromptTokens += repairUsage.PromptTokens
+		totalUsage.CompletionTokens += repairUsage.CompletionTokens
+		totalUsage.TotalTokens += repairUsage.TotalTokens
+		totalUsage.RowsWithJapaneseScript = detected
+		totalUsage.RowsRepaired = repairedCount
+	}
+	r.log.Info("contextual translation usage", "input_tokens", totalUsage.PromptTokens, "output_tokens", totalUsage.CompletionTokens, "total_tokens", totalUsage.TotalTokens, "translated_rows", translatedRows, "context_rows", contextRows, "reused_rows", reusedRows, "glossary_entries", glossaryEntries, "rows_with_japanese_script", detected, "rows_repaired", repairedCount)
 	return out, totalUsage, nil
 }
 
