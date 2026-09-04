@@ -105,14 +105,19 @@ type WhisperConfig struct {
 }
 
 type TranslationConfig struct {
-	Mode                 string              `json:"mode"`
-	BaseURL              string              `json:"base_url"`
-	APIKey               string              `json:"api_key"`
-	Model                string              `json:"model"`
-	BatchSize            int                 `json:"batch_size"`
-	TimeoutSec           int                 `json:"timeout_seconds"`
-	ContextGapMS         int64               `json:"context_gap_ms"`
-	TranslationMemory    bool                `json:"translation_memory"`
+	Mode              string `json:"mode"`
+	BaseURL           string `json:"base_url"`
+	APIKey            string `json:"api_key"`
+	Model             string `json:"model"`
+	BatchSize         int    `json:"batch_size"`
+	TimeoutSec        int    `json:"timeout_seconds"`
+	ContextGapMS      int64  `json:"context_gap_ms"`
+	TranslationMemory bool   `json:"translation_memory"`
+	// MixedScriptQA enables a post-translation pass that detects Japanese
+	// script (hiragana/katakana/kanji) leaked into English output and
+	// attempts one selective re-translation of just the affected rows
+	// (TODO Part 23-25). Defaults to true; set false to disable entirely.
+	MixedScriptQA        bool                `json:"mixed_script_qa_enabled"`
 	InputCostPerMillion  float64             `json:"input_cost_per_million,omitempty"`
 	OutputCostPerMillion float64             `json:"output_cost_per_million,omitempty"`
 	Glossary             string              `json:"glossary"`
@@ -150,6 +155,11 @@ type OutputConfig struct {
 	MinCueDurationMS   int64   `json:"subtitle_min_duration_ms"`
 	TargetCPS          float64 `json:"subtitle_target_cps"`
 	WriteProvenance    bool    `json:"subtitle_write_provenance_sidecar"`
+	// ExtremeCPS flags a canonical (Japanese) cue as a density anomaly when
+	// its characters-per-second exceeds this value - a diagnostic-only
+	// signal, never used to alter timing or text (TODO Part 26-27). Set to
+	// 0 to disable the check.
+	ExtremeCPS float64 `json:"subtitle_extreme_cps"`
 }
 
 func defaults() Config {
@@ -173,12 +183,12 @@ func defaults() Config {
 			WhisperStatusPath: "./data/whisper-runtime.json",
 			Prompt:            "",
 		},
-		Translation:    TranslationConfig{Mode: "direct", BatchSize: 24, TimeoutSec: 120, ContextGapMS: 8000},
+		Translation:    TranslationConfig{Mode: "direct", BatchSize: 24, TimeoutSec: 120, ContextGapMS: 8000, MixedScriptQA: true},
 		PostProcessing: PostProcessingConfig{Mode: "none", TimeoutSec: 60},
 		Output: OutputConfig{
 			EnglishSuffix: ".en.srt", JapaneseSuffix: ".ja.srt", EnglishASS: ".en.ass", JapaneseASS: ".ja.ass", ProjectJSON: ".subtitles.json",
 			KeepJapanese: false, WriteASS: true, NormalizeSubtitles: true, TargetLineChars: 40, MaxLineChars: 46, MaxLines: 2,
-			TargetCueChars: 80, MaxCueDurationMS: 6000, MinCueDurationMS: 1000, TargetCPS: 17, WriteProvenance: true,
+			TargetCueChars: 80, MaxCueDurationMS: 6000, MinCueDurationMS: 1000, TargetCPS: 17, WriteProvenance: true, ExtremeCPS: 40,
 		},
 		Workers:   1,
 		JAVBeacon: JAVBeaconConfig{TimeoutSec: 10},

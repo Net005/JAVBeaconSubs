@@ -70,6 +70,7 @@
     "timeout_seconds": 120,
     "context_gap_ms": 8000,
     "translation_memory": false,
+    "mixed_script_qa_enabled": true,
     "input_cost_per_million": 0,
     "output_cost_per_million": 0,
 		"glossary": "",
@@ -107,6 +108,7 @@
     "subtitle_max_duration_ms": 6000,
     "subtitle_min_duration_ms": 1000,
     "subtitle_target_cps": 17,
-    "subtitle_write_provenance_sidecar": true
+    "subtitle_write_provenance_sidecar": true,
+    "subtitle_extreme_cps": 40
   }
 }

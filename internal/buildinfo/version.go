@@ -1,4 +1,4 @@
 package buildinfo
 
 // Version is overridden from VERSION by release/container builds.
-var Version = "0.8.0"
+var Version = "0.9.0"

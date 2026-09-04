@@ -46,40 +46,45 @@ type ProcessOptions struct {
 }
 
 type Result struct {
-	Input                              string               `json:"input"`
-	EnglishSRT                         string               `json:"english_srt,omitempty"`
-	JapaneseSRT                        string               `json:"japanese_srt,omitempty"`
-	EnglishSRTProvenance               string               `json:"english_srt_provenance,omitempty"`
-	JapaneseSRTProvenance              string               `json:"japanese_srt_provenance,omitempty"`
-	EnglishASS                         string               `json:"english_ass,omitempty"`
-	JapaneseASS                        string               `json:"japanese_ass,omitempty"`
-	ProjectJSON                        string               `json:"project_json,omitempty"`
-	Segments                           int                  `json:"segments"`
-	Skipped                            bool                 `json:"skipped,omitempty"`
-	SkipReason                         string               `json:"skip_reason,omitempty"`
-	TranslationInputTokens             int                  `json:"translation_input_tokens,omitempty"`
-	TranslationOutputTokens            int                  `json:"translation_output_tokens,omitempty"`
-	TranslationTotalTokens             int                  `json:"translation_total_tokens,omitempty"`
-	TranslationBatches                 int                  `json:"translation_batches,omitempty"`
-	TranslationRows                    int                  `json:"translation_rows,omitempty"`
-	TranslationContextRows             int                  `json:"translation_context_rows,omitempty"`
-	TranslationReusedRows              int                  `json:"translation_reused_rows,omitempty"`
-	TranslationTokensPerMinute         float64              `json:"translation_tokens_per_source_minute,omitempty"`
-	TranslationCostEstimateUSD         float64              `json:"translation_cost_estimate_usd,omitempty"`
-	TranslationCostPerSourceHour       float64              `json:"translation_cost_per_source_hour_usd,omitempty"`
-	Profile                            string               `json:"profile,omitempty"`
-	ASRMode                            string               `json:"asr_mode,omitempty"`
-	RecognitionVocabularyVersion       int                  `json:"recognition_vocabulary_version,omitempty"`
-	RecognitionVocabularyScopes        []string             `json:"recognition_vocabulary_scopes,omitempty"`
-	TranslationGlossaryVersion         int                  `json:"translation_glossary_version,omitempty"`
-	TranslationGlossaryScopes          []string             `json:"translation_glossary_scopes,omitempty"`
-	TranslationReleaseTitleContextUsed bool                 `json:"translation_release_title_context_used,omitempty"`
-	TranslationReleaseStoryContextUsed bool                 `json:"translation_release_story_context_used,omitempty"`
-	PipelineVersion                    string               `json:"pipeline_version,omitempty"`
-	Models                             map[string]string    `json:"models,omitempty"`
-	DiagnosticSummary                  map[string]any       `json:"diagnostic_summary,omitempty"`
-	SubtitleProvenance                 []ProvenanceArtifact `json:"subtitle_provenance,omitempty"`
-	Warnings                           []string             `json:"warnings,omitempty"`
+	Input                                    string                    `json:"input"`
+	EnglishSRT                               string                    `json:"english_srt,omitempty"`
+	JapaneseSRT                              string                    `json:"japanese_srt,omitempty"`
+	EnglishSRTProvenance                     string                    `json:"english_srt_provenance,omitempty"`
+	JapaneseSRTProvenance                    string                    `json:"japanese_srt_provenance,omitempty"`
+	EnglishASS                               string                    `json:"english_ass,omitempty"`
+	JapaneseASS                              string                    `json:"japanese_ass,omitempty"`
+	ProjectJSON                              string                    `json:"project_json,omitempty"`
+	Segments                                 int                       `json:"segments"`
+	Skipped                                  bool                      `json:"skipped,omitempty"`
+	SkipReason                               string                    `json:"skip_reason,omitempty"`
+	TranslationInputTokens                   int                       `json:"translation_input_tokens,omitempty"`
+	TranslationOutputTokens                  int                       `json:"translation_output_tokens,omitempty"`
+	TranslationTotalTokens                   int                       `json:"translation_total_tokens,omitempty"`
+	TranslationBatches                       int                       `json:"translation_batches,omitempty"`
+	TranslationRows                          int                       `json:"translation_rows,omitempty"`
+	TranslationContextRows                   int                       `json:"translation_context_rows,omitempty"`
+	TranslationReusedRows                    int                       `json:"translation_reused_rows,omitempty"`
+	TranslationTokensPerMinute               float64                   `json:"translation_tokens_per_source_minute,omitempty"`
+	TranslationCostEstimateUSD               float64                   `json:"translation_cost_estimate_usd,omitempty"`
+	TranslationCostPerSourceHour             float64                   `json:"translation_cost_per_source_hour_usd,omitempty"`
+	Profile                                  string                    `json:"profile,omitempty"`
+	ASRMode                                  string                    `json:"asr_mode,omitempty"`
+	RecognitionVocabularyVersion             int                       `json:"recognition_vocabulary_version,omitempty"`
+	RecognitionVocabularyScopes              []string                  `json:"recognition_vocabulary_scopes,omitempty"`
+	TranslationGlossaryVersion               int                       `json:"translation_glossary_version,omitempty"`
+	TranslationGlossaryScopes                []string                  `json:"translation_glossary_scopes,omitempty"`
+	TranslationReleaseTitleContextUsed       bool                      `json:"translation_release_title_context_used,omitempty"`
+	TranslationReleaseStoryContextUsed       bool                      `json:"translation_release_story_context_used,omitempty"`
+	TranslationRowsWithJapaneseScript        int                       `json:"translation_rows_with_japanese_script,omitempty"`
+	TranslationRowsRetranslatedForValidation int                       `json:"translation_rows_retranslated_for_validation,omitempty"`
+	TranslationRetranslationSuccess          int                       `json:"translation_retranslation_success,omitempty"`
+	CanonicalDensityAnomalyRows              int                       `json:"canonical_rows_over_extreme_cps,omitempty"`
+	CanonicalDensityAnomalies                []subtitle.DensityAnomaly `json:"canonical_density_anomalies,omitempty"`
+	PipelineVersion                          string                    `json:"pipeline_version,omitempty"`
+	Models                                   map[string]string         `json:"models,omitempty"`
+	DiagnosticSummary                        map[string]any            `json:"diagnostic_summary,omitempty"`
+	SubtitleProvenance                       []ProvenanceArtifact      `json:"subtitle_provenance,omitempty"`
+	Warnings                                 []string                  `json:"warnings,omitempty"`
 }
 
 type ProvenanceArtifact struct {
@@ -359,6 +364,10 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 	if err != nil {
 		return result, err
 	}
+	if anomalies := subtitle.DetectDensityAnomalies(japaneseOutput, r.cfg.Output.ExtremeCPS); len(anomalies) > 0 {
+		result.CanonicalDensityAnomalyRows = len(anomalies)
+		result.CanonicalDensityAnomalies = anomalies
+	}
 	transcriptionBackend := r.transcriptionBackend(result)
 
 	if keepJapanese {
@@ -399,6 +408,9 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		result.TranslationRows = usage.TranslatedRows
 		result.TranslationContextRows = usage.ContextRows
 		result.TranslationReusedRows = usage.ReusedRows
+		result.TranslationRowsWithJapaneseScript = usage.RowsWithJapaneseScript
+		result.TranslationRowsRetranslatedForValidation = usage.RowsWithJapaneseScript
+		result.TranslationRetranslationSuccess = usage.RowsRepaired
 		durationSeconds, _ := result.DiagnosticSummary["source_duration_seconds"].(float64)
 		if durationSeconds > 0 {
 			result.TranslationTokensPerMinute = float64(usage.TotalTokens) / (durationSeconds / 60)
