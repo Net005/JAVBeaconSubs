@@ -80,6 +80,8 @@ type Result struct {
 	TranslationRetranslationSuccess          int                       `json:"translation_retranslation_success,omitempty"`
 	CanonicalDensityAnomalyRows              int                       `json:"canonical_rows_over_extreme_cps,omitempty"`
 	CanonicalDensityAnomalies                []subtitle.DensityAnomaly `json:"canonical_density_anomalies,omitempty"`
+	TranslationProperNameVariantsDetected    int                       `json:"translation_proper_name_variants_detected,omitempty"`
+	TranslationProperNameVariants            []ProperNameVariant       `json:"translation_proper_name_variants,omitempty"`
 	PipelineVersion                          string                    `json:"pipeline_version,omitempty"`
 	Models                                   map[string]string         `json:"models,omitempty"`
 	DiagnosticSummary                        map[string]any            `json:"diagnostic_summary,omitempty"`
@@ -411,6 +413,8 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		result.TranslationRowsWithJapaneseScript = usage.RowsWithJapaneseScript
 		result.TranslationRowsRetranslatedForValidation = usage.RowsWithJapaneseScript
 		result.TranslationRetranslationSuccess = usage.RowsRepaired
+		result.TranslationProperNameVariantsDetected = len(usage.ProperNameVariants)
+		result.TranslationProperNameVariants = usage.ProperNameVariants
 		durationSeconds, _ := result.DiagnosticSummary["source_duration_seconds"].(float64)
 		if durationSeconds > 0 {
 			result.TranslationTokensPerMinute = float64(usage.TotalTokens) / (durationSeconds / 60)

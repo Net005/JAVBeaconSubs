@@ -482,6 +482,60 @@ func TestContextualTranslationSuppressesPunctuationBeforeAPI(t *testing.T) {
 	}
 }
 
+func TestGlossaryTargetsUsedInMatchesOnlyPresentSources(t *testing.T) {
+	index := newStructuredGlossaryIndex(&config.StructuredGlossary{Terms: map[string]string{
+		"お姉ちゃん": "big sis",
+		"先生":    "teacher",
+	}})
+	targets := glossaryTargetsUsedIn(index, "お姉ちゃん、待って")
+	if len(targets) != 1 || targets[0] != "big sis" {
+		t.Fatalf("targets = %v, want [big sis]", targets)
+	}
+}
+
+func TestCollectJobLocalTermsDedupesAndCombinesSources(t *testing.T) {
+	index := newStructuredGlossaryIndex(&config.StructuredGlossary{Terms: map[string]string{
+		"お姉ちゃん": "Moon Angel",
+	}})
+	memory := NewTranslationMemory()
+	memory.store("今日は 晴れです", "Moon Angel")     // same term as the glossary match; must collapse to one
+	memory.store("さようなら みんな", "Crimson Order") // a second, distinct accepted translation-memory form
+	source := []subtitle.Segment{{Text: "お姉ちゃん、待って"}}
+
+	terms := collectJobLocalTerms(source, index, memory)
+	seen := make(map[string]int, len(terms))
+	for _, term := range terms {
+		seen[strings.ToLower(term)]++
+	}
+	if seen["moon angel"] != 1 {
+		t.Fatalf("terms = %v, want exactly one case-insensitive occurrence of 'Moon Angel'", terms)
+	}
+	if seen["crimson order"] != 1 {
+		t.Fatalf("terms = %v, want 'Crimson Order' present once", terms)
+	}
+}
+
+func TestRepairMixedScriptLeaksIncludesJobLocalTermsInPrompt(t *testing.T) {
+	var repairSystem string
+	server, _ := newFakeTranslationServer(t, func(call fakeTranslationCall) map[int]string {
+		if isRepairCall(call) {
+			repairSystem = call.System
+			return map[int]string{0: "Hello"}
+		}
+		return map[int]string{0: "こんにちは leaked", 1: "Goodbye"}
+	})
+	runner := newRepairTestRunner(server.URL, true)
+	memory := NewTranslationMemory()
+	memory.store("さようなら みんな", "Moon Angel")
+
+	if _, _, err := runner.translate(context.Background(), repairTestSegments(), func(string, int, string) {}, memory); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(repairSystem, "Known proper names/terms already established for this file") || !strings.Contains(repairSystem, "Moon Angel") {
+		t.Fatalf("repair system prompt missing job-local terms block: %q", repairSystem)
+	}
+}
+
 func equalInts(a, b []int) bool {
 	if len(a) != len(b) {
 		return false

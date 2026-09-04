@@ -5,7 +5,7 @@ services:
     build:
       context: .
       args:
-        APP_VERSION: "${APP_VERSION:-0.9.0}"
+        APP_VERSION: "${APP_VERSION:-0.10.0}"
         WHISPER_CPP_REF: "${WHISPER_CPP_REF:-f049fff95a089aa9969deb009cdd4892b3e74916}"
         CUDA_ARCHITECTURES: "${CUDA_ARCHITECTURES:-75;86}"
         WHISPER_BUILD_JOBS: "${WHISPER_BUILD_JOBS:-2}"

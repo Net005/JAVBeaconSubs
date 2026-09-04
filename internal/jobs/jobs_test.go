@@ -309,3 +309,120 @@ func TestNewLeavesReleaseSourceEmptyWhenJobNeverHadMetadata(t *testing.T) {
 		t.Fatalf("a job that never had release metadata should not gain a source marker: title_source=%q story_source=%q", got.ReleaseTitleSource, got.ReleaseStorySource)
 	}
 }
+
+// TestCreateFileReleaseOverridesResolvedPerFile exercises a two-file batch
+// with an override for only one of them (TODO Part 33): only the
+// overridden file gets a FileReleaseMetadata entry, the other must have
+// none (fallback to job-level fields happens in Manager.process()).
+func TestCreateFileReleaseOverridesResolvedPerFile(t *testing.T) {
+	root := t.TempDir()
+	pathA := filepath.Join(root, "one.mp4")
+	pathB := filepath.Join(root, "two.mp4")
+	for _, p := range []string{pathA, pathB} {
+		if err := os.WriteFile(p, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := &Manager{cfg: config.Config{}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 1), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+
+	job, err := m.Create(Request{
+		Inputs: []string{pathA, pathB},
+		FileReleaseOverrides: map[string]ReleaseOverrideRequest{
+			pathA: {ReleaseTitle: "  Override Title  ", ReleaseStory: "Override story."},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	absA, _ := filepath.Abs(pathA)
+	absA = filepath.Clean(absA)
+	absB, _ := filepath.Abs(pathB)
+	absB = filepath.Clean(absB)
+
+	meta, ok := job.FileReleaseMetadata[absA]
+	if !ok {
+		t.Fatalf("expected FileReleaseMetadata entry for %s, got %#v", absA, job.FileReleaseMetadata)
+	}
+	if meta.ReleaseTitle != "Override Title" || meta.ReleaseTitleSource != "manual" {
+		t.Fatalf("override metadata = %#v", meta)
+	}
+	if meta.ReleaseStory != "Override story." {
+		t.Fatalf("override story = %q", meta.ReleaseStory)
+	}
+	if _, ok := job.FileReleaseMetadata[absB]; ok {
+		t.Fatalf("non-overridden file must have no FileReleaseMetadata entry: %#v", job.FileReleaseMetadata)
+	}
+}
+
+func TestCreateFileReleaseOverridesRejectsUnknownFile(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "one.mp4")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{cfg: config.Config{}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 1), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+
+	_, err := m.Create(Request{
+		Inputs: []string{path},
+		FileReleaseOverrides: map[string]ReleaseOverrideRequest{
+			filepath.Join(root, "missing.mp4"): {ReleaseTitle: "Whatever"},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected an error when file_release_overrides references a file not in this job")
+	}
+}
+
+// TestCreateFileReleaseOverridesNormalizesRelativePaths uses an
+// unnormalized (but still resolvable) override key - containing a literal
+// "/./" segment rather than the exact clean path discover() produces - to
+// confirm Create() applies the same filepath.Abs+filepath.Clean
+// normalization discover() already applies before matching, so a caller
+// echoing back whatever raw form it used in Inputs still resolves.
+func TestCreateFileReleaseOverridesNormalizesRelativePaths(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "one.mp4")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{cfg: config.Config{}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 1), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+
+	messyKey := filepath.Dir(path) + string(filepath.Separator) + "." + string(filepath.Separator) + filepath.Base(path)
+	if messyKey == path {
+		t.Fatal("test setup error: messyKey must differ from the clean path")
+	}
+	job, err := m.Create(Request{
+		Inputs: []string{path},
+		FileReleaseOverrides: map[string]ReleaseOverrideRequest{
+			messyKey: {ReleaseTitle: "Normalized Title"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanPath, _ := filepath.Abs(path)
+	cleanPath = filepath.Clean(cleanPath)
+	meta, ok := job.FileReleaseMetadata[cleanPath]
+	if !ok || meta.ReleaseTitle != "Normalized Title" {
+		t.Fatalf("override should match after path normalization: metadata=%#v", job.FileReleaseMetadata)
+	}
+}
+
+func TestCreateFileReleaseOverridesRespectsSizeLimits(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "one.mp4")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{cfg: config.Config{}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 1), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+
+	_, err := m.Create(Request{
+		Inputs: []string{path},
+		FileReleaseOverrides: map[string]ReleaseOverrideRequest{
+			path: {ReleaseTitle: strings.Repeat("x", maxReleaseTitleBytes+1)},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected an error for an oversized per-file release_title override")
+	}
+}

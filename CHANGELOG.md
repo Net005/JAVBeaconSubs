@@ -4,6 +4,21 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-04
+
+### Added
+
+- Added job-local terminology collection (Stage 4 of the post-0.6.0 combined TODO, revisiting Stage 2/3's deferred items): for each translated file, the terms already established for it - structured-glossary/`title_or_series_overrides` entries whose Japanese source actually appears in the file's dialogue, plus every accepted translation-memory form - are now collected into a single deduplicated list and passed to the mixed-script repair pass as one more optional "Known proper names/terms already established for this file" system-prompt block. Deliberately built only from already-structured data with zero free-text extraction, and deliberately not split into semantic categories (character/scenario/organization/series); no new config flag or API field, since this is internal prompt context exactly like the existing glossary/release-context blocks.
+- Added proper-name variant flagging: a new diagnostic-only pass (`internal/engine/qa.go`) scans translated output for single-word capitalized candidates that are not an exact match to any job-local term but are suspiciously close (Levenshtein distance 1-2, both sides at least 5 characters) to exactly one of them - e.g. catching "Moonligt" as a likely misspelling of an established "Moonlight". Catalog codes (`ADN-803`) and acronyms (`MVSD`) are excluded by construction. Never auto-corrects anything - flags only. New `translation_proper_name_variants_detected` count and `translation_proper_name_variants` (row index/candidate/likely-intended/edit-distance detail per flagged term) diagnostics on the job result. New `proper_name_variant_qa_enabled` config flag (default `true`) disables the pass entirely.
+- Added per-file release metadata for batch jobs: the JSON "paths" job API accepts an optional `file_release_overrides` map (keyed by the same path used in `inputs`) giving one or more files in a batch their own `release_external_id`/`javbeacon_release_id`/`release_title`/`release_story`, resolved through the same JAVBeacon/manual lookup path as the job-level fields. A file with no override entry keeps using the job-level release metadata, mirroring the existing per-file ASR `file_settings` fallback pattern. Overridden files' resolved metadata is exposed on the job as `file_release_metadata`.
+- The web UI's job card Release summary now shows an expandable story preview and the metadata source (manual vs. JAVBeacon) alongside the existing title/provider/lookup-method line; a new per-file line lists each overridden file's resolved title, JAVBeacon ID, and lookup method when a batch job used `file_release_overrides`.
+
+### Notes
+
+- Translation-only: recognition (Qwen/Whisper/ForcedAligner/VAD), the subtitle normalizer, provenance hashing, and the prompt-leak vocalization filter are unchanged.
+- Provenance sidecar fields (release metadata added to the `.provenance` JSON alongside the existing hash/version/backend fields) remain out of scope this stage: the information is already available via the job API response and each file's `project_json` sidecar, and adding it would require new cross-package plumbing (`metadata_provider`/`release_lookup_method` do not currently reach the `engine` package) touching the provenance-hashing system this project treats as protected. A small, well-scoped follow-up if wanted.
+- This is Stage 4, revisiting items deferred from Stages 2 and 3 of the post-0.6.0 combined TODO.
+
 ## [0.9.0] - 2026-09-04
 
 ### Added
