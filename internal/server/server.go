@@ -2,11 +2,13 @@ package server
 
 import (
 	"archive/zip"
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -26,6 +28,7 @@ import (
 	"javbeaconsubs/internal/jobs"
 	"javbeaconsubs/internal/models"
 	profilecatalog "javbeaconsubs/internal/profile"
+	"javbeaconsubs/internal/release"
 )
 
 //go:embed web/*
@@ -48,6 +51,7 @@ type SettingsStore interface {
 	SaveTranslation(config.TranslationConfig) error
 	SavePostProcessing(config.PostProcessingConfig) error
 	SaveProfiles(config.ProfilesConfig) error
+	SaveJAVBeacon(config.JAVBeaconConfig) error
 	SaveRecognitionVocabulary(profilecatalog.RecognitionVocabulary) error
 	SaveTranslationGlossary(profilecatalog.TranslationGlossary) error
 }
@@ -71,6 +75,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/health", s.health)
 	mux.HandleFunc("GET /api/v1/settings", s.getSettings)
 	mux.HandleFunc("PUT /api/v1/settings", s.updateSettings)
+	mux.HandleFunc("POST /api/v1/javbeacon/test", s.testJAVBeacon)
 	mux.HandleFunc("GET /api/v1/profiles", s.getProfiles)
 	mux.HandleFunc("PUT /api/v1/profiles", s.updateProfiles)
 	mux.HandleFunc("GET /api/v1/profiles/catalogs", s.getCatalogs)
@@ -136,19 +141,41 @@ type postProcessingSettingsRequest struct {
 	TimeoutSec         int    `json:"timeout_seconds"`
 }
 
+type javBeaconSettingsResponse struct {
+	BaseURL    string `json:"base_url"`
+	TimeoutSec int    `json:"timeout_seconds"`
+	APIKeySet  bool   `json:"api_key_set"`
+}
+
+type javBeaconSettingsRequest struct {
+	BaseURL     string `json:"base_url"`
+	APIKey      string `json:"api_key"`
+	ClearAPIKey bool   `json:"clear_api_key"`
+	TimeoutSec  int    `json:"timeout_seconds"`
+}
+
 type settingsRequest struct {
 	Translation    translationSettingsRequest    `json:"translation"`
 	PostProcessing postProcessingSettingsRequest `json:"post_processing"`
 	Profiles       *config.ProfilesConfig        `json:"profiles,omitempty"`
+	// JAVBeacon is a pointer so a caller that omits it (or an older client
+	// unaware of this field) never wipes the saved JAVBeacon settings back
+	// to zero values - the same "only touch it if present" precedent as
+	// Profiles above.
+	JAVBeacon *javBeaconSettingsRequest `json:"javbeacon,omitempty"`
 }
 
 func settingsResponse(value config.TranslationConfig) translationSettingsResponse {
 	return translationSettingsResponse{Mode: value.Mode, BaseURL: value.BaseURL, Model: value.Model, BatchSize: value.BatchSize, TimeoutSec: value.TimeoutSec, ContextGapMS: value.ContextGapMS, TranslationMemory: value.TranslationMemory, InputCostPerMillion: value.InputCostPerMillion, OutputCostPerMillion: value.OutputCostPerMillion, Glossary: value.Glossary, StructuredGlossary: value.StructuredGlossary, APIKeySet: value.APIKey != ""}
 }
 
+func javBeaconResponse(value config.JAVBeaconConfig) javBeaconSettingsResponse {
+	return javBeaconSettingsResponse{BaseURL: value.BaseURL, TimeoutSec: value.TimeoutSec, APIKeySet: value.APIKey != ""}
+}
+
 func (s *Server) getSettings(w http.ResponseWriter, _ *http.Request) {
 	post := s.post.Config()
-	writeJSON(w, 200, map[string]any{"translation": settingsResponse(s.runner.Translation()), "post_processing": postProcessingSettingsResponse{Mode: post.Mode, ShellScript: post.ShellScript, WebhookURL: post.WebhookURL, TimeoutSec: post.TimeoutSec, BearerTokenSet: post.WebhookBearerToken != ""}, "profiles": s.profileSettings()})
+	writeJSON(w, 200, map[string]any{"translation": settingsResponse(s.runner.Translation()), "post_processing": postProcessingSettingsResponse{Mode: post.Mode, ShellScript: post.ShellScript, WebhookURL: post.WebhookURL, TimeoutSec: post.TimeoutSec, BearerTokenSet: post.WebhookBearerToken != ""}, "profiles": s.profileSettings(), "javbeacon": javBeaconResponse(s.javBeaconSettings())})
 }
 
 func (s *Server) profileSettings() config.ProfilesConfig {
@@ -156,6 +183,17 @@ func (s *Server) profileSettings() config.ProfilesConfig {
 		return s.jobs.Profiles()
 	}
 	return s.cfg.Profiles
+}
+
+// javBeaconSettings returns the current JAVBeacon lookup client
+// configuration, falling back to the static startup config when no
+// jobs.Manager is wired up (mirrors profileSettings() above; some tests
+// construct a Server with a nil manager).
+func (s *Server) javBeaconSettings() config.JAVBeaconConfig {
+	if s.jobs != nil {
+		return s.jobs.JAVBeacon()
+	}
+	return s.cfg.JAVBeacon
 }
 
 func (s *Server) getProfiles(w http.ResponseWriter, _ *http.Request) {
@@ -294,9 +332,122 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 			s.jobs.UpdateProfiles(profilesValue)
 		}
 	}
+	javBeaconValue := s.javBeaconSettings()
+	if request.JAVBeacon != nil {
+		jb := *request.JAVBeacon
+		javBeaconValue = config.JAVBeaconConfig{BaseURL: jb.BaseURL, TimeoutSec: jb.TimeoutSec, APIKey: javBeaconValue.APIKey}
+		if jb.ClearAPIKey {
+			javBeaconValue.APIKey = ""
+		} else if strings.TrimSpace(jb.APIKey) != "" {
+			javBeaconValue.APIKey = strings.TrimSpace(jb.APIKey)
+		}
+		if err := config.NormalizeJAVBeacon(&javBeaconValue); err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := s.settings.SaveJAVBeacon(javBeaconValue); err != nil {
+			s.log.Error("save javbeacon settings", "error", err)
+			writeJSON(w, 500, map[string]string{"error": "could not save javbeacon settings"})
+			return
+		}
+		if s.jobs != nil {
+			s.jobs.UpdateJAVBeacon(javBeaconValue)
+		}
+	}
 	s.runner.UpdateTranslation(value)
 	s.post.Update(postValue)
-	writeJSON(w, 200, map[string]any{"translation": settingsResponse(value), "post_processing": postProcessingSettingsResponse{Mode: postValue.Mode, ShellScript: postValue.ShellScript, WebhookURL: postValue.WebhookURL, TimeoutSec: postValue.TimeoutSec, BearerTokenSet: postValue.WebhookBearerToken != ""}, "profiles": profilesValue})
+	writeJSON(w, 200, map[string]any{"translation": settingsResponse(value), "post_processing": postProcessingSettingsResponse{Mode: postValue.Mode, ShellScript: postValue.ShellScript, WebhookURL: postValue.WebhookURL, TimeoutSec: postValue.TimeoutSec, BearerTokenSet: postValue.WebhookBearerToken != ""}, "profiles": profilesValue, "javbeacon": javBeaconResponse(javBeaconValue)})
+}
+
+// javBeaconTestRequest is submitted from the JAVBeacon settings card to
+// verify connectivity (and, optionally, look up one specific release)
+// against the form's current, possibly-unsaved values - so an operator can
+// test before saving. A blank BaseURL/APIKey/TimeoutSec falls back to the
+// currently saved value, matching the "leave blank to keep saved key"
+// convention used for the translation API key and webhook token above.
+type javBeaconTestRequest struct {
+	BaseURL    string `json:"base_url"`
+	APIKey     string `json:"api_key"`
+	TimeoutSec int    `json:"timeout_seconds"`
+	ReleaseID  *int64 `json:"release_id,omitempty"`
+}
+
+type javBeaconTestResponse struct {
+	Reachable bool             `json:"reachable"`
+	Error     string           `json:"error,omitempty"`
+	Release   *release.Release `json:"release,omitempty"`
+}
+
+// testJAVBeacon builds a throwaway release.Client from the submitted (or
+// saved-fallback) settings and either looks up one release by id or, when
+// no release_id is given, performs a minimal connectivity check. It always
+// answers 200 with a structured {reachable,error,release} body for any
+// reachability outcome - a 400 is reserved for a genuinely malformed
+// request (bad JSON, no base URL at all) - so the UI can render every
+// result without a fetch()-level error branch.
+func (s *Server) testJAVBeacon(w http.ResponseWriter, r *http.Request) {
+	var request javBeaconTestRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid request: " + err.Error()})
+		return
+	}
+	current := s.javBeaconSettings()
+	baseURL := strings.TrimSpace(request.BaseURL)
+	if baseURL == "" {
+		baseURL = current.BaseURL
+	}
+	apiKey := strings.TrimSpace(request.APIKey)
+	if apiKey == "" {
+		apiKey = current.APIKey
+	}
+	timeoutSec := request.TimeoutSec
+	if timeoutSec < 1 {
+		timeoutSec = current.TimeoutSec
+	}
+	if timeoutSec < 1 {
+		timeoutSec = 10
+	}
+	if baseURL == "" {
+		writeJSON(w, 400, map[string]string{"error": "base_url is required"})
+		return
+	}
+	timeout := time.Duration(timeoutSec) * time.Second
+	client := release.NewClient(baseURL, apiKey, timeout)
+	if client == nil {
+		// release.NewClient also treats a URL that trims down to nothing
+		// (e.g. just "/") as unconfigured; guard against it explicitly so
+		// a nil *Client is never dereferenced below.
+		writeJSON(w, 400, map[string]string{"error": "base_url is required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	defer cancel()
+
+	if request.ReleaseID != nil {
+		found, err := client.ByID(ctx, *request.ReleaseID)
+		switch {
+		case err == nil:
+			writeJSON(w, 200, javBeaconTestResponse{Reachable: true, Release: &found})
+		case errors.Is(err, release.ErrNotFound):
+			writeJSON(w, 200, javBeaconTestResponse{Reachable: true, Error: fmt.Sprintf("no release with id %d", *request.ReleaseID)})
+		default:
+			writeJSON(w, 200, javBeaconTestResponse{Reachable: false, Error: err.Error()})
+		}
+		return
+	}
+	// No specific release to look up: id 0 will not exist on a real
+	// JAVBeacon instance, so a clean 404 (ErrNotFound) still proves the
+	// base URL and API key round-trip successfully - any other failure
+	// (network, timeout, auth, unexpected status) is reported as such.
+	_, err := client.ByID(ctx, 0)
+	switch {
+	case err == nil || errors.Is(err, release.ErrNotFound):
+		writeJSON(w, 200, javBeaconTestResponse{Reachable: true})
+	default:
+		writeJSON(w, 200, javBeaconTestResponse{Reachable: false, Error: err.Error()})
+	}
 }
 
 func (s *Server) middleware(next http.Handler) http.Handler {

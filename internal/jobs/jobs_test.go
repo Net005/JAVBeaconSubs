@@ -3,6 +3,8 @@ package jobs
 import (
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -424,5 +426,58 @@ func TestCreateFileReleaseOverridesRespectsSizeLimits(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected an error for an oversized per-file release_title override")
+	}
+}
+
+// TestUpdateJAVBeaconSwapsReleaseClientUsedByResolve exercises
+// Manager.JAVBeacon()/UpdateJAVBeacon(): after swapping in a new
+// base_url/api_key, resolveFileRelease (which Create() calls for both the
+// job-level default and every per-file override) must use the newly
+// configured client - not a nil or stale one held from construction. The
+// fake server records the Authorization header it received; seeing the
+// new key proves the swap actually took effect under the Manager's mutex.
+func TestUpdateJAVBeaconSwapsReleaseClientUsedByResolve(t *testing.T) {
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(404)
+	}))
+	defer server.Close()
+
+	m := &Manager{cfg: config.Config{}, log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	if got := m.JAVBeacon(); got.BaseURL != "" || got.APIKey != "" {
+		t.Fatalf("expected zero-value javbeacon config initially, got %#v", got)
+	}
+
+	m.UpdateJAVBeacon(config.JAVBeaconConfig{BaseURL: server.URL, APIKey: "new-key", TimeoutSec: 5})
+	if got := m.JAVBeacon(); got.BaseURL != server.URL || got.APIKey != "new-key" || got.TimeoutSec != 5 {
+		t.Fatalf("JAVBeacon() did not reflect the update: %#v", got)
+	}
+
+	if _, err := m.resolveFileRelease(nil, "ADN-803", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if gotAuth != "Bearer new-key" {
+		t.Fatalf("resolveFileRelease used a stale or nil release client: got Authorization=%q, want %q", gotAuth, "Bearer new-key")
+	}
+}
+
+// TestUpdateJAVBeaconCanDisableLookupsByClearingBaseURL confirms that
+// swapping in an empty base_url (e.g. a user clearing the field) actually
+// disables lookups going forward - release.NewClient returns nil for an
+// empty base_url, and resolveFileRelease must handle that nil client
+// gracefully (via release.Resolve's own client==nil handling) rather than
+// panicking.
+func TestUpdateJAVBeaconCanDisableLookupsByClearingBaseURL(t *testing.T) {
+	m := &Manager{cfg: config.Config{}, log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	m.UpdateJAVBeacon(config.JAVBeaconConfig{BaseURL: "http://example.invalid", APIKey: "key", TimeoutSec: 5})
+	m.UpdateJAVBeacon(config.JAVBeaconConfig{BaseURL: "", TimeoutSec: 5})
+
+	resolution, err := m.resolveFileRelease(nil, "ADN-803", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolution.LookupError == "" {
+		t.Fatal("expected a lookup error explaining no JAVBeacon instance is configured")
 	}
 }

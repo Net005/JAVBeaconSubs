@@ -65,6 +65,16 @@ func main() {
 		}
 		cfg.Profiles = saved
 	}
+	if saved, ok, loadErr := database.LoadJAVBeacon(); loadErr != nil {
+		fmt.Fprintln(os.Stderr, "load javbeacon settings:", loadErr)
+		os.Exit(2)
+	} else if ok {
+		if normalizeErr := config.NormalizeJAVBeacon(&saved); normalizeErr != nil {
+			fmt.Fprintln(os.Stderr, "validate saved javbeacon settings:", normalizeErr)
+			os.Exit(2)
+		}
+		cfg.JAVBeacon = saved
+	}
 	authManager, err := auth.New(database, cfg.WebUsername, cfg.WebPassword)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "load web authentication:", err)

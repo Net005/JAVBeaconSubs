@@ -4,6 +4,17 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-04
+
+### Added
+
+- Added JAVBeacon API settings to the web UI: a new "JAVBeacon" settings card lets an operator set/update the API base URL, API key (write-only - the response only ever reports whether one is saved), and request timeout, persisted the same way as the other settings sections. Runtime updates take effect immediately for every job created afterward (the lookup client is rebuilt in place; in-flight jobs are unaffected).
+- Added a "Test connection" action and a "Test a release ID" lookup to the same card: both call a new `POST /api/v1/javbeacon/test` endpoint against the form's current (not-yet-saved) values, falling back to the saved base URL/API key/timeout for any field left blank. A release ID test shows the matched release's title, story, video ID, source, and StashApp match status directly in the UI; a plain connection test just confirms the server is reachable. Every outcome (matched, not found, unreachable) renders inline - nothing needs to be saved first to try it.
+
+### Notes
+
+- Translation-only features, recognition, the subtitle normalizer, and provenance hashing are unchanged; this is UI/API surface for the existing JAVBeacon release-lookup client (`internal/release`), not a new lookup capability.
+
 ## [0.10.0] - 2026-09-04
 
 ### Added

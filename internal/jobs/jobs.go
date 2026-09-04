@@ -218,12 +218,35 @@ func (m *Manager) resolveFileRelease(javbeaconID *int64, externalID, title, stor
 	if len(story) > maxReleaseStoryBytes {
 		return release.Resolution{}, fmt.Errorf("release_story exceeds %d bytes", maxReleaseStoryBytes)
 	}
-	return release.Resolve(context.Background(), m.releaseClient, release.Request{
+	m.mu.RLock()
+	client := m.releaseClient
+	m.mu.RUnlock()
+	return release.Resolve(context.Background(), client, release.Request{
 		JAVBeaconReleaseID: javbeaconID,
 		ReleaseExternalID:  externalID,
 		ManualTitle:        title,
 		ManualStory:        story,
 	})
+}
+
+// JAVBeacon returns the current JAVBeacon lookup client configuration.
+func (m *Manager) JAVBeacon() config.JAVBeaconConfig {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.cfg.JAVBeacon
+}
+
+// UpdateJAVBeacon replaces the JAVBeacon lookup client configuration and
+// rebuilds the underlying HTTP client (base URL, API key, and timeout can
+// all change), mirroring engine.Runner.UpdateTranslation's client-rebuild
+// pattern. release.NewClient returns nil for an empty BaseURL, so clearing
+// it here correctly disables lookups for every job created afterward.
+func (m *Manager) UpdateJAVBeacon(value config.JAVBeaconConfig) {
+	client := release.NewClient(value.BaseURL, value.APIKey, time.Duration(value.TimeoutSec)*time.Second)
+	m.mu.Lock()
+	m.cfg.JAVBeacon = value
+	m.releaseClient = client
+	m.mu.Unlock()
 }
 
 func (m *Manager) Create(req Request) (*Job, error) {
