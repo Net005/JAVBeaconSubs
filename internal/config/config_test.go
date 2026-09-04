@@ -60,3 +60,23 @@ func TestTranslationProperNameVariantQADefaultsEnabled(t *testing.T) {
 		t.Fatalf("proper_name_variant_qa_enabled default = %v, want true", value.ProperNameVariantQA)
 	}
 }
+
+func TestNormalizeJAVBeaconAppliesDefaultTimeoutAndTrims(t *testing.T) {
+	value := JAVBeaconConfig{BaseURL: "  http://javbeacon.local:8080  ", APIKey: "  secret  "}
+	if err := NormalizeJAVBeacon(&value); err != nil {
+		t.Fatal(err)
+	}
+	if value.BaseURL != "http://javbeacon.local:8080" || value.APIKey != "secret" {
+		t.Fatalf("trimmed fields = %#v", value)
+	}
+	if value.TimeoutSec != 10 {
+		t.Fatalf("timeout_seconds default = %d, want 10", value.TimeoutSec)
+	}
+}
+
+func TestNormalizeJAVBeaconRejectsExcessiveTimeout(t *testing.T) {
+	value := JAVBeaconConfig{TimeoutSec: 301}
+	if err := NormalizeJAVBeacon(&value); err == nil {
+		t.Fatal("expected an error for a timeout over 300 seconds")
+	}
+}

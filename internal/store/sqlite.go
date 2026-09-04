@@ -252,6 +252,16 @@ func (s *SQLite) SaveProfiles(value config.ProfilesConfig) error {
 	return s.saveSetting("profiles", value)
 }
 
+func (s *SQLite) LoadJAVBeacon() (config.JAVBeaconConfig, bool, error) {
+	var value config.JAVBeaconConfig
+	ok, err := s.loadSetting("javbeacon", &value)
+	return value, ok, err
+}
+
+func (s *SQLite) SaveJAVBeacon(value config.JAVBeaconConfig) error {
+	return s.saveSetting("javbeacon", value)
+}
+
 func (s *SQLite) LoadRecognitionVocabulary() (profilecatalog.RecognitionVocabulary, bool, error) {
 	var value profilecatalog.RecognitionVocabulary
 	ok, err := s.loadSetting("recognition_vocabulary", &value)

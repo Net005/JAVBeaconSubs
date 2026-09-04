@@ -488,6 +488,23 @@ func Load(path string) (Config, error) {
 
 func NormalizeASRMode(value string) string { return strings.ToLower(strings.TrimSpace(value)) }
 
+// NormalizeJAVBeacon trims the optional JAVBeacon lookup client settings
+// and applies/validates the request timeout. BaseURL is intentionally left
+// unvalidated as a URL here - release.NewClient treats an empty BaseURL as
+// "no JAVBeacon configured" and a malformed one simply fails at request
+// time, which the settings-test endpoint surfaces directly to the caller.
+func NormalizeJAVBeacon(value *JAVBeaconConfig) error {
+	value.BaseURL = strings.TrimSpace(value.BaseURL)
+	value.APIKey = strings.TrimSpace(value.APIKey)
+	if value.TimeoutSec < 1 {
+		value.TimeoutSec = 10
+	}
+	if value.TimeoutSec > 300 {
+		return errors.New("javbeacon.timeout_seconds cannot exceed 300")
+	}
+	return nil
+}
+
 func NormalizeProfiles(value *ProfilesConfig) error {
 	value.DefaultProfile = NormalizeProfile(value.DefaultProfile)
 	if value.DefaultProfile == "" {
