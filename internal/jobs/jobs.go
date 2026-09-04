@@ -51,6 +51,24 @@ type Request struct {
 	JAVBeaconReleaseID *int64 `json:"javbeacon_release_id,omitempty"`
 	ReleaseTitle       string `json:"release_title,omitempty"`
 	ReleaseStory       string `json:"release_story,omitempty"`
+
+	// FileReleaseOverrides sets per-file release metadata for a batch job
+	// (TODO Part 33), keyed by the same path used in Inputs for that file.
+	// Only meaningful for multi-file batch submission via the JSON "paths"
+	// API; a file with no entry here uses the job-level release fields
+	// above. Not supported for folder-expanded inputs, since the caller
+	// cannot know the expanded paths in advance.
+	FileReleaseOverrides map[string]ReleaseOverrideRequest `json:"file_release_overrides,omitempty"`
+}
+
+// ReleaseOverrideRequest is one file's release metadata override inside a
+// batch job (TODO Part 33). Same fields and semantics as the job-level
+// equivalents on Request.
+type ReleaseOverrideRequest struct {
+	ReleaseExternalID  string `json:"release_external_id,omitempty"`
+	JAVBeaconReleaseID *int64 `json:"javbeacon_release_id,omitempty"`
+	ReleaseTitle       string `json:"release_title,omitempty"`
+	ReleaseStory       string `json:"release_story,omitempty"`
 }
 
 type Job struct {
@@ -91,6 +109,7 @@ type Job struct {
 	ProfileSource        string                         `json:"profile_source,omitempty"`
 	ASRModeSource        string                         `json:"asr_mode_source,omitempty"`
 	FileSettings         map[string]profiles.Resolution `json:"file_settings,omitempty"`
+	FileReleaseMetadata  map[string]FileReleaseMetadata `json:"file_release_metadata,omitempty"`
 	DebugMode            bool                           `json:"debug_mode,omitempty"`
 	CreatedAt            time.Time                      `json:"created_at"`
 	StartedAt            *time.Time                     `json:"started_at,omitempty"`
@@ -98,6 +117,25 @@ type Job struct {
 	PostProcessingStatus string                         `json:"post_processing_status,omitempty"`
 	PostProcessingError  string                         `json:"post_processing_error,omitempty"`
 	cancel               context.CancelFunc
+}
+
+// FileReleaseMetadata is one file's resolved release metadata inside a
+// batch job (TODO Part 33) - present only for files with an explicit
+// override in Request.FileReleaseOverrides; absence means "use the
+// job-level release fields," mirroring FileSettings' fallback shape.
+type FileReleaseMetadata struct {
+	ReleaseExternalID    string `json:"release_external_id,omitempty"`
+	JAVBeaconReleaseID   *int64 `json:"javbeacon_release_id,omitempty"`
+	ReleaseTitle         string `json:"release_title,omitempty"`
+	ReleaseStory         string `json:"release_story,omitempty"`
+	ReleaseTitleSource   string `json:"release_title_source,omitempty"`
+	ReleaseStorySource   string `json:"release_story_source,omitempty"`
+	ReleaseLookupMethod  string `json:"release_lookup_method,omitempty"`
+	ReleaseLookupMatched bool   `json:"release_lookup_matched,omitempty"`
+	ReleaseLookupError   string `json:"release_lookup_error,omitempty"`
+	ReleaseProvider      string `json:"release_provider,omitempty"`
+	ReleaseStashSceneID  string `json:"release_stash_scene_id,omitempty"`
+	ReleaseStashURL      string `json:"release_stash_url,omitempty"`
 }
 
 type Manager struct {
@@ -167,6 +205,27 @@ func (m *Manager) Run(ctx context.Context) {
 	<-ctx.Done()
 }
 
+// resolveFileRelease validates release metadata size limits and resolves
+// it against JAVBeacon/manual overrides (TODO Part 33/36). Shared by the
+// job-level default (Create()) and every per-file override, so the
+// validate-then-resolve logic exists exactly once.
+func (m *Manager) resolveFileRelease(javbeaconID *int64, externalID, title, story string) (release.Resolution, error) {
+	title = strings.TrimSpace(title)
+	if len(title) > maxReleaseTitleBytes {
+		return release.Resolution{}, fmt.Errorf("release_title exceeds %d bytes", maxReleaseTitleBytes)
+	}
+	story = strings.Trim(story, " \t\r\n")
+	if len(story) > maxReleaseStoryBytes {
+		return release.Resolution{}, fmt.Errorf("release_story exceeds %d bytes", maxReleaseStoryBytes)
+	}
+	return release.Resolve(context.Background(), m.releaseClient, release.Request{
+		JAVBeaconReleaseID: javbeaconID,
+		ReleaseExternalID:  externalID,
+		ManualTitle:        title,
+		ManualStory:        story,
+	})
+}
+
 func (m *Manager) Create(req Request) (*Job, error) {
 	if len(req.Inputs) == 0 {
 		return nil, fmt.Errorf("inputs must contain at least one file or folder")
@@ -193,22 +252,39 @@ func (m *Manager) Create(req Request) (*Job, error) {
 	if releaseExternalID == "" {
 		releaseExternalID = strings.TrimSpace(req.ExternalID)
 	}
-	releaseTitle := strings.TrimSpace(req.ReleaseTitle)
-	if len(releaseTitle) > maxReleaseTitleBytes {
-		return nil, fmt.Errorf("release_title exceeds %d bytes", maxReleaseTitleBytes)
-	}
-	releaseStory := strings.Trim(req.ReleaseStory, " \t\r\n")
-	if len(releaseStory) > maxReleaseStoryBytes {
-		return nil, fmt.Errorf("release_story exceeds %d bytes", maxReleaseStoryBytes)
-	}
-	resolution, err := release.Resolve(context.Background(), m.releaseClient, release.Request{
-		JAVBeaconReleaseID: req.JAVBeaconReleaseID,
-		ReleaseExternalID:  releaseExternalID,
-		ManualTitle:        releaseTitle,
-		ManualStory:        releaseStory,
-	})
+	resolution, err := m.resolveFileRelease(req.JAVBeaconReleaseID, releaseExternalID, req.ReleaseTitle, req.ReleaseStory)
 	if err != nil {
 		return nil, err
+	}
+	fileReleaseMetadata := make(map[string]FileReleaseMetadata, len(req.FileReleaseOverrides))
+	if len(req.FileReleaseOverrides) > 0 {
+		discovered := make(map[string]bool, len(files))
+		for _, f := range files {
+			discovered[f] = true
+		}
+		for rawKey, override := range req.FileReleaseOverrides {
+			key, absErr := filepath.Abs(rawKey)
+			if absErr == nil {
+				key = filepath.Clean(key)
+			} else {
+				key = rawKey
+			}
+			if !discovered[key] {
+				return nil, fmt.Errorf("file_release_overrides references a file not in this job: %s", rawKey)
+			}
+			fileExternalID := strings.TrimSpace(override.ReleaseExternalID)
+			fileResolution, resolveErr := m.resolveFileRelease(override.JAVBeaconReleaseID, fileExternalID, override.ReleaseTitle, override.ReleaseStory)
+			if resolveErr != nil {
+				return nil, fmt.Errorf("file_release_overrides[%s]: %w", rawKey, resolveErr)
+			}
+			fileReleaseMetadata[key] = FileReleaseMetadata{
+				ReleaseExternalID: fileExternalID, JAVBeaconReleaseID: override.JAVBeaconReleaseID,
+				ReleaseTitle: fileResolution.Title, ReleaseStory: fileResolution.Story,
+				ReleaseTitleSource: fileResolution.TitleSource, ReleaseStorySource: fileResolution.StorySource,
+				ReleaseLookupMethod: fileResolution.LookupMethod, ReleaseLookupMatched: fileResolution.LookupMatched, ReleaseLookupError: fileResolution.LookupError,
+				ReleaseProvider: fileResolution.Provider, ReleaseStashSceneID: fileResolution.StashSceneID, ReleaseStashURL: fileResolution.StashURL,
+			}
+		}
 	}
 	fileSettings := make(map[string]profiles.Resolution, len(files))
 	profileSettings := m.Profiles()
@@ -235,6 +311,7 @@ func (m *Manager) Create(req Request) (*Job, error) {
 		ReleaseTitleSource: resolution.TitleSource, ReleaseStorySource: resolution.StorySource,
 		ReleaseLookupMethod: resolution.LookupMethod, ReleaseLookupMatched: resolution.LookupMatched, ReleaseLookupError: resolution.LookupError,
 		ReleaseProvider: resolution.Provider, ReleaseStashSceneID: resolution.StashSceneID, ReleaseStashURL: resolution.StashURL,
+		FileReleaseMetadata: fileReleaseMetadata,
 	}
 	m.mu.Lock()
 	m.jobs[job.ID] = job
@@ -418,7 +495,11 @@ func (m *Manager) process(ctx context.Context, id string) {
 				m.mu.Unlock()
 			}
 		}
-		result, err := m.runner.ProcessWithOptions(ctx, file, job.Overwrite, job.KeepJapanese, engine.ProcessOptions{ASRMode: resolution.ASRMode, ASRProfile: resolution.Profile, DebugMode: job.DebugMode, Title: job.ReleaseExternalID, ReleaseTitle: job.ReleaseTitle, ReleaseStory: job.ReleaseStory, WriteASS: &job.WriteASS}, progress, translationMemory)
+		titleKey, releaseTitle, releaseStory := job.ReleaseExternalID, job.ReleaseTitle, job.ReleaseStory
+		if override, ok := job.FileReleaseMetadata[file]; ok {
+			titleKey, releaseTitle, releaseStory = override.ReleaseExternalID, override.ReleaseTitle, override.ReleaseStory
+		}
+		result, err := m.runner.ProcessWithOptions(ctx, file, job.Overwrite, job.KeepJapanese, engine.ProcessOptions{ASRMode: resolution.ASRMode, ASRProfile: resolution.Profile, DebugMode: job.DebugMode, Title: titleKey, ReleaseTitle: releaseTitle, ReleaseStory: releaseStory, WriteASS: &job.WriteASS}, progress, translationMemory)
 		if err != nil {
 			m.finish(id, "failed", err.Error())
 			return

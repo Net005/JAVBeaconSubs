@@ -54,3 +54,9 @@ func TestTranslationMixedScriptQADefaultsEnabled(t *testing.T) {
 		t.Fatalf("mixed_script_qa_enabled default = %v, want true", value.MixedScriptQA)
 	}
 }
+
+func TestTranslationProperNameVariantQADefaultsEnabled(t *testing.T) {
+	if value := defaults().Translation; !value.ProperNameVariantQA {
+		t.Fatalf("proper_name_variant_qa_enabled default = %v, want true", value.ProperNameVariantQA)
+	}
+}

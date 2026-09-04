@@ -117,7 +117,13 @@ type TranslationConfig struct {
 	// script (hiragana/katakana/kanji) leaked into English output and
 	// attempts one selective re-translation of just the affected rows
 	// (TODO Part 23-25). Defaults to true; set false to disable entirely.
-	MixedScriptQA        bool                `json:"mixed_script_qa_enabled"`
+	MixedScriptQA bool `json:"mixed_script_qa_enabled"`
+	// ProperNameVariantQA enables a diagnostic-only pass that flags
+	// capitalized-phrase candidates in translated English text that
+	// closely but not exactly match a proper name/term already
+	// established for this file (TODO Part 22). Never auto-corrects
+	// anything. Defaults to true; set false to disable entirely.
+	ProperNameVariantQA  bool                `json:"proper_name_variant_qa_enabled"`
 	InputCostPerMillion  float64             `json:"input_cost_per_million,omitempty"`
 	OutputCostPerMillion float64             `json:"output_cost_per_million,omitempty"`
 	Glossary             string              `json:"glossary"`
@@ -183,7 +189,7 @@ func defaults() Config {
 			WhisperStatusPath: "./data/whisper-runtime.json",
 			Prompt:            "",
 		},
-		Translation:    TranslationConfig{Mode: "direct", BatchSize: 24, TimeoutSec: 120, ContextGapMS: 8000, MixedScriptQA: true},
+		Translation:    TranslationConfig{Mode: "direct", BatchSize: 24, TimeoutSec: 120, ContextGapMS: 8000, MixedScriptQA: true, ProperNameVariantQA: true},
 		PostProcessing: PostProcessingConfig{Mode: "none", TimeoutSec: 60},
 		Output: OutputConfig{
 			EnglishSuffix: ".en.srt", JapaneseSuffix: ".ja.srt", EnglishASS: ".en.ass", JapaneseASS: ".ja.ass", ProjectJSON: ".subtitles.json",

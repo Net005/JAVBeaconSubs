@@ -44,6 +44,9 @@ type tokenUsage struct {
 	// translate()'s main loop, by repairMixedScriptLeaks (TODO Part 23-25).
 	RowsWithJapaneseScript int `json:"-"`
 	RowsRepaired           int `json:"-"`
+	// ProperNameVariants is set once, after translate()'s repair pass, by
+	// DetectProperNameVariants (TODO Part 22). Diagnostic only.
+	ProperNameVariants []ProperNameVariant `json:"-"`
 }
 type translationResult struct {
 	Translations []struct {
@@ -109,6 +112,22 @@ func (m *TranslationMemory) store(source, translated string) {
 	m.mu.Lock()
 	m.exact[key] = translated
 	m.mu.Unlock()
+}
+
+// values returns a snapshot of every currently-stored translation (TODO
+// Part 21 source 5: "repeated accepted translation forms"). Order is not
+// meaningful; callers that need determinism should sort.
+func (m *TranslationMemory) values() []string {
+	if m == nil {
+		return nil
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]string, 0, len(m.exact))
+	for _, value := range m.exact {
+		out = append(out, value)
+	}
+	return out
 }
 
 func translationMemoryKey(value string) (string, bool) {
@@ -286,6 +305,80 @@ func glossaryInstructionsIndexed(legacy string, index structuredGlossaryIndex, r
 	return strings.Join(sections, "\n"), entries
 }
 
+// glossaryTargetsUsedIn returns the deduplicated English target terms from
+// index whose Japanese source appears anywhere in text. This is the same
+// first-rune-indexed matching glossaryInstructionsIndexed already does,
+// but returns the matched targets themselves rather than a formatted
+// prompt string (TODO Part 21 sources 1+4: title/series overrides are
+// already merged into index by applyCatalogs before translate() builds
+// it, so a single scan over the glossary index covers both sources).
+func glossaryTargetsUsedIn(index structuredGlossaryIndex, text string) []string {
+	checked := make(map[string]bool)
+	var targets []string
+	for _, first := range text {
+		for _, term := range index.termsByFirst[first] {
+			if checked[term.Source] {
+				continue
+			}
+			checked[term.Source] = true
+			if strings.Contains(text, term.Source) {
+				if target := strings.TrimSpace(term.Target); target != "" {
+					targets = append(targets, target)
+				}
+			}
+		}
+	}
+	return targets
+}
+
+// collectJobLocalTerms gathers the bounded, high-confidence set of English
+// terms established for this file so far: glossary/title-series-override
+// terms that matched its Japanese dialogue, plus every accepted
+// translation-memory entry (TODO Part 21). Deduplicated case-
+// insensitively; first occurrence wins. Deliberately NOT split into
+// semantic categories (character/scenario/organization/series) - doing so
+// reliably would require the kind of free-text name extraction from prose
+// this project treats as a fabrication risk; the sources used here are
+// already fully structured data with no extraction step.
+func collectJobLocalTerms(source []subtitle.Segment, index structuredGlossaryIndex, memory *TranslationMemory) []string {
+	seen := make(map[string]bool)
+	var terms []string
+	add := func(term string) {
+		term = strings.TrimSpace(term)
+		if term == "" {
+			return
+		}
+		key := strings.ToLower(term)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		terms = append(terms, term)
+	}
+	var allText strings.Builder
+	for _, seg := range source {
+		allText.WriteString(seg.Text)
+		allText.WriteByte('\n')
+	}
+	for _, target := range glossaryTargetsUsedIn(index, allText.String()) {
+		add(target)
+	}
+	for _, value := range memory.values() {
+		add(value)
+	}
+	return terms
+}
+
+// capTerms truncates terms to at most n entries, keeping prompt context
+// compact (TODO Part 15/21: "do not dump huge metadata blobs... keep
+// prompt context compact").
+func capTerms(terms []string, n int) []string {
+	if len(terms) <= n {
+		return terms
+	}
+	return terms[:n]
+}
+
 const translationSystemPrompt = `Translate spoken Japanese into concise, natural English subtitles. Preserve names, relationships, tone, slang, explicit/sexual language, incomplete speech, and reactions without censorship. Input rows are [id,t,text]: t=1 must be translated; t=0 is context only. Return every t=1 id exactly once; never merge, omit, repeat, explain, or renumber. Output strict JSON only: {"translations":[{"id":number,"text":"English"}]}.`
 
 // releaseContextInstructions builds the release title/story background
@@ -334,7 +427,7 @@ const mixedScriptRepairSystemPrompt = `The following rows were already translate
 // (HTTP error, missing id, or a repair that still contains script) leaves
 // the original translated text in out unchanged - the repair pass is
 // best-effort QA, not part of the required translation path.
-func (r *Runner) repairMixedScriptLeaks(ctx context.Context, source []subtitle.Segment, out []subtitle.Segment, glossaryIndex structuredGlossaryIndex, releaseContext string) (detected, repaired int, usage tokenUsage, err error) {
+func (r *Runner) repairMixedScriptLeaks(ctx context.Context, source []subtitle.Segment, out []subtitle.Segment, glossaryIndex structuredGlossaryIndex, releaseContext string, jobLocalTerms []string) (detected, repaired int, usage tokenUsage, err error) {
 	if !r.cfg.Translation.MixedScriptQA || len(source) == 0 {
 		return 0, 0, tokenUsage{}, nil
 	}
@@ -376,6 +469,9 @@ func (r *Runner) repairMixedScriptLeaks(ctx context.Context, source []subtitle.S
 		}
 		if releaseContext != "" {
 			system += "\n" + releaseContext
+		}
+		if len(jobLocalTerms) > 0 {
+			system += "\nKnown proper names/terms already established for this file: " + strings.Join(capTerms(jobLocalTerms, 40), ", ")
 		}
 		requestBody := chatRequest{Model: r.cfg.Translation.Model, Messages: []chatMessage{{Role: "system", Content: system}, {Role: "user", Content: string(payload)}}, ResponseFormat: map[string]string{"type": "json_object"}}
 		var repairedResult translationResult
@@ -489,7 +585,8 @@ func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progr
 	totalUsage.TranslatedRows = translatedRows
 	totalUsage.ContextRows = contextRows
 	totalUsage.ReusedRows = reusedRows
-	detected, repairedCount, repairUsage, repairErr := r.repairMixedScriptLeaks(ctx, source, out, glossaryIndex, releaseContext)
+	jobLocalTerms := collectJobLocalTerms(source, glossaryIndex, memory)
+	detected, repairedCount, repairUsage, repairErr := r.repairMixedScriptLeaks(ctx, source, out, glossaryIndex, releaseContext, jobLocalTerms)
 	if repairErr != nil {
 		r.log.Warn("mixed-script repair pass failed", "error", repairErr)
 	} else {
@@ -498,6 +595,9 @@ func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progr
 		totalUsage.TotalTokens += repairUsage.TotalTokens
 		totalUsage.RowsWithJapaneseScript = detected
 		totalUsage.RowsRepaired = repairedCount
+	}
+	if r.cfg.Translation.ProperNameVariantQA {
+		totalUsage.ProperNameVariants = DetectProperNameVariants(out, jobLocalTerms)
 	}
 	r.log.Info("contextual translation usage", "input_tokens", totalUsage.PromptTokens, "output_tokens", totalUsage.CompletionTokens, "total_tokens", totalUsage.TotalTokens, "translated_rows", translatedRows, "context_rows", contextRows, "reused_rows", reusedRows, "glossary_entries", glossaryEntries, "rows_with_japanese_script", detected, "rows_repaired", repairedCount)
 	return out, totalUsage, nil

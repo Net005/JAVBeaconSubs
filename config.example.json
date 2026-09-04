@@ -71,6 +71,7 @@
     "context_gap_ms": 8000,
     "translation_memory": false,
     "mixed_script_qa_enabled": true,
+    "proper_name_variant_qa_enabled": true,
     "input_cost_per_million": 0,
     "output_cost_per_million": 0,
 		"glossary": "",
