@@ -32,44 +32,54 @@ type ProcessOptions struct {
 	ASRMode    string
 	ASRProfile string
 	DebugMode  bool
-	Title      string
+	// Title is the catalog/release-identity key used for both recognition
+	// vocabulary and translation glossary title_or_series_overrides lookups.
+	Title string
+	// ReleaseTitle and ReleaseStory are optional release metadata (see
+	// internal/release) fed into the translation prompt as background-only
+	// context, and used as a secondary title_or_series_overrides lookup key
+	// for translation only. Neither ever reaches speech recognition.
+	ReleaseTitle string
+	ReleaseStory string
 	// WriteASS overrides Output.WriteASS for one job when non-nil.
 	WriteASS *bool
 }
 
 type Result struct {
-	Input                        string               `json:"input"`
-	EnglishSRT                   string               `json:"english_srt,omitempty"`
-	JapaneseSRT                  string               `json:"japanese_srt,omitempty"`
-	EnglishSRTProvenance         string               `json:"english_srt_provenance,omitempty"`
-	JapaneseSRTProvenance        string               `json:"japanese_srt_provenance,omitempty"`
-	EnglishASS                   string               `json:"english_ass,omitempty"`
-	JapaneseASS                  string               `json:"japanese_ass,omitempty"`
-	ProjectJSON                  string               `json:"project_json,omitempty"`
-	Segments                     int                  `json:"segments"`
-	Skipped                      bool                 `json:"skipped,omitempty"`
-	SkipReason                   string               `json:"skip_reason,omitempty"`
-	TranslationInputTokens       int                  `json:"translation_input_tokens,omitempty"`
-	TranslationOutputTokens      int                  `json:"translation_output_tokens,omitempty"`
-	TranslationTotalTokens       int                  `json:"translation_total_tokens,omitempty"`
-	TranslationBatches           int                  `json:"translation_batches,omitempty"`
-	TranslationRows              int                  `json:"translation_rows,omitempty"`
-	TranslationContextRows       int                  `json:"translation_context_rows,omitempty"`
-	TranslationReusedRows        int                  `json:"translation_reused_rows,omitempty"`
-	TranslationTokensPerMinute   float64              `json:"translation_tokens_per_source_minute,omitempty"`
-	TranslationCostEstimateUSD   float64              `json:"translation_cost_estimate_usd,omitempty"`
-	TranslationCostPerSourceHour float64              `json:"translation_cost_per_source_hour_usd,omitempty"`
-	Profile                      string               `json:"profile,omitempty"`
-	ASRMode                      string               `json:"asr_mode,omitempty"`
-	RecognitionVocabularyVersion int                  `json:"recognition_vocabulary_version,omitempty"`
-	RecognitionVocabularyScopes  []string             `json:"recognition_vocabulary_scopes,omitempty"`
-	TranslationGlossaryVersion   int                  `json:"translation_glossary_version,omitempty"`
-	TranslationGlossaryScopes    []string             `json:"translation_glossary_scopes,omitempty"`
-	PipelineVersion              string               `json:"pipeline_version,omitempty"`
-	Models                       map[string]string    `json:"models,omitempty"`
-	DiagnosticSummary            map[string]any       `json:"diagnostic_summary,omitempty"`
-	SubtitleProvenance           []ProvenanceArtifact `json:"subtitle_provenance,omitempty"`
-	Warnings                     []string             `json:"warnings,omitempty"`
+	Input                              string               `json:"input"`
+	EnglishSRT                         string               `json:"english_srt,omitempty"`
+	JapaneseSRT                        string               `json:"japanese_srt,omitempty"`
+	EnglishSRTProvenance               string               `json:"english_srt_provenance,omitempty"`
+	JapaneseSRTProvenance              string               `json:"japanese_srt_provenance,omitempty"`
+	EnglishASS                         string               `json:"english_ass,omitempty"`
+	JapaneseASS                        string               `json:"japanese_ass,omitempty"`
+	ProjectJSON                        string               `json:"project_json,omitempty"`
+	Segments                           int                  `json:"segments"`
+	Skipped                            bool                 `json:"skipped,omitempty"`
+	SkipReason                         string               `json:"skip_reason,omitempty"`
+	TranslationInputTokens             int                  `json:"translation_input_tokens,omitempty"`
+	TranslationOutputTokens            int                  `json:"translation_output_tokens,omitempty"`
+	TranslationTotalTokens             int                  `json:"translation_total_tokens,omitempty"`
+	TranslationBatches                 int                  `json:"translation_batches,omitempty"`
+	TranslationRows                    int                  `json:"translation_rows,omitempty"`
+	TranslationContextRows             int                  `json:"translation_context_rows,omitempty"`
+	TranslationReusedRows              int                  `json:"translation_reused_rows,omitempty"`
+	TranslationTokensPerMinute         float64              `json:"translation_tokens_per_source_minute,omitempty"`
+	TranslationCostEstimateUSD         float64              `json:"translation_cost_estimate_usd,omitempty"`
+	TranslationCostPerSourceHour       float64              `json:"translation_cost_per_source_hour_usd,omitempty"`
+	Profile                            string               `json:"profile,omitempty"`
+	ASRMode                            string               `json:"asr_mode,omitempty"`
+	RecognitionVocabularyVersion       int                  `json:"recognition_vocabulary_version,omitempty"`
+	RecognitionVocabularyScopes        []string             `json:"recognition_vocabulary_scopes,omitempty"`
+	TranslationGlossaryVersion         int                  `json:"translation_glossary_version,omitempty"`
+	TranslationGlossaryScopes          []string             `json:"translation_glossary_scopes,omitempty"`
+	TranslationReleaseTitleContextUsed bool                 `json:"translation_release_title_context_used,omitempty"`
+	TranslationReleaseStoryContextUsed bool                 `json:"translation_release_story_context_used,omitempty"`
+	PipelineVersion                    string               `json:"pipeline_version,omitempty"`
+	Models                             map[string]string    `json:"models,omitempty"`
+	DiagnosticSummary                  map[string]any       `json:"diagnostic_summary,omitempty"`
+	SubtitleProvenance                 []ProvenanceArtifact `json:"subtitle_provenance,omitempty"`
+	Warnings                           []string             `json:"warnings,omitempty"`
 }
 
 type ProvenanceArtifact struct {
@@ -87,6 +97,8 @@ type Runner struct {
 	recognitionVocabulary *catalog.RecognitionVocabulary
 	translationGlossary   *catalog.TranslationGlossary
 	activeTitle           string
+	activeReleaseTitle    string
+	activeReleaseStory    string
 }
 
 func New(cfg config.Config, log *slog.Logger) *Runner {
@@ -227,14 +239,25 @@ func (r *Runner) ProcessWithOptions(ctx context.Context, input string, overwrite
 	if options.WriteASS != nil {
 		worker.cfg.Output.WriteASS = *options.WriteASS
 	}
-	worker.applyCatalogs(options.Title)
+	worker.applyCatalogs(options.Title, options.ReleaseTitle)
 	worker.activeTitle = options.Title
+	worker.activeReleaseTitle = options.ReleaseTitle
+	worker.activeReleaseStory = options.ReleaseStory
 	return worker.process(ctx, input, overwrite, keepJapanese, progress, memory)
 }
 
-func (r *Runner) applyCatalogs(title string) {
+// applyCatalogs resolves the translation glossary (recognition vocabulary is
+// resolved separately, from catalogID alone, in process()). catalogID is the
+// release's own catalog/DVD code; releaseTitle is tried as a secondary
+// title_or_series_overrides key only when catalogID doesn't match one
+// (catalog.TranslationGlossary.ResolveOverrideKey), per TODO Part 20.
+func (r *Runner) applyCatalogs(catalogID, releaseTitle string) {
 	if r.translationGlossary != nil {
-		resolved, _ := r.translationGlossary.Resolve(r.cfg.Whisper.Profile, title)
+		key := catalogID
+		if override := r.translationGlossary.ResolveOverrideKey(catalogID, releaseTitle); override != "" {
+			key = override
+		}
+		resolved, _ := r.translationGlossary.Resolve(r.cfg.Whisper.Profile, key)
 		custom := r.cfg.Translation.StructuredGlossary
 		if custom != nil {
 			resolved.Style = append(resolved.Style, custom.Style...)
@@ -260,9 +283,15 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		result.RecognitionVocabularyVersion = catalog.RecognitionVersion
 	}
 	if r.translationGlossary != nil {
-		_, result.TranslationGlossaryScopes = r.translationGlossary.Resolve(r.cfg.Whisper.Profile, r.activeTitle)
+		key := r.activeTitle
+		if override := r.translationGlossary.ResolveOverrideKey(r.activeTitle, r.activeReleaseTitle); override != "" {
+			key = override
+		}
+		_, result.TranslationGlossaryScopes = r.translationGlossary.Resolve(r.cfg.Whisper.Profile, key)
 		result.TranslationGlossaryVersion = catalog.GlossaryVersion
 	}
+	result.TranslationReleaseTitleContextUsed = strings.TrimSpace(r.activeReleaseTitle) != ""
+	result.TranslationReleaseStoryContextUsed = strings.TrimSpace(r.activeReleaseStory) != ""
 	base := strings.TrimSuffix(input, filepath.Ext(input))
 	englishPath := base + r.cfg.Output.EnglishSuffix
 	japanesePath := base + r.cfg.Output.JapaneseSuffix

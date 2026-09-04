@@ -246,6 +246,27 @@ func (value TranslationGlossary) Resolve(profileValue, title string) (*config.St
 	return &config.StructuredGlossary{Terms: terms}, scopes
 }
 
+// ResolveOverrideKey returns whichever of catalogID or releaseTitle exists
+// as an exact key in TitleOrSeriesOverrides. catalogID (the release's own
+// catalog/DVD code) is tried first since it is the more specific, canonical
+// identity (TODO Part 20: "specific... match wins"); releaseTitle is tried
+// only when catalogID is empty or has no override entry. Returns "" when
+// neither matches - callers then fall back to catalogID alone, identical to
+// today's behavior.
+func (value TranslationGlossary) ResolveOverrideKey(catalogID, releaseTitle string) string {
+	if key := strings.TrimSpace(catalogID); key != "" {
+		if _, ok := value.TitleOrSeriesOverrides[key]; ok {
+			return key
+		}
+	}
+	if key := strings.TrimSpace(releaseTitle); key != "" {
+		if _, ok := value.TitleOrSeriesOverrides[key]; ok {
+			return key
+		}
+	}
+	return ""
+}
+
 func (value RecognitionVocabulary) Terms(profileValue, title string, limit int) ([]string, []string) {
 	if limit < 0 {
 		limit = 0

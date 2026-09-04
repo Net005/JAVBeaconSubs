@@ -41,6 +41,43 @@ func TestBundledTranslationGlossaryValidatesAndResolvesOverrides(t *testing.T) {
 	}
 }
 
+func TestResolveOverrideKeyCatalogIDWinsOverReleaseTitle(t *testing.T) {
+	value := TranslationGlossary{TitleOrSeriesOverrides: TranslationOverrides{
+		"ADN-803":       {{Japanese: "先生", English: "instructor"}},
+		"Release Title": {{Japanese: "先生", English: "teacher"}},
+	}}
+	if got := value.ResolveOverrideKey("ADN-803", "Release Title"); got != "ADN-803" {
+		t.Fatalf("ResolveOverrideKey = %q, want catalog ID to win", got)
+	}
+}
+
+func TestResolveOverrideKeyFallsBackToReleaseTitle(t *testing.T) {
+	value := TranslationGlossary{TitleOrSeriesOverrides: TranslationOverrides{
+		"Release Title": {{Japanese: "先生", English: "teacher"}},
+	}}
+	if got := value.ResolveOverrideKey("ADN-803", "Release Title"); got != "Release Title" {
+		t.Fatalf("ResolveOverrideKey = %q, want release title fallback", got)
+	}
+	if got := value.ResolveOverrideKey("", "Release Title"); got != "Release Title" {
+		t.Fatalf("ResolveOverrideKey with empty catalog ID = %q, want release title fallback", got)
+	}
+}
+
+func TestResolveOverrideKeyReturnsEmptyWhenNeitherMatches(t *testing.T) {
+	value := TranslationGlossary{TitleOrSeriesOverrides: TranslationOverrides{
+		"Some Other Title": {{Japanese: "先生", English: "teacher"}},
+	}}
+	if got := value.ResolveOverrideKey("ADN-803", "Release Title"); got != "" {
+		t.Fatalf("ResolveOverrideKey = %q, want empty", got)
+	}
+	if got := value.ResolveOverrideKey("", ""); got != "" {
+		t.Fatalf("ResolveOverrideKey with both empty = %q, want empty", got)
+	}
+	if got := value.ResolveOverrideKey("  ", "  "); got != "" {
+		t.Fatalf("ResolveOverrideKey with whitespace-only = %q, want empty", got)
+	}
+}
+
 func TestSameScopeDuplicatesRejectedButCrossScopeOverridesAllowed(t *testing.T) {
 	value := TranslationGlossary{Format: GlossaryFormat, Version: GlossaryVersion, Scopes: map[string][]TranslationTerm{
 		"global": {{Japanese: "先生", English: "teacher"}},

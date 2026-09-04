@@ -1,7 +1,7 @@
 ARG CUDA_VERSION=13.0.0
 ARG UBUNTU_VERSION=22.04
 FROM golang:1.25-bookworm AS go-builder
-ARG APP_VERSION=0.7.0
+ARG APP_VERSION=0.8.0
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

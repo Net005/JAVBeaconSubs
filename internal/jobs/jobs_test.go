@@ -225,6 +225,44 @@ func TestCreateRejectsOversizedReleaseTitleAndStory(t *testing.T) {
 	}
 }
 
+// TestCreateReleaseFieldsAllPopulatedForProcessOptionsWiring exercises
+// release_external_id, release_title, and release_story together on one
+// job - the exact three fields Manager.process()'s
+// engine.ProcessOptions{Title: job.ReleaseExternalID, ReleaseTitle:
+// job.ReleaseTitle, ReleaseStory: job.ReleaseStory} call site reads
+// verbatim (Stage 2, TODO Part 20). Manager.process() itself isn't
+// unit-tested here since m.runner is a concrete *engine.Runner with no
+// seam to intercept the call, but the call site is a direct one-line
+// field read, so asserting the job carries the correct values is the
+// meaningful regression guard.
+func TestCreateReleaseFieldsAllPopulatedForProcessOptionsWiring(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "one.mp4")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{cfg: config.Config{}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 1), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+
+	job, err := m.Create(Request{
+		Inputs:            []string{path},
+		ReleaseExternalID: "ADN-803",
+		ReleaseTitle:      "  My Title  ",
+		ReleaseStory:      "My story.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.ReleaseExternalID != "ADN-803" {
+		t.Fatalf("release_external_id = %q, want ADN-803 (this becomes ProcessOptions.Title)", job.ReleaseExternalID)
+	}
+	if job.ReleaseTitle != "My Title" {
+		t.Fatalf("release_title = %q, want trimmed \"My Title\" (this becomes ProcessOptions.ReleaseTitle)", job.ReleaseTitle)
+	}
+	if job.ReleaseStory != "My story." {
+		t.Fatalf("release_story = %q, want \"My story.\" (this becomes ProcessOptions.ReleaseStory)", job.ReleaseStory)
+	}
+}
+
 // presetPersistence returns a fixed set of stored jobs from Load(), for
 // exercising jobs.New()'s legacy-record backfill.
 type presetPersistence struct{ jobs []*Job }
