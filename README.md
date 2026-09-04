@@ -108,6 +108,7 @@ Authentication and translation credentials have separate purposes:
 - The web interface uses a username/password account stored in SQLite. On first launch it asks you to create the administrator account, then uses a secure, HTTP-only session cookie. Optional `JAVBEACONSUBS_WEB_USERNAME` and `JAVBEACONSUBS_WEB_PASSWORD` values can seed the first account for unattended deployments.
 - `JAVBEACONSUBS_API_TOKEN` is only for JAVBeacon, curl, and other external REST clients. Send it as `Authorization: Bearer <token>` or `X-API-Key: <token>`. It is never required in the browser after web login.
 - `JAVBEACONSUBS_TRANSLATION_API_KEY` is sent as a Bearer credential to the configured OpenAI-compatible endpoint only when contextual translation is used. It is not used to access JAVBeaconSubs. Leave it blank for direct Whisper translation or an unauthenticated local endpoint such as Ollama.
+- `JAVBEACONSUBS_JAVBEACON_BASE_URL` and `JAVBEACONSUBS_JAVBEACON_API_KEY` (or the `javbeacon.base_url`/`javbeacon.api_key` config fields) point at a JAVBeacon instance for optional release-metadata lookups (`javbeacon_release_id`/`release_external_id`). The API key is the one shown in JAVBeacon's own Settings (sent as `Authorization: Bearer <key>`). Leave both blank to skip JAVBeacon lookups entirely — manual `release_title`/`release_story` still work.
 
 ## Web interface
 
@@ -205,7 +206,11 @@ Content-Type: application/json
   "profile": "giga",
   "debug_mode": true,
   "external_id": "javbeacon-movie-4182",
-  "callback_url": "http://127.0.0.1:8080/api/subtitles/callback"
+  "callback_url": "http://127.0.0.1:8080/api/subtitles/callback",
+  "release_external_id": "ADN-803",
+  "javbeacon_release_id": 12345,
+  "release_title": "",
+  "release_story": ""
 }
 ```
 
@@ -219,9 +224,11 @@ The response is `202 Accepted`, includes the job, and sets `Location: /api/v1/jo
 - `GET /api/v1/health` — dependency and model readiness.
 - `GET /api/v1/settings` and `PUT /api/v1/settings` — read/update persistent translation and post-processing settings (credentials are write-only).
 
-The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, `overwrite`, `keep_japanese`, `write_ass`, `asr_mode`, `profile`, and `debug_mode` fields. The legacy `asr_profile` field remains accepted as an alias. For JSON and multipart jobs, omitting `keep_japanese` uses `output.keep_japanese` from service configuration, and omitting `write_ass` uses `output.write_ass` (`true` by default). Set `"write_ass": false` (or uncheck **Also export `.ass` subtitles** in the web UI) to generate only `.srt` files without the matching `.ass` track. Generated files are available through `GET /api/v1/jobs/{id}/outputs/{zeroBasedResultIndex}/{en|ja|en-ass|ja-ass|json|en-provenance|ja-provenance}`; the `-ass` outputs return `404` for a job that had ASS export disabled.
+The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, `overwrite`, `keep_japanese`, `write_ass`, `asr_mode`, `profile`, `debug_mode`, `release_external_id`, `javbeacon_release_id`, `release_title`, and `release_story` fields. The legacy `asr_profile` field remains accepted as an alias. For JSON and multipart jobs, omitting `keep_japanese` uses `output.keep_japanese` from service configuration, and omitting `write_ass` uses `output.write_ass` (`true` by default). Set `"write_ass": false` (or uncheck **Also export `.ass` subtitles** in the web UI) to generate only `.srt` files without the matching `.ass` track. Generated files are available through `GET /api/v1/jobs/{id}/outputs/{zeroBasedResultIndex}/{en|ja|en-ass|ja-ass|json|en-provenance|ja-provenance}`; the `-ass` outputs return `404` for a job that had ASS export disabled.
 
 If `callback_url` is supplied, the terminal job document is POSTed there. `external_id` round-trips unchanged so JAVBeacon can associate it with its own movie or task record.
+
+All release fields are optional and every existing client/job keeps working unchanged. `release_external_id` (a catalog/DVD code such as `ADN-803`) falls back to `external_id` when omitted. When `javbeacon.base_url`/`javbeacon.api_key` are configured (see below), a supplied `javbeacon_release_id` or `release_external_id` is resolved against JAVBeacon's own `GET /api/releases/{id}` / `GET /api/releases?video_id=...` endpoints — internal ID first, then external ID, never a fuzzy filename guess — and `release_title`/`release_story` are auto-filled from the match unless you supplied them manually (manual values always win). The resolved job document also carries `release_title_source`, `release_story_source`, `release_lookup_method`, `release_lookup_matched`, `release_lookup_error`, `release_provider`, and (when the matched release is locally present in the operator's StashApp library) `release_stash_scene_id`/`release_stash_url`. Release metadata is translation context only — it is never sent to speech recognition and never changes the recognized Japanese text.
 
 External clients send `Authorization: Bearer …` or `X-API-Key: …` to `/api/*` requests. Browser requests are authorized by the web login session instead; the browser never stores or asks for the external API token.
 

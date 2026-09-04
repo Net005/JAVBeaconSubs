@@ -494,16 +494,29 @@ func (s *Server) uploadJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": err.Error()})
 		return
 	}
+	var javbeaconReleaseID *int64
+	if raw := strings.TrimSpace(r.FormValue("javbeacon_release_id")); raw != "" {
+		parsed, parseErr := strconv.ParseInt(raw, 10, 64)
+		if parseErr != nil {
+			writeJSON(w, 400, map[string]string{"error": "javbeacon_release_id must be an integer"})
+			return
+		}
+		javbeaconReleaseID = &parsed
+	}
 	job, err := s.jobs.Create(jobs.Request{
-		Inputs:       []string{destination},
-		Overwrite:    r.FormValue("overwrite") == "true",
-		KeepJapanese: keepJapanese,
-		WriteASS:     writeASS,
-		ASRMode:      r.FormValue("asr_mode"),
-		ASRProfile:   firstNonEmpty(r.FormValue("profile"), r.FormValue("asr_profile")),
-		DebugMode:    r.FormValue("debug_mode") == "true",
-		ExternalID:   strings.TrimSpace(r.FormValue("external_id")),
-		CallbackURL:  strings.TrimSpace(r.FormValue("callback_url")),
+		Inputs:             []string{destination},
+		Overwrite:          r.FormValue("overwrite") == "true",
+		KeepJapanese:       keepJapanese,
+		WriteASS:           writeASS,
+		ASRMode:            r.FormValue("asr_mode"),
+		ASRProfile:         firstNonEmpty(r.FormValue("profile"), r.FormValue("asr_profile")),
+		DebugMode:          r.FormValue("debug_mode") == "true",
+		ExternalID:         strings.TrimSpace(r.FormValue("external_id")),
+		CallbackURL:        strings.TrimSpace(r.FormValue("callback_url")),
+		ReleaseExternalID:  strings.TrimSpace(r.FormValue("release_external_id")),
+		JAVBeaconReleaseID: javbeaconReleaseID,
+		ReleaseTitle:       strings.TrimSpace(r.FormValue("release_title")),
+		ReleaseStory:       r.FormValue("release_story"),
 	})
 	if err != nil {
 		writeJSON(w, 400, map[string]string{"error": err.Error()})

@@ -4,6 +4,20 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-04
+
+### Added
+
+- Added optional release metadata support (Stage 1 of the post-0.6.0 combined TODO): jobs may now carry `release_external_id` (a catalog/DVD code such as `ADN-803`), `javbeacon_release_id` (JAVBeacon's internal database id), and manual `release_title`/`release_story`, all optional and fully backwards compatible with existing clients and persisted jobs. `release_external_id` defaults from the existing `external_id` field when omitted.
+- Added a `internal/release` client and deterministic lookup resolver against a real JAVBeacon instance (`GET /api/releases/{id}` and `GET /api/releases?video_id=...`, Bearer-token authenticated), with a strict, never-reversed precedence: `javbeacon_release_id` > `release_external_id` > filename fallback > none. An internal ID that doesn't resolve, or an internal/external ID mismatch, or an external ID matching more than one release, all fail job creation with a clear diagnostic rather than silently guessing; a JAVBeacon instance that is simply unreachable is non-fatal and falls back to manual metadata (surfaced via `release_lookup_error`). New optional `javbeacon.base_url`/`javbeacon.api_key`/`javbeacon.timeout_seconds` config section (also `JAVBEACONSUBS_JAVBEACON_BASE_URL`/`JAVBEACONSUBS_JAVBEACON_API_KEY` env vars); lookups are simply unavailable when unconfigured.
+- Added `release_title_source`/`release_story_source` (`manual` | `javbeacon` | `legacy`), `release_lookup_method`/`release_lookup_matched`/`release_lookup_error`, and `release_provider` diagnostics to the job record and API response, so it's always clear where release metadata came from and whether a lookup was attempted.
+- Added a "Release Context" field group (catalog ID, JAVBeacon release ID, title, story) to the job creation UI, and a Release summary line on each job card. When a matched release is also locally present in the operator's StashApp library (via JAVBeacon's own Stash sync), the job card shows the Stash scene ID with a direct "Open in StashApp" link.
+
+### Notes
+
+- Manual `release_title`/`release_story` always take precedence over a JAVBeacon match for those two fields; a JAVBeacon match still populates `release_lookup_matched`/`release_provider` either way.
+- This is Stage 1 of 3: release metadata is not yet wired into translation context or `title_or_series_overrides` matching (Stage 2), and mixed-script translation QA / canonical text-density QA (Stage 3) are not part of this release. Recognition, timing, translation, and the prompt-leak vocalization filter are unchanged.
+
 ## [0.6.0] - 2026-09-03
 
 ### Fixed

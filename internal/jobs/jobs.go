@@ -19,9 +19,17 @@ import (
 	"javbeaconsubs/internal/config"
 	"javbeaconsubs/internal/engine"
 	profiles "javbeaconsubs/internal/profile"
+	"javbeaconsubs/internal/release"
 )
 
 var videoExtensions = map[string]bool{".mp4": true, ".mkv": true, ".avi": true, ".mov": true, ".wmv": true, ".flv": true, ".webm": true, ".ts": true, ".m4v": true, ".mp3": true, ".wav": true, ".m4a": true, ".flac": true}
+
+// Release metadata size limits (TODO Part 36): generous enough for any
+// real title/synopsis, small enough to reject an absurd payload outright.
+const (
+	maxReleaseTitleBytes = 2 * 1024
+	maxReleaseStoryBytes = 32 * 1024
+)
 
 type Request struct {
 	Inputs       []string `json:"inputs"`
@@ -35,11 +43,31 @@ type Request struct {
 	DebugMode    bool     `json:"debug_mode,omitempty"`
 	ExternalID   string   `json:"external_id,omitempty"`
 	CallbackURL  string   `json:"callback_url,omitempty"`
+
+	// Release metadata (all optional; see internal/release for lookup
+	// precedence). ReleaseExternalID falls back to ExternalID when empty so
+	// existing clients/jobs keep working unchanged.
+	ReleaseExternalID  string `json:"release_external_id,omitempty"`
+	JAVBeaconReleaseID *int64 `json:"javbeacon_release_id,omitempty"`
+	ReleaseTitle       string `json:"release_title,omitempty"`
+	ReleaseStory       string `json:"release_story,omitempty"`
 }
 
 type Job struct {
 	ID                   string                         `json:"id"`
 	ExternalID           string                         `json:"external_id,omitempty"`
+	ReleaseExternalID    string                         `json:"release_external_id,omitempty"`
+	JAVBeaconReleaseID   *int64                         `json:"javbeacon_release_id,omitempty"`
+	ReleaseTitle         string                         `json:"release_title,omitempty"`
+	ReleaseStory         string                         `json:"release_story,omitempty"`
+	ReleaseTitleSource   string                         `json:"release_title_source,omitempty"`
+	ReleaseStorySource   string                         `json:"release_story_source,omitempty"`
+	ReleaseLookupMethod  string                         `json:"release_lookup_method,omitempty"`
+	ReleaseLookupMatched bool                           `json:"release_lookup_matched,omitempty"`
+	ReleaseLookupError   string                         `json:"release_lookup_error,omitempty"`
+	ReleaseProvider      string                         `json:"release_provider,omitempty"`
+	ReleaseStashSceneID  string                         `json:"release_stash_scene_id,omitempty"`
+	ReleaseStashURL      string                         `json:"release_stash_url,omitempty"`
 	Status               string                         `json:"status"`
 	Phase                string                         `json:"phase,omitempty"`
 	Progress             int                            `json:"progress"`
@@ -73,15 +101,16 @@ type Job struct {
 }
 
 type Manager struct {
-	cfg         config.Config
-	runner      *engine.Runner
-	log         *slog.Logger
-	mu          sync.RWMutex
-	jobs        map[string]*Job
-	queue       chan string
-	subscribers map[chan []byte]struct{}
-	persistence Persistence
-	post        *PostProcessor
+	cfg           config.Config
+	runner        *engine.Runner
+	log           *slog.Logger
+	mu            sync.RWMutex
+	jobs          map[string]*Job
+	queue         chan string
+	subscribers   map[chan []byte]struct{}
+	persistence   Persistence
+	post          *PostProcessor
+	releaseClient *release.Client
 }
 
 type Persistence interface {
@@ -90,7 +119,9 @@ type Persistence interface {
 }
 
 func New(cfg config.Config, runner *engine.Runner, persistence Persistence, post *PostProcessor, log *slog.Logger) (*Manager, error) {
-	m := &Manager{cfg: cfg, runner: runner, persistence: persistence, post: post, log: log, jobs: make(map[string]*Job), queue: make(chan string, 256), subscribers: make(map[chan []byte]struct{})}
+	releaseTimeout := time.Duration(cfg.JAVBeacon.TimeoutSec) * time.Second
+	releaseClient := release.NewClient(cfg.JAVBeacon.BaseURL, cfg.JAVBeacon.APIKey, releaseTimeout)
+	m := &Manager{cfg: cfg, runner: runner, persistence: persistence, post: post, log: log, jobs: make(map[string]*Job), queue: make(chan string, 256), subscribers: make(map[chan []byte]struct{}), releaseClient: releaseClient}
 	stored, err := persistence.Load()
 	if err != nil {
 		return nil, err
@@ -106,6 +137,15 @@ func New(cfg config.Config, runner *engine.Runner, persistence Persistence, post
 		}
 		if job.ASRModeSource == "" {
 			job.ASRModeSource = "legacy"
+		}
+		if job.ReleaseExternalID == "" {
+			job.ReleaseExternalID = job.ExternalID
+		}
+		if job.ReleaseTitleSource == "" && job.ReleaseTitle != "" {
+			job.ReleaseTitleSource = "legacy"
+		}
+		if job.ReleaseStorySource == "" && job.ReleaseStory != "" {
+			job.ReleaseStorySource = "legacy"
 		}
 		if job.Status == "queued" || job.Status == "running" {
 			job.Status = "failed"
@@ -149,6 +189,27 @@ func (m *Manager) Create(req Request) (*Job, error) {
 	if req.ASRProfile != "" && req.ASRProfile != "standard" && req.ASRProfile != "jav" && req.ASRProfile != "giga" {
 		return nil, fmt.Errorf("profile must be standard, jav, or giga")
 	}
+	releaseExternalID := strings.TrimSpace(req.ReleaseExternalID)
+	if releaseExternalID == "" {
+		releaseExternalID = strings.TrimSpace(req.ExternalID)
+	}
+	releaseTitle := strings.TrimSpace(req.ReleaseTitle)
+	if len(releaseTitle) > maxReleaseTitleBytes {
+		return nil, fmt.Errorf("release_title exceeds %d bytes", maxReleaseTitleBytes)
+	}
+	releaseStory := strings.Trim(req.ReleaseStory, " \t\r\n")
+	if len(releaseStory) > maxReleaseStoryBytes {
+		return nil, fmt.Errorf("release_story exceeds %d bytes", maxReleaseStoryBytes)
+	}
+	resolution, err := release.Resolve(context.Background(), m.releaseClient, release.Request{
+		JAVBeaconReleaseID: req.JAVBeaconReleaseID,
+		ReleaseExternalID:  releaseExternalID,
+		ManualTitle:        releaseTitle,
+		ManualStory:        releaseStory,
+	})
+	if err != nil {
+		return nil, err
+	}
 	fileSettings := make(map[string]profiles.Resolution, len(files))
 	profileSettings := m.Profiles()
 	for _, file := range files {
@@ -163,7 +224,18 @@ func (m *Manager) Create(req Request) (*Job, error) {
 	if req.WriteASS != nil {
 		writeASS = *req.WriteASS
 	}
-	job := &Job{ID: newID(), ExternalID: req.ExternalID, Status: "queued", Progress: 0, Message: "Waiting for subtitle worker", Inputs: req.Inputs, Files: files, CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, KeepJapanese: keepJapanese, WriteASS: writeASS, ASRMode: firstResolution.ASRMode, ASRProfile: firstResolution.Profile, Profile: firstResolution.Profile, ProfileSource: firstResolution.ProfileSource, ASRModeSource: firstResolution.ASRModeSource, FileSettings: fileSettings, DebugMode: req.DebugMode, CreatedAt: time.Now().UTC()}
+	job := &Job{
+		ID: newID(), ExternalID: req.ExternalID, Status: "queued", Progress: 0, Message: "Waiting for subtitle worker",
+		Inputs: req.Inputs, Files: files, CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, KeepJapanese: keepJapanese, WriteASS: writeASS,
+		ASRMode: firstResolution.ASRMode, ASRProfile: firstResolution.Profile, Profile: firstResolution.Profile,
+		ProfileSource: firstResolution.ProfileSource, ASRModeSource: firstResolution.ASRModeSource, FileSettings: fileSettings,
+		DebugMode: req.DebugMode, CreatedAt: time.Now().UTC(),
+		ReleaseExternalID: releaseExternalID, JAVBeaconReleaseID: req.JAVBeaconReleaseID,
+		ReleaseTitle: resolution.Title, ReleaseStory: resolution.Story,
+		ReleaseTitleSource: resolution.TitleSource, ReleaseStorySource: resolution.StorySource,
+		ReleaseLookupMethod: resolution.LookupMethod, ReleaseLookupMatched: resolution.LookupMatched, ReleaseLookupError: resolution.LookupError,
+		ReleaseProvider: resolution.Provider, ReleaseStashSceneID: resolution.StashSceneID, ReleaseStashURL: resolution.StashURL,
+	}
 	m.mu.Lock()
 	m.jobs[job.ID] = job
 	m.mu.Unlock()

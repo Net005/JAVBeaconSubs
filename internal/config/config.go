@@ -26,6 +26,19 @@ type Config struct {
 	TranslationGlossaryPath   string               `json:"translation_glossary_path"`
 	Profiles                  ProfilesConfig       `json:"profiles"`
 	Workers                   int                  `json:"workers"`
+	JAVBeacon                 JAVBeaconConfig      `json:"javbeacon,omitempty"`
+}
+
+// JAVBeaconConfig configures the optional lookup client used to resolve
+// release metadata (title/story/provider) from a JAVBeacon instance by
+// internal release_id or external/catalog video_id. Both fields are
+// optional: when BaseURL is empty, release lookups are simply unavailable
+// and jobs fall back to manual title/story or proceed with none, per the
+// release-lookup precedence rules in internal/release.
+type JAVBeaconConfig struct {
+	BaseURL    string `json:"base_url,omitempty"`
+	APIKey     string `json:"api_key,omitempty"`
+	TimeoutSec int    `json:"timeout_seconds,omitempty"`
 }
 
 type ProfilesConfig struct {
@@ -167,7 +180,8 @@ func defaults() Config {
 			KeepJapanese: false, WriteASS: true, NormalizeSubtitles: true, TargetLineChars: 40, MaxLineChars: 46, MaxLines: 2,
 			TargetCueChars: 80, MaxCueDurationMS: 6000, MinCueDurationMS: 1000, TargetCPS: 17, WriteProvenance: true,
 		},
-		Workers: 1,
+		Workers:   1,
+		JAVBeacon: JAVBeaconConfig{TimeoutSec: 10},
 	}
 }
 
@@ -310,6 +324,12 @@ func Load(path string) (Config, error) {
 	if value := os.Getenv("JAVBEACONSUBS_TRANSLATION_API_KEY"); value != "" {
 		cfg.Translation.APIKey = value
 	}
+	if value := os.Getenv("JAVBEACONSUBS_JAVBEACON_BASE_URL"); value != "" {
+		cfg.JAVBeacon.BaseURL = value
+	}
+	if value := os.Getenv("JAVBEACONSUBS_JAVBEACON_API_KEY"); value != "" {
+		cfg.JAVBeacon.APIKey = value
+	}
 	if cfg.Workers < 1 {
 		cfg.Workers = 1
 	}
@@ -321,6 +341,9 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Translation.TimeoutSec < 1 {
 		cfg.Translation.TimeoutSec = 120
+	}
+	if cfg.JAVBeacon.TimeoutSec < 1 {
+		cfg.JAVBeacon.TimeoutSec = 10
 	}
 	if cfg.Output.MaxLineChars < 20 {
 		cfg.Output.MaxLineChars = 42
