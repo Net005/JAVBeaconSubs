@@ -41,11 +41,30 @@ func fakeJAVBeacon(t *testing.T, byID map[int64]Release, byVideoID map[string][]
 			return
 		}
 		videoID := strings.ToLower(r.URL.Query().Get("video_id"))
+		stashPath := strings.ToLower(r.URL.Query().Get("stash_file_path"))
 		var matches []Release
-		for key, releases := range byVideoID {
-			if strings.ToLower(key) == videoID {
-				matches = releases
-				break
+		if stashPath != "" {
+			seen := map[int64]bool{}
+			for _, item := range byID {
+				if strings.EqualFold(item.StashFilePath, stashPath) && !seen[item.ID] {
+					matches = append(matches, item)
+					seen[item.ID] = true
+				}
+			}
+			for _, releases := range byVideoID {
+				for _, item := range releases {
+					if strings.EqualFold(item.StashFilePath, stashPath) && !seen[item.ID] {
+						matches = append(matches, item)
+						seen[item.ID] = true
+					}
+				}
+			}
+		} else {
+			for key, releases := range byVideoID {
+				if strings.EqualFold(key, videoID) {
+					matches = releases
+					break
+				}
 			}
 		}
 		_ = json.NewEncoder(w).Encode(matches)
@@ -154,16 +173,64 @@ func TestResolveAmbiguousExternalMatch(t *testing.T) {
 	}
 }
 
-func TestResolveFilenameFallbackWhenNoIDSupplied(t *testing.T) {
+func TestResolveDoesNotAutoDetectUnlessRequested(t *testing.T) {
 	res, err := Resolve(context.Background(), nil, Request{ManualTitle: "Manual Title"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.LookupMethod != "filename_match" || res.LookupMatched {
+	if res.LookupMethod != "none" || res.LookupMatched {
 		t.Fatalf("resolution = %#v", res)
 	}
 	if res.Title != "Manual Title" || res.TitleSource != "manual" {
 		t.Fatalf("manual title should survive with no ID supplied: %#v", res)
+	}
+}
+
+func TestResolveAutoDetectsExactStashPathFirstCaseInsensitive(t *testing.T) {
+	item := Release{ID: 1, VideoID: "OTHER-1", StashFilePath: "/P2P/HTTP/ADN-816.mp4", Title: "Path match"}
+	server := fakeJAVBeacon(t, map[int64]Release{1: item}, map[string][]Release{"ADN-816": {{ID: 2, VideoID: "ADN-816", Title: "Filename match"}}}, nil)
+	res, err := Resolve(context.Background(), testClient(t, server), Request{AutoDetect: true, FilePath: "/p2p/http/adn-816.MP4"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.LookupMatched || res.LookupMethod != "stash_file_path" || res.Title != "Path match" || res.StashFilePath != item.StashFilePath {
+		t.Fatalf("resolution = %#v", res)
+	}
+}
+
+func TestResolveAutoDetectsFilenameVideoIDCaseInsensitive(t *testing.T) {
+	server := fakeJAVBeacon(t, nil, map[string][]Release{"SSIS-001": {{ID: 1, VideoID: "SSIS-001", Title: "Found"}}}, nil)
+	res, err := Resolve(context.Background(), testClient(t, server), Request{AutoDetect: true, FilePath: "/movies/ssis-001.mkv"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.LookupMatched || res.LookupMethod != "filename_video_id" || res.MatchedVideoID != "SSIS-001" {
+		t.Fatalf("resolution = %#v", res)
+	}
+}
+
+func TestResolveAutoDetectsFilenameWithoutHyphens(t *testing.T) {
+	server := fakeJAVBeacon(t, nil, map[string][]Release{"ADN816": {{ID: 1, VideoID: "ADN816"}}}, nil)
+	res, err := Resolve(context.Background(), testClient(t, server), Request{AutoDetect: true, FilePath: "/movies/ADN-816.mp4"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.LookupMatched || res.LookupMethod != "filename_video_id_compact" {
+		t.Fatalf("resolution = %#v", res)
+	}
+}
+
+func TestResolveExplicitIDPrecedesAutoDetection(t *testing.T) {
+	server := fakeJAVBeacon(t,
+		map[int64]Release{7: {ID: 7, VideoID: "EXPLICIT-7", Title: "Explicit"}},
+		map[string][]Release{"ADN-816": {{ID: 8, VideoID: "ADN-816", Title: "Automatic"}}}, nil)
+	id := int64(7)
+	res, err := Resolve(context.Background(), testClient(t, server), Request{JAVBeaconReleaseID: &id, AutoDetect: true, FilePath: "/movies/ADN-816.mp4"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.LookupMethod != "javbeacon_release_id" || res.Title != "Explicit" {
+		t.Fatalf("resolution = %#v", res)
 	}
 }
 

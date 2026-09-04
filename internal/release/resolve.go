@@ -26,6 +26,8 @@ type Request struct {
 	ReleaseExternalID  string
 	ManualTitle        string
 	ManualStory        string
+	FilePath           string
+	AutoDetect         bool
 }
 
 // Resolution is what Resolve fills in on a Job.
@@ -35,7 +37,7 @@ type Resolution struct {
 	TitleSource string // "manual" | "javbeacon" | ""
 	StorySource string // "manual" | "javbeacon" | ""
 
-	LookupMethod  string // "javbeacon_release_id" | "external_release_id" | "filename_match" | "none"
+	LookupMethod  string // explicit ID or one of the exact auto-detection rules
 	LookupMatched bool
 	// LookupError carries a non-fatal diagnostic (JAVBeacon unreachable, not
 	// configured) for an explicit-ID lookup that could not be completed -
@@ -45,6 +47,7 @@ type Resolution struct {
 
 	Provider       string // JAVBeacon's Release.Source ("GIGA" | "JavLibrary" | "")
 	MatchedVideoID string
+	StashFilePath  string
 
 	// StashSceneID/StashURL are populated only when the matched release is
 	// locally matched in the operator's StashApp instance, letting the UI
@@ -54,8 +57,8 @@ type Resolution struct {
 }
 
 // Resolve implements the deterministic release-lookup precedence:
-// javbeacon_release_id > release_external_id > filename fallback > none
-// (TODO Parts 2-6). It never guesses: an internal ID that doesn't resolve
+// javbeacon_release_id > release_external_id > opt-in exact media matching >
+// none. It never guesses: an internal ID that doesn't resolve
 // (ErrNotFound), an internal/external ID mismatch (ErrConflict), or an
 // external ID matching more than one release (ErrAmbiguous) are all hard
 // errors - the caller should fail job creation rather than silently
@@ -66,8 +69,8 @@ type Resolution struct {
 // NOT fail Resolve, so a job with manual title/story (or none at all) can
 // still be created rather than being blocked by an external service outage.
 //
-// When client is nil (no JAVBeacon configured), any explicit ID lookup
-// resolves the same way: LookupError set, no hard failure.
+// When client is nil (no JAVBeacon configured), any requested lookup resolves
+// the same way: LookupError set, no hard failure.
 func Resolve(ctx context.Context, client *Client, req Request) (Resolution, error) {
 	res := Resolution{
 		Title:        strings.TrimSpace(req.ManualTitle),
@@ -128,18 +131,31 @@ func Resolve(ctx context.Context, client *Client, req Request) (Resolution, erro
 			return res, fmt.Errorf("%w: release_external_id %q matched %d releases in JAVBeacon",
 				ErrAmbiguous, req.ReleaseExternalID, len(found))
 		}
-	default:
-		// No exact ID supplied. TODO Part 6 allows an active filename ->
-		// catalog-code lookup here; javbeaconsubs has no such heuristic
-		// today (see plan's Stage 1 scope note), so this tier currently
-		// just records that no exact-ID lookup was attempted.
-		res.LookupMethod = "filename_match"
+	case req.AutoDetect:
+		res.LookupMethod = "auto_detect"
+		if client == nil {
+			res.LookupError = "auto-detection was requested but no JAVBeacon instance is configured"
+			return res, nil
+		}
+		found, err := DetectFile(ctx, client, req.FilePath)
+		if err != nil {
+			if errors.Is(err, ErrUnavailable) {
+				res.LookupError = err.Error()
+				return res, nil
+			}
+			return res, err
+		}
+		if found != nil {
+			res.LookupMethod = found.Method
+			matched = &found.Release
+		}
 	}
 
 	if matched != nil {
 		res.LookupMatched = true
 		res.Provider = matched.Source
 		res.MatchedVideoID = matched.VideoID
+		res.StashFilePath = matched.StashFilePath
 		if res.Title == "" && strings.TrimSpace(matched.Title) != "" {
 			res.Title = matched.Title
 			res.TitleSource = "javbeacon"

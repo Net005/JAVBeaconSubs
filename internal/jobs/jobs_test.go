@@ -429,6 +429,45 @@ func TestCreateFileReleaseOverridesRespectsSizeLimits(t *testing.T) {
 	}
 }
 
+func TestCreateAutoDetectsReleaseMetadataPerFileInFolderJob(t *testing.T) {
+	root := t.TempDir()
+	first := filepath.Join(root, "ssis-001.mp4")
+	second := filepath.Join(root, "ADN-816.mkv")
+	for _, path := range []string{first, second} {
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch strings.ToLower(r.URL.Query().Get("video_id")) {
+		case "ssis-001":
+			_, _ = io.WriteString(w, `[{"id":1,"video_id":"SSIS-001","title":"First"}]`)
+		case "adn816":
+			_, _ = io.WriteString(w, `[{"id":2,"video_id":"ADN816","title":"Second"}]`)
+		default:
+			_, _ = io.WriteString(w, `[]`)
+		}
+	}))
+	defer server.Close()
+
+	m := &Manager{cfg: config.Config{}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 1), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+	m.UpdateJAVBeacon(config.JAVBeaconConfig{BaseURL: server.URL, TimeoutSec: 5})
+	job, err := m.Create(Request{Inputs: []string{root}, Recursive: true, AutoDetectRelease: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !job.AutoDetectRelease || len(job.FileReleaseMetadata) != 2 {
+		t.Fatalf("job auto-detection metadata = %#v", job.FileReleaseMetadata)
+	}
+	if got := job.FileReleaseMetadata[first]; !got.ReleaseLookupMatched || got.ReleaseLookupMethod != "filename_video_id" || got.ReleaseExternalID != "SSIS-001" {
+		t.Fatalf("first metadata = %#v", got)
+	}
+	if got := job.FileReleaseMetadata[second]; !got.ReleaseLookupMatched || got.ReleaseLookupMethod != "filename_video_id_compact" || got.ReleaseExternalID != "ADN816" {
+		t.Fatalf("second metadata = %#v", got)
+	}
+}
+
 // TestUpdateJAVBeaconSwapsReleaseClientUsedByResolve exercises
 // Manager.JAVBeacon()/UpdateJAVBeacon(): after swapping in a new
 // base_url/api_key, resolveFileRelease (which Create() calls for both the
@@ -454,7 +493,7 @@ func TestUpdateJAVBeaconSwapsReleaseClientUsedByResolve(t *testing.T) {
 		t.Fatalf("JAVBeacon() did not reflect the update: %#v", got)
 	}
 
-	if _, err := m.resolveFileRelease(nil, "ADN-803", "", ""); err != nil {
+	if _, err := m.resolveFileRelease(nil, "ADN-803", "", "", "", false); err != nil {
 		t.Fatal(err)
 	}
 	if gotAuth != "Bearer new-key" {
@@ -473,7 +512,7 @@ func TestUpdateJAVBeaconCanDisableLookupsByClearingBaseURL(t *testing.T) {
 	m.UpdateJAVBeacon(config.JAVBeaconConfig{BaseURL: "http://example.invalid", APIKey: "key", TimeoutSec: 5})
 	m.UpdateJAVBeacon(config.JAVBeaconConfig{BaseURL: "", TimeoutSec: 5})
 
-	resolution, err := m.resolveFileRelease(nil, "ADN-803", "", "")
+	resolution, err := m.resolveFileRelease(nil, "ADN-803", "", "", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}

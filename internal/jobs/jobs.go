@@ -45,12 +45,14 @@ type Request struct {
 	CallbackURL  string   `json:"callback_url,omitempty"`
 
 	// Release metadata (all optional; see internal/release for lookup
-	// precedence). ReleaseExternalID falls back to ExternalID when empty so
-	// existing clients/jobs keep working unchanged.
+	// precedence). ReleaseExternalID falls back to ExternalID when empty and
+	// auto-detection is disabled, so existing clients/jobs keep working while
+	// auto-detecting clients can still use ExternalID purely for correlation.
 	ReleaseExternalID  string `json:"release_external_id,omitempty"`
 	JAVBeaconReleaseID *int64 `json:"javbeacon_release_id,omitempty"`
 	ReleaseTitle       string `json:"release_title,omitempty"`
 	ReleaseStory       string `json:"release_story,omitempty"`
+	AutoDetectRelease  bool   `json:"auto_detect_release,omitempty"`
 
 	// FileReleaseOverrides sets per-file release metadata for a batch job
 	// (TODO Part 33), keyed by the same path used in Inputs for that file.
@@ -86,6 +88,8 @@ type Job struct {
 	ReleaseProvider      string                         `json:"release_provider,omitempty"`
 	ReleaseStashSceneID  string                         `json:"release_stash_scene_id,omitempty"`
 	ReleaseStashURL      string                         `json:"release_stash_url,omitempty"`
+	ReleaseStashFilePath string                         `json:"release_stash_file_path,omitempty"`
+	AutoDetectRelease    bool                           `json:"auto_detect_release,omitempty"`
 	Status               string                         `json:"status"`
 	Phase                string                         `json:"phase,omitempty"`
 	Progress             int                            `json:"progress"`
@@ -136,6 +140,7 @@ type FileReleaseMetadata struct {
 	ReleaseProvider      string `json:"release_provider,omitempty"`
 	ReleaseStashSceneID  string `json:"release_stash_scene_id,omitempty"`
 	ReleaseStashURL      string `json:"release_stash_url,omitempty"`
+	ReleaseStashFilePath string `json:"release_stash_file_path,omitempty"`
 }
 
 type Manager struct {
@@ -209,7 +214,7 @@ func (m *Manager) Run(ctx context.Context) {
 // it against JAVBeacon/manual overrides (TODO Part 33/36). Shared by the
 // job-level default (Create()) and every per-file override, so the
 // validate-then-resolve logic exists exactly once.
-func (m *Manager) resolveFileRelease(javbeaconID *int64, externalID, title, story string) (release.Resolution, error) {
+func (m *Manager) resolveFileRelease(javbeaconID *int64, externalID, title, story, filePath string, autoDetect bool) (release.Resolution, error) {
 	title = strings.TrimSpace(title)
 	if len(title) > maxReleaseTitleBytes {
 		return release.Resolution{}, fmt.Errorf("release_title exceeds %d bytes", maxReleaseTitleBytes)
@@ -226,7 +231,23 @@ func (m *Manager) resolveFileRelease(javbeaconID *int64, externalID, title, stor
 		ReleaseExternalID:  externalID,
 		ManualTitle:        title,
 		ManualStory:        story,
+		FilePath:           filePath,
+		AutoDetect:         autoDetect,
 	})
+}
+
+func buildFileReleaseMetadata(externalID string, javbeaconID *int64, resolution release.Resolution) FileReleaseMetadata {
+	if resolution.MatchedVideoID != "" {
+		externalID = resolution.MatchedVideoID
+	}
+	return FileReleaseMetadata{
+		ReleaseExternalID: externalID, JAVBeaconReleaseID: javbeaconID,
+		ReleaseTitle: resolution.Title, ReleaseStory: resolution.Story,
+		ReleaseTitleSource: resolution.TitleSource, ReleaseStorySource: resolution.StorySource,
+		ReleaseLookupMethod: resolution.LookupMethod, ReleaseLookupMatched: resolution.LookupMatched, ReleaseLookupError: resolution.LookupError,
+		ReleaseProvider: resolution.Provider, ReleaseStashSceneID: resolution.StashSceneID, ReleaseStashURL: resolution.StashURL,
+		ReleaseStashFilePath: resolution.StashFilePath,
+	}
 }
 
 // JAVBeacon returns the current JAVBeacon lookup client configuration.
@@ -272,14 +293,24 @@ func (m *Manager) Create(req Request) (*Job, error) {
 		return nil, fmt.Errorf("profile must be standard, jav, or giga")
 	}
 	releaseExternalID := strings.TrimSpace(req.ReleaseExternalID)
-	if releaseExternalID == "" {
+	if releaseExternalID == "" && !req.AutoDetectRelease {
 		releaseExternalID = strings.TrimSpace(req.ExternalID)
 	}
-	resolution, err := m.resolveFileRelease(req.JAVBeaconReleaseID, releaseExternalID, req.ReleaseTitle, req.ReleaseStory)
+	hasExplicitRelease := req.JAVBeaconReleaseID != nil || releaseExternalID != ""
+	autoDetectSingle := req.AutoDetectRelease && !hasExplicitRelease && len(files) == 1
+	resolutionPath := ""
+	if autoDetectSingle {
+		resolutionPath = files[0]
+	}
+	resolution, err := m.resolveFileRelease(req.JAVBeaconReleaseID, releaseExternalID, req.ReleaseTitle, req.ReleaseStory, resolutionPath, autoDetectSingle)
 	if err != nil {
 		return nil, err
 	}
+	if resolution.MatchedVideoID != "" {
+		releaseExternalID = resolution.MatchedVideoID
+	}
 	fileReleaseMetadata := make(map[string]FileReleaseMetadata, len(req.FileReleaseOverrides))
+	overridden := make(map[string]bool, len(req.FileReleaseOverrides))
 	if len(req.FileReleaseOverrides) > 0 {
 		discovered := make(map[string]bool, len(files))
 		for _, f := range files {
@@ -296,17 +327,24 @@ func (m *Manager) Create(req Request) (*Job, error) {
 				return nil, fmt.Errorf("file_release_overrides references a file not in this job: %s", rawKey)
 			}
 			fileExternalID := strings.TrimSpace(override.ReleaseExternalID)
-			fileResolution, resolveErr := m.resolveFileRelease(override.JAVBeaconReleaseID, fileExternalID, override.ReleaseTitle, override.ReleaseStory)
+			fileResolution, resolveErr := m.resolveFileRelease(override.JAVBeaconReleaseID, fileExternalID, override.ReleaseTitle, override.ReleaseStory, key, req.AutoDetectRelease)
 			if resolveErr != nil {
 				return nil, fmt.Errorf("file_release_overrides[%s]: %w", rawKey, resolveErr)
 			}
-			fileReleaseMetadata[key] = FileReleaseMetadata{
-				ReleaseExternalID: fileExternalID, JAVBeaconReleaseID: override.JAVBeaconReleaseID,
-				ReleaseTitle: fileResolution.Title, ReleaseStory: fileResolution.Story,
-				ReleaseTitleSource: fileResolution.TitleSource, ReleaseStorySource: fileResolution.StorySource,
-				ReleaseLookupMethod: fileResolution.LookupMethod, ReleaseLookupMatched: fileResolution.LookupMatched, ReleaseLookupError: fileResolution.LookupError,
-				ReleaseProvider: fileResolution.Provider, ReleaseStashSceneID: fileResolution.StashSceneID, ReleaseStashURL: fileResolution.StashURL,
+			fileReleaseMetadata[key] = buildFileReleaseMetadata(fileExternalID, override.JAVBeaconReleaseID, fileResolution)
+			overridden[key] = true
+		}
+	}
+	if req.AutoDetectRelease && !hasExplicitRelease && len(files) > 1 {
+		for _, file := range files {
+			if overridden[file] {
+				continue
 			}
+			fileResolution, resolveErr := m.resolveFileRelease(nil, "", req.ReleaseTitle, req.ReleaseStory, file, true)
+			if resolveErr != nil {
+				return nil, fmt.Errorf("auto-detect release for %s: %w", file, resolveErr)
+			}
+			fileReleaseMetadata[file] = buildFileReleaseMetadata("", nil, fileResolution)
 		}
 	}
 	fileSettings := make(map[string]profiles.Resolution, len(files))
@@ -328,12 +366,12 @@ func (m *Manager) Create(req Request) (*Job, error) {
 		Inputs: req.Inputs, Files: files, CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, KeepJapanese: keepJapanese, WriteASS: writeASS,
 		ASRMode: firstResolution.ASRMode, ASRProfile: firstResolution.Profile, Profile: firstResolution.Profile,
 		ProfileSource: firstResolution.ProfileSource, ASRModeSource: firstResolution.ASRModeSource, FileSettings: fileSettings,
-		DebugMode: req.DebugMode, CreatedAt: time.Now().UTC(),
+		DebugMode: req.DebugMode, AutoDetectRelease: req.AutoDetectRelease, CreatedAt: time.Now().UTC(),
 		ReleaseExternalID: releaseExternalID, JAVBeaconReleaseID: req.JAVBeaconReleaseID,
 		ReleaseTitle: resolution.Title, ReleaseStory: resolution.Story,
 		ReleaseTitleSource: resolution.TitleSource, ReleaseStorySource: resolution.StorySource,
 		ReleaseLookupMethod: resolution.LookupMethod, ReleaseLookupMatched: resolution.LookupMatched, ReleaseLookupError: resolution.LookupError,
-		ReleaseProvider: resolution.Provider, ReleaseStashSceneID: resolution.StashSceneID, ReleaseStashURL: resolution.StashURL,
+		ReleaseProvider: resolution.Provider, ReleaseStashSceneID: resolution.StashSceneID, ReleaseStashURL: resolution.StashURL, ReleaseStashFilePath: resolution.StashFilePath,
 		FileReleaseMetadata: fileReleaseMetadata,
 	}
 	m.mu.Lock()

@@ -125,3 +125,20 @@ func TestWebUIShowsVersionAndProvenanceDownloads(t *testing.T) {
 		}
 	}
 }
+
+func TestWebUIProvidesJAVBeaconAutoDetectionAndFreshLookupTests(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{
+		"autoDetectRelease", "auto_detect_release", "javbeaconTestFilePath",
+		"javbeaconTestVideoID", "javbeaconTestFilename",
+		"clearJAVBeaconTestResults()", "Clear results", "stash_file_path",
+	} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("JAVBeacon auto-detection UI is missing %q", required)
+		}
+	}
+}
