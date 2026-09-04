@@ -418,7 +418,7 @@ func (m *Manager) process(ctx context.Context, id string) {
 				m.mu.Unlock()
 			}
 		}
-		result, err := m.runner.ProcessWithOptions(ctx, file, job.Overwrite, job.KeepJapanese, engine.ProcessOptions{ASRMode: resolution.ASRMode, ASRProfile: resolution.Profile, DebugMode: job.DebugMode, Title: job.ExternalID, WriteASS: &job.WriteASS}, progress, translationMemory)
+		result, err := m.runner.ProcessWithOptions(ctx, file, job.Overwrite, job.KeepJapanese, engine.ProcessOptions{ASRMode: resolution.ASRMode, ASRProfile: resolution.Profile, DebugMode: job.DebugMode, Title: job.ReleaseExternalID, ReleaseTitle: job.ReleaseTitle, ReleaseStory: job.ReleaseStory, WriteASS: &job.WriteASS}, progress, translationMemory)
 		if err != nil {
 			m.finish(id, "failed", err.Error())
 			return

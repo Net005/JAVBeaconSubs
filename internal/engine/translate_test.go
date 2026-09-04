@@ -153,6 +153,77 @@ func TestLargeStructuredGlossaryFiltersBeforeSerialization(t *testing.T) {
 	}
 }
 
+func TestReleaseContextInstructionsEmptyWhenBothBlank(t *testing.T) {
+	if got := releaseContextInstructions("", ""); got != "" {
+		t.Fatalf("releaseContextInstructions(\"\", \"\") = %q, want empty", got)
+	}
+	if got := releaseContextInstructions("   ", "\t"); got != "" {
+		t.Fatalf("releaseContextInstructions with whitespace-only input = %q, want empty", got)
+	}
+}
+
+func TestReleaseContextInstructionsTitleOnly(t *testing.T) {
+	got := releaseContextInstructions("Sample Release Title", "")
+	if !strings.Contains(got, "Release title: Sample Release Title") {
+		t.Fatalf("missing title line: %q", got)
+	}
+	if strings.Contains(got, "Release story:") {
+		t.Fatalf("story line present with no story: %q", got)
+	}
+	if !strings.Contains(got, "background context only") {
+		t.Fatalf("missing guardrail sentence: %q", got)
+	}
+	if !strings.Contains(got, "spoken Japanese is authoritative") {
+		t.Fatalf("missing authority sentence: %q", got)
+	}
+}
+
+func TestReleaseContextInstructionsTitleAndStory(t *testing.T) {
+	got := releaseContextInstructions("  Sample Title  ", "  A story about two rivals.  ")
+	if !strings.Contains(got, "Release title: Sample Title") {
+		t.Fatalf("missing trimmed title line: %q", got)
+	}
+	if !strings.Contains(got, "Release story: A story about two rivals.") {
+		t.Fatalf("missing trimmed story line: %q", got)
+	}
+	if !strings.Contains(got, "background context only") {
+		t.Fatalf("missing guardrail sentence: %q", got)
+	}
+	titleIdx := strings.Index(got, "Release title:")
+	storyIdx := strings.Index(got, "Release story:")
+	guardrailIdx := strings.Index(got, "background context only")
+	if !(titleIdx < storyIdx && storyIdx < guardrailIdx) {
+		t.Fatalf("unexpected line order: %q", got)
+	}
+}
+
+func TestReleaseContextInstructionsStoryOnlyGuardrailAlwaysPresent(t *testing.T) {
+	got := releaseContextInstructions("", "Only a story, no title.")
+	if strings.Contains(got, "Release title:") {
+		t.Fatalf("title line present with no title: %q", got)
+	}
+	if !strings.Contains(got, "Release story: Only a story, no title.") {
+		t.Fatalf("missing story line: %q", got)
+	}
+	if !strings.Contains(got, "Do not copy, summarize, quote, or invent dialogue") {
+		t.Fatalf("missing fabrication guardrail: %q", got)
+	}
+}
+
+func TestReleaseContextInstructionsPreservesEmbeddedNewlinesWithoutBreakingStructure(t *testing.T) {
+	got := releaseContextInstructions("Title", "Line one.\nLine two.")
+	if !strings.Contains(got, "Line one.\nLine two.") {
+		t.Fatalf("embedded newline in story was mangled: %q", got)
+	}
+	// The block must still end with the single-line guardrail sentence as the
+	// final line, regardless of embedded newlines earlier in the story.
+	lines := strings.Split(got, "\n")
+	last := lines[len(lines)-1]
+	if !strings.Contains(last, "spoken Japanese is authoritative") {
+		t.Fatalf("guardrail sentence is not the final line: last=%q full=%q", last, got)
+	}
+}
+
 func TestTranslationMemoryExcludesShortReactions(t *testing.T) {
 	memory := NewTranslationMemory()
 	memory.store("はい", "Yes")

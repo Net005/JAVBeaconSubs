@@ -4,6 +4,21 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-04
+
+### Added
+
+- Wired Stage 1's resolved release metadata into translation (Stage 2 of the post-0.6.0 combined TODO): a job's resolved `release_title`/`release_story` are now included in the translation system prompt as a dedicated, clearly-labeled background-context block, after the glossary and before per-file translation memory. The block always carries an explicit guardrail: the release title/story are background only, never dialogue to copy or invent, used only to resolve proper names, terminology, roles, relationships, and scenario ambiguity - and the spoken Japanese is always authoritative if it conflicts with the release context.
+- Extended `title_or_series_overrides` matching (translation glossary only) to also try the resolved `release_title` as a secondary lookup key when the release's own catalog/DVD code (`release_external_id`) doesn't match an override entry directly. The catalog/DVD code is always tried first and wins on a match, per the existing "most specific match wins" precedence; recognition vocabulary (ASR-side) matching is unchanged and still uses only the catalog/DVD code, since that stays out of scope for this stage.
+- Added `translation_release_title_context_used`/`translation_release_story_context_used` diagnostics to the job result, reporting whether release-context background was actually included in the translation prompt for a given file.
+- The job pipeline now resolves the translation glossary/vocabulary lookup key from `release_external_id` (falling back to `external_id` per Stage 1's existing guarantee) instead of `external_id` directly - identical behavior for every existing job, and the more correct catalog-identity key going forward.
+
+### Notes
+
+- Translation-only: recognition (Qwen/Whisper/ForcedAligner/VAD), the subtitle normalizer, provenance hashing, and the prompt-leak vocalization filter are unchanged.
+- Free-text extraction of proper names/terminology from title/story prose, and proper-name variant detection/flagging, are explicitly out of scope for this stage (deferred to Stage 3) to avoid fabrication risk from ad hoc NLP heuristics on mixed Japanese/English marketing prose.
+- This is Stage 2 of 3: mixed-script translation QA, canonical text-density QA, and proper-name variant detection (Stage 3) are not part of this release.
+
 ## [0.7.0] - 2026-09-04
 
 ### Added

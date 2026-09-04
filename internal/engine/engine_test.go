@@ -9,8 +9,52 @@ import (
 	"testing"
 
 	"javbeaconsubs/internal/config"
+	catalog "javbeaconsubs/internal/profile"
 	"javbeaconsubs/internal/subtitle"
 )
+
+func TestApplyCatalogsCatalogIDOverrideWinsOverReleaseTitle(t *testing.T) {
+	glossary := &catalog.TranslationGlossary{
+		Scopes: map[string][]catalog.TranslationTerm{"global": {}},
+		TitleOrSeriesOverrides: catalog.TranslationOverrides{
+			"ADN-803":       {{Japanese: "先生", English: "instructor"}},
+			"Release Title": {{Japanese: "先生", English: "teacher"}},
+		},
+	}
+	r := &Runner{translationGlossary: glossary}
+	r.applyCatalogs("ADN-803", "Release Title")
+	if got := r.cfg.Translation.StructuredGlossary.Terms["先生"]; got != "instructor" {
+		t.Fatalf("resolved term = %q, want catalog ID override to win (instructor)", got)
+	}
+}
+
+func TestApplyCatalogsFallsBackToReleaseTitleOverride(t *testing.T) {
+	glossary := &catalog.TranslationGlossary{
+		Scopes: map[string][]catalog.TranslationTerm{"global": {}},
+		TitleOrSeriesOverrides: catalog.TranslationOverrides{
+			"Release Title": {{Japanese: "先生", English: "teacher"}},
+		},
+	}
+	r := &Runner{translationGlossary: glossary}
+	r.applyCatalogs("ADN-803", "Release Title")
+	if got := r.cfg.Translation.StructuredGlossary.Terms["先生"]; got != "teacher" {
+		t.Fatalf("resolved term = %q, want release title fallback (teacher)", got)
+	}
+}
+
+func TestApplyCatalogsNoOverrideMatchesLeavesTermsEmpty(t *testing.T) {
+	glossary := &catalog.TranslationGlossary{
+		Scopes: map[string][]catalog.TranslationTerm{"global": {}},
+		TitleOrSeriesOverrides: catalog.TranslationOverrides{
+			"Some Other Title": {{Japanese: "先生", English: "teacher"}},
+		},
+	}
+	r := &Runner{translationGlossary: glossary}
+	r.applyCatalogs("ADN-803", "Release Title")
+	if _, ok := r.cfg.Translation.StructuredGlossary.Terms["先生"]; ok {
+		t.Fatal("unexpected override term applied with no matching key")
+	}
+}
 
 func TestAtomicWriteCreatesGroupWritableSubtitle(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "movie.en.srt")

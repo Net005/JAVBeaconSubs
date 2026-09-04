@@ -284,6 +284,28 @@ func glossaryInstructionsIndexed(legacy string, index structuredGlossaryIndex, r
 
 const translationSystemPrompt = `Translate spoken Japanese into concise, natural English subtitles. Preserve names, relationships, tone, slang, explicit/sexual language, incomplete speech, and reactions without censorship. Input rows are [id,t,text]: t=1 must be translated; t=0 is context only. Return every t=1 id exactly once; never merge, omit, repeat, explain, or renumber. Output strict JSON only: {"translations":[{"id":number,"text":"English"}]}.`
 
+// releaseContextInstructions builds the release title/story background
+// context block for the translation system prompt. It returns "" when both
+// are empty. The guardrail and authority sentences are always present
+// whenever either field is non-empty, so the model can never mistake this
+// for dialogue to translate or a source of truth over the actual spoken
+// Japanese.
+func releaseContextInstructions(title, story string) string {
+	title, story = strings.TrimSpace(title), strings.TrimSpace(story)
+	if title == "" && story == "" {
+		return ""
+	}
+	var lines []string
+	if title != "" {
+		lines = append(lines, "Release title: "+title)
+	}
+	if story != "" {
+		lines = append(lines, "Release story: "+story)
+	}
+	lines = append(lines, "The release title and story above are background context only. Do not copy, summarize, quote, or invent dialogue from them. Translate only the supplied Japanese subtitle text. Use this context only to resolve proper names, terminology, roles, relationships, factions, and scenario ambiguity. If the spoken Japanese conflicts with this context, the spoken Japanese is authoritative.")
+	return strings.Join(lines, "\n")
+}
+
 func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progress ProgressFunc, memory *TranslationMemory) ([]subtitle.Segment, tokenUsage, error) {
 	// Defense in depth: punctuation-only ASR artifacts must never consume paid
 	// translation tokens even if a future caller bypasses the ASR cleanup path.
@@ -293,6 +315,7 @@ func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progr
 	var totalUsage tokenUsage
 	batchSize := r.cfg.Translation.BatchSize
 	glossaryIndex := newStructuredGlossaryIndex(r.cfg.Translation.StructuredGlossary)
+	releaseContext := releaseContextInstructions(r.activeReleaseTitle, r.activeReleaseStory)
 	translatedRows, contextRows, reusedRows, glossaryEntries := 0, 0, 0, 0
 	for start := 0; start < len(source); start += batchSize {
 		end := start + batchSize
@@ -328,6 +351,9 @@ func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progr
 		system := translationSystemPrompt
 		if glossary != "" {
 			system += "\n" + glossary
+		}
+		if releaseContext != "" {
+			system += "\n" + releaseContext
 		}
 		requestBody := chatRequest{Model: r.cfg.Translation.Model, Messages: []chatMessage{{Role: "system", Content: system}, {Role: "user", Content: string(payload)}}, ResponseFormat: map[string]string{"type": "json_object"}}
 		var translated translationResult
