@@ -6,6 +6,7 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ### Added
 
+- Grouped every generated subtitle and diagnostic download by its source media file in Activity. Multi-file jobs now show filename, full path, per-file position, and that file's artifacts in a bounded scroll area designed to stay usable for batches of 50 or more files.
 - Added opt-in JAVBeacon release auto-detection to JSON and multipart job APIs and the web job form. Each media file is matched case-insensitively by exact `stash_file_path`, filename stem as `video_id`, then filename stem with hyphens removed as `video_id`; explicit release IDs still take precedence and ambiguous matches are rejected.
 - Expanded the JAVBeacon settings test area to accept exactly one release ID, full file path, video ID (including lower-case values such as `ssis-001`), or filename. Tests clear stale output before every request, show the winning lookup rule and returned Stash path, and include a dedicated Clear results action.
 - Updated the in-app Setup examples and README API contract for `auto_detect_release`, per-file folder resolution, and JAVBeacon v1.0.71's exact `stash_file_path` query.

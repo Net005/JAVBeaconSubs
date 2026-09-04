@@ -142,3 +142,20 @@ func TestWebUIProvidesJAVBeaconAutoDetectionAndFreshLookupTests(t *testing.T) {
 		}
 	}
 }
+
+func TestWebUIGroupsLargeJobDownloadsBySourceFile(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{
+		"outputArtifactLinks", "output-list", "output-file-name",
+		"output-file-path", "scrollable", "max-height:min(520px,55vh)",
+		"r.input||j.files?.[i]", "${i+1} / ${results.length}",
+	} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("per-file output list is missing %q", required)
+		}
+	}
+}
