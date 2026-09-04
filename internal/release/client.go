@@ -23,11 +23,12 @@ import (
 // context needs. JAVBeacon's API returns many more fields; the rest are
 // simply ignored by json.Decode.
 type Release struct {
-	ID      int64  `json:"id"`
-	VideoID string `json:"video_id"`
-	Title   string `json:"title"`
-	Story   string `json:"story"`
-	Source  string `json:"source"`
+	ID            int64  `json:"id"`
+	VideoID       string `json:"video_id"`
+	StashFilePath string `json:"stash_file_path,omitempty"`
+	Title         string `json:"title"`
+	Story         string `json:"story"`
+	Source        string `json:"source"`
 	// Local and StashSceneID mirror JAVBeacon's own "open in StashApp" link
 	// condition (internal/web/static/app.js's stashSceneURL): only a release
 	// JAVBeacon has actually matched to a local StashApp scene carries a
@@ -120,7 +121,17 @@ func (c *Client) ByID(ctx context.Context, id int64) (Release, error) {
 // (in principle) more than one release may come back; the caller (Resolve)
 // decides what "more than one" means.
 func (c *Client) ByVideoID(ctx context.Context, videoID string) ([]Release, error) {
-	resp, err := c.get(ctx, "/api/releases", url.Values{"video_id": {videoID}})
+	return c.byExactField(ctx, "video_id", videoID)
+}
+
+// ByStashFilePath looks up releases by the exact, case-insensitive full media
+// path stored by JAVBeacon. This endpoint was added in JAVBeacon v1.0.71.
+func (c *Client) ByStashFilePath(ctx context.Context, filePath string) ([]Release, error) {
+	return c.byExactField(ctx, "stash_file_path", filePath)
+}
+
+func (c *Client) byExactField(ctx context.Context, field, value string) ([]Release, error) {
+	resp, err := c.get(ctx, "/api/releases", url.Values{field: {value}})
 	if err != nil {
 		return nil, err
 	}

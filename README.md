@@ -181,6 +181,7 @@ curl --fail-with-body --request POST 'http://localhost:8097/api/v1/jobs' \
     "overwrite": false,
     "keep_japanese": true,
     "write_ass": true,
+    "auto_detect_release": true,
     "asr_mode": "balanced",
     "profile": "jav",
     "debug_mode": false
@@ -205,6 +206,7 @@ Content-Type: application/json
   "asr_mode": "high_accuracy",
   "profile": "giga",
   "debug_mode": true,
+  "auto_detect_release": true,
   "external_id": "javbeacon-movie-4182",
   "callback_url": "http://127.0.0.1:8080/api/subtitles/callback",
   "release_external_id": "ADN-803",
@@ -224,11 +226,15 @@ The response is `202 Accepted`, includes the job, and sets `Location: /api/v1/jo
 - `GET /api/v1/health` — dependency and model readiness.
 - `GET /api/v1/settings` and `PUT /api/v1/settings` — read/update persistent translation and post-processing settings (credentials are write-only).
 
-The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, `overwrite`, `keep_japanese`, `write_ass`, `asr_mode`, `profile`, `debug_mode`, `release_external_id`, `javbeacon_release_id`, `release_title`, and `release_story` fields. The legacy `asr_profile` field remains accepted as an alias. For JSON and multipart jobs, omitting `keep_japanese` uses `output.keep_japanese` from service configuration, and omitting `write_ass` uses `output.write_ass` (`true` by default). Set `"write_ass": false` (or uncheck **Also export `.ass` subtitles** in the web UI) to generate only `.srt` files without the matching `.ass` track. Generated files are available through `GET /api/v1/jobs/{id}/outputs/{zeroBasedResultIndex}/{en|ja|en-ass|ja-ass|json|en-provenance|ja-provenance}`; the `-ass` outputs return `404` for a job that had ASS export disabled.
+The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, `overwrite`, `keep_japanese`, `write_ass`, `asr_mode`, `profile`, `debug_mode`, `auto_detect_release`, `release_external_id`, `javbeacon_release_id`, `release_title`, and `release_story` fields. The legacy `asr_profile` field remains accepted as an alias. For JSON and multipart jobs, omitting `keep_japanese` uses `output.keep_japanese` from service configuration, and omitting `write_ass` uses `output.write_ass` (`true` by default). Set `"write_ass": false` (or uncheck **Also export `.ass` subtitles** in the web UI) to generate only `.srt` files without the matching `.ass` track. Generated files are available through `GET /api/v1/jobs/{id}/outputs/{zeroBasedResultIndex}/{en|ja|en-ass|ja-ass|json|en-provenance|ja-provenance}`; the `-ass` outputs return `404` for a job that had ASS export disabled.
 
 If `callback_url` is supplied, the terminal job document is POSTed there. `external_id` round-trips unchanged so JAVBeacon can associate it with its own movie or task record.
 
-All release fields are optional and every existing client/job keeps working unchanged. `release_external_id` (a catalog/DVD code such as `ADN-803`) falls back to `external_id` when omitted. When `javbeacon.base_url`/`javbeacon.api_key` are configured (see below), a supplied `javbeacon_release_id` or `release_external_id` is resolved against JAVBeacon's own `GET /api/releases/{id}` / `GET /api/releases?video_id=...` endpoints — internal ID first, then external ID, never a fuzzy filename guess — and `release_title`/`release_story` are auto-filled from the match unless you supplied them manually (manual values always win). The resolved job document also carries `release_title_source`, `release_story_source`, `release_lookup_method`, `release_lookup_matched`, `release_lookup_error`, `release_provider`, and (when the matched release is locally present in the operator's StashApp library) `release_stash_scene_id`/`release_stash_url`. Release metadata is translation context only — it is never sent to speech recognition and never changes the recognized Japanese text.
+All release fields are optional and every existing client/job keeps working unchanged. When auto-detection is disabled, `release_external_id` (a catalog/DVD code such as `ADN-803`) falls back to `external_id` when omitted. With auto-detection enabled, `external_id` remains a correlation value and does not prevent media-based matching. When `javbeacon.base_url`/`javbeacon.api_key` are configured (see below), a supplied `javbeacon_release_id` or `release_external_id` is resolved against JAVBeacon's own `GET /api/releases/{id}` / `GET /api/releases?video_id=...` endpoints. Exact IDs take precedence.
+
+Set `"auto_detect_release": true` (JSON), send `auto_detect_release=true` (multipart), or enable the matching web checkbox to resolve each discovered media file automatically. The lookup order is deterministic and case-insensitive: exact full file path against `GET /api/releases?stash_file_path=...`, filename without its extension against `GET /api/releases?video_id=...`, then that filename with ASCII hyphens removed against the same `video_id` endpoint. For example, `/p2p/http/ADN-816.mp4` tries the path, `ADN-816`, and `ADN816`; a direct lower-case lookup such as `video_id=ssis-001` is also valid. There is no fuzzy matching, and ambiguous matches fail instead of selecting an arbitrary release. Full-path matching requires JAVBeacon v1.0.71 or newer and requires both containers to see the same media path; filename fallback still works when their mount paths differ.
+
+Matched `release_title`/`release_story` values are auto-filled unless supplied manually (manual values always win). The resolved job document also carries `release_title_source`, `release_story_source`, `release_lookup_method`, `release_lookup_matched`, `release_lookup_error`, `release_provider`, `release_stash_file_path`, and (when the matched release is locally present in the operator's StashApp library) `release_stash_scene_id`/`release_stash_url`. Folder jobs expose independently resolved entries in `file_release_metadata`. Release metadata is translation context only — it is never sent to speech recognition and never changes the recognized Japanese text.
 
 External clients send `Authorization: Bearer …` or `X-API-Key: …` to `/api/*` requests. Browser requests are authorized by the web login session instead; the browser never stores or asks for the external API token.
 

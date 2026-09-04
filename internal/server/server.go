@@ -370,12 +370,16 @@ type javBeaconTestRequest struct {
 	APIKey     string `json:"api_key"`
 	TimeoutSec int    `json:"timeout_seconds"`
 	ReleaseID  *int64 `json:"release_id,omitempty"`
+	FilePath   string `json:"file_path,omitempty"`
+	VideoID    string `json:"video_id,omitempty"`
+	Filename   string `json:"filename,omitempty"`
 }
 
 type javBeaconTestResponse struct {
-	Reachable bool             `json:"reachable"`
-	Error     string           `json:"error,omitempty"`
-	Release   *release.Release `json:"release,omitempty"`
+	Reachable    bool             `json:"reachable"`
+	Error        string           `json:"error,omitempty"`
+	Release      *release.Release `json:"release,omitempty"`
+	LookupMethod string           `json:"lookup_method,omitempty"`
 }
 
 // testJAVBeacon builds a throwaway release.Client from the submitted (or
@@ -424,16 +428,56 @@ func (s *Server) testJAVBeacon(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
+	selectors := 0
+	if request.ReleaseID != nil {
+		selectors++
+	}
+	if strings.TrimSpace(request.FilePath) != "" {
+		selectors++
+	}
+	if strings.TrimSpace(request.VideoID) != "" {
+		selectors++
+	}
+	if strings.TrimSpace(request.Filename) != "" {
+		selectors++
+	}
+	if selectors > 1 {
+		writeJSON(w, 400, map[string]string{"error": "enter only one of release_id, file_path, video_id, or filename"})
+		return
+	}
 
 	if request.ReleaseID != nil {
 		found, err := client.ByID(ctx, *request.ReleaseID)
 		switch {
 		case err == nil:
-			writeJSON(w, 200, javBeaconTestResponse{Reachable: true, Release: &found})
+			writeJSON(w, 200, javBeaconTestResponse{Reachable: true, Release: &found, LookupMethod: "javbeacon_release_id"})
 		case errors.Is(err, release.ErrNotFound):
 			writeJSON(w, 200, javBeaconTestResponse{Reachable: true, Error: fmt.Sprintf("no release with id %d", *request.ReleaseID)})
 		default:
 			writeJSON(w, 200, javBeaconTestResponse{Reachable: false, Error: err.Error()})
+		}
+		return
+	}
+	var match *release.Match
+	var lookupErr error
+	switch {
+	case strings.TrimSpace(request.FilePath) != "":
+		match, lookupErr = release.DetectFile(ctx, client, request.FilePath)
+	case strings.TrimSpace(request.VideoID) != "":
+		match, lookupErr = release.MatchVideoID(ctx, client, request.VideoID, "video_id")
+	case strings.TrimSpace(request.Filename) != "":
+		match, lookupErr = release.DetectFilename(ctx, client, request.Filename)
+	}
+	if selectors == 1 {
+		switch {
+		case lookupErr != nil && errors.Is(lookupErr, release.ErrUnavailable):
+			writeJSON(w, 200, javBeaconTestResponse{Reachable: false, Error: lookupErr.Error()})
+		case lookupErr != nil:
+			writeJSON(w, 200, javBeaconTestResponse{Reachable: true, Error: lookupErr.Error()})
+		case match == nil:
+			writeJSON(w, 200, javBeaconTestResponse{Reachable: true, Error: "no release matched the supplied value"})
+		default:
+			writeJSON(w, 200, javBeaconTestResponse{Reachable: true, Release: &match.Release, LookupMethod: match.Method})
 		}
 		return
 	}
@@ -645,6 +689,11 @@ func (s *Server) uploadJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": err.Error()})
 		return
 	}
+	autoDetectRelease, err := optionalFormBool("auto_detect_release", r.FormValue("auto_detect_release"))
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
 	var javbeaconReleaseID *int64
 	if raw := strings.TrimSpace(r.FormValue("javbeacon_release_id")); raw != "" {
 		parsed, parseErr := strconv.ParseInt(raw, 10, 64)
@@ -668,6 +717,7 @@ func (s *Server) uploadJob(w http.ResponseWriter, r *http.Request) {
 		JAVBeaconReleaseID: javbeaconReleaseID,
 		ReleaseTitle:       strings.TrimSpace(r.FormValue("release_title")),
 		ReleaseStory:       r.FormValue("release_story"),
+		AutoDetectRelease:  autoDetectRelease != nil && *autoDetectRelease,
 	})
 	if err != nil {
 		writeJSON(w, 400, map[string]string{"error": err.Error()})

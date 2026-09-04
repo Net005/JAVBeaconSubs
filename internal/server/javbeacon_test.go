@@ -28,6 +28,21 @@ func newTestJAVBeaconServer(t *testing.T, expectedKey string, byID map[int64]map
 			w.WriteHeader(401)
 			return
 		}
+		if r.URL.Path == "/api/releases" {
+			videoID := r.URL.Query().Get("video_id")
+			stashPath := r.URL.Query().Get("stash_file_path")
+			matches := make([]map[string]any, 0)
+			for _, item := range byID {
+				itemVideoID, _ := item["video_id"].(string)
+				itemStashPath, _ := item["stash_file_path"].(string)
+				if (videoID != "" && strings.EqualFold(itemVideoID, videoID)) || (stashPath != "" && strings.EqualFold(itemStashPath, stashPath)) {
+					matches = append(matches, item)
+				}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(matches)
+			return
+		}
 		idStr := strings.TrimPrefix(r.URL.Path, "/api/releases/")
 		id, err := strconv.ParseInt(idStr, 10, 64)
 		if err != nil {
@@ -137,6 +152,43 @@ func TestJAVBeaconTestEndpointReportsMatchedRelease(t *testing.T) {
 	release, ok := got["release"].(map[string]any)
 	if !ok || release["title"] != "Sample Title" || release["video_id"] != "ADN-803" {
 		t.Fatalf("unexpected release payload: %s", response.Body.String())
+	}
+}
+
+func TestJAVBeaconTestEndpointAutoDetectsPathAndFilename(t *testing.T) {
+	fake := newTestJAVBeaconServer(t, "test-key", map[int64]map[string]any{
+		42: {"id": 42, "video_id": "SSIS-001", "stash_file_path": "/P2P/HTTP/ADN-816.mp4", "title": "Path Match"},
+		43: {"id": 43, "video_id": "ADN816", "title": "Compact Filename Match"},
+	})
+	cfg := config.Config{APIToken: "test-api-token"}
+	srv, _, _ := newTestServerWithManager(t, cfg)
+	handler := srv.Handler()
+
+	tests := []struct {
+		name, selector, wantMethod, wantTitle string
+	}{
+		{"path", `"file_path":"/p2p/http/adn-816.MP4"`, "stash_file_path", "Path Match"},
+		{"video id", `"video_id":"ssis-001"`, "video_id", "Path Match"},
+		{"filename", `"filename":"ADN-816.mkv"`, "filename_video_id_compact", "Compact Filename Match"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			body := `{"base_url":"` + fake.URL + `","api_key":"test-key",` + tc.selector + `}`
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/javbeacon/test", strings.NewReader(body))
+			request.Header.Set("Authorization", "Bearer test-api-token")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != http.StatusOK {
+				t.Fatalf("status %d: %s", response.Code, response.Body.String())
+			}
+			var got javBeaconTestResponse
+			if err := json.Unmarshal(response.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if !got.Reachable || got.Release == nil || got.LookupMethod != tc.wantMethod || got.Release.Title != tc.wantTitle {
+				t.Fatalf("response = %#v", got)
+			}
+		})
 	}
 }
 
