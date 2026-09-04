@@ -85,6 +85,11 @@
 		"webhook_bearer_token": "",
 		"timeout_seconds": 60
 	},
+  "javbeacon": {
+    "base_url": "",
+    "api_key": "",
+    "timeout_seconds": 10
+  },
   "output": {
     "english_suffix": ".en.srt",
     "japanese_suffix": ".ja.srt",

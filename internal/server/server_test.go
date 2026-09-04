@@ -112,6 +112,165 @@ func TestSingleFileUploadCreatesPersistedJob(t *testing.T) {
 	}
 }
 
+func TestUploadJobWithReleaseContextFieldsPersists(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{UploadDir: filepath.Join(root, "uploads"), MaxUploadGB: 1, APIToken: "test-api-token", Output: config.OutputConfig{WriteASS: true}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	database, err := store.Open(filepath.Join(root, "jobs.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	runner := engine.New(cfg, logger)
+	post := jobs.NewPostProcessor(config.PostProcessingConfig{Mode: "none", TimeoutSec: 60}, logger)
+	manager, err := jobs.New(cfg, runner, database, post, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authManager, err := auth.New(database, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	file, err := writer.CreateFormFile("file", "ADN-803.mkv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = file.Write([]byte("fake media"))
+	_ = writer.WriteField("release_external_id", "ADN-803")
+	_ = writer.WriteField("javbeacon_release_id", "12345")
+	_ = writer.WriteField("release_title", "Example Title")
+	_ = writer.WriteField("release_story", "Example story context.")
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/jobs/upload", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer test-api-token")
+	response := httptest.NewRecorder()
+	// No JAVBeacon.BaseURL configured, so this exercises the "explicit ID
+	// supplied but no JAVBeacon instance available" non-fatal path end to
+	// end through the HTTP layer: the job must still be created (202), with
+	// the supplied fields preserved and the lookup reported as unmatched.
+	New(cfg, manager, runner, authManager, post, database, logger).Handler().ServeHTTP(response, req)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("status %d: %s", response.Code, response.Body.String())
+	}
+	var job jobs.Job
+	if err := json.Unmarshal(response.Body.Bytes(), &job); err != nil {
+		t.Fatal(err)
+	}
+	if job.ReleaseExternalID != "ADN-803" {
+		t.Fatalf("release_external_id = %q", job.ReleaseExternalID)
+	}
+	if job.JAVBeaconReleaseID == nil || *job.JAVBeaconReleaseID != 12345 {
+		t.Fatalf("javbeacon_release_id = %#v", job.JAVBeaconReleaseID)
+	}
+	if job.ReleaseTitle != "Example Title" || job.ReleaseTitleSource != "manual" {
+		t.Fatalf("release title = %q source = %q", job.ReleaseTitle, job.ReleaseTitleSource)
+	}
+	if job.ReleaseStory != "Example story context." || job.ReleaseStorySource != "manual" {
+		t.Fatalf("release story = %q source = %q", job.ReleaseStory, job.ReleaseStorySource)
+	}
+	if job.ReleaseLookupMatched {
+		t.Fatalf("no JAVBeacon is configured, so the lookup must not report a match: %#v", job)
+	}
+	if job.ReleaseLookupError == "" {
+		t.Fatal("expected a non-fatal release_lookup_error to be reported")
+	}
+}
+
+func TestCreateJobWithInvalidJAVBeaconReleaseIDIsRejected(t *testing.T) {
+	root := t.TempDir()
+	media := filepath.Join(root, "sample.mkv")
+	if err := os.WriteFile(media, []byte("fake media"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{UploadDir: filepath.Join(root, "uploads"), MaxUploadGB: 1, APIToken: "test-api-token", Output: config.OutputConfig{WriteASS: true}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	database, err := store.Open(filepath.Join(root, "jobs.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	runner := engine.New(cfg, logger)
+	post := jobs.NewPostProcessor(config.PostProcessingConfig{Mode: "none", TimeoutSec: 60}, logger)
+	manager, err := jobs.New(cfg, runner, database, post, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authManager, err := auth.New(database, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	file, err := writer.CreateFormFile("file", "sample.mkv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = file.Write([]byte("fake media"))
+	_ = writer.WriteField("javbeacon_release_id", "not-a-number")
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/jobs/upload", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer test-api-token")
+	response := httptest.NewRecorder()
+	New(cfg, manager, runner, authManager, post, database, logger).Handler().ServeHTTP(response, req)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for a non-numeric javbeacon_release_id, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestCreateJobLegacyMinimalRequestStillWorksUnchanged(t *testing.T) {
+	root := t.TempDir()
+	media := filepath.Join(root, "sample.mkv")
+	if err := os.WriteFile(media, []byte("fake media"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{UploadDir: filepath.Join(root, "uploads"), MaxUploadGB: 1, APIToken: "test-api-token", Output: config.OutputConfig{WriteASS: true}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	database, err := store.Open(filepath.Join(root, "jobs.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	runner := engine.New(cfg, logger)
+	post := jobs.NewPostProcessor(config.PostProcessingConfig{Mode: "none", TimeoutSec: 60}, logger)
+	manager, err := jobs.New(cfg, runner, database, post, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authManager, err := auth.New(database, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The exact shape of TODO Part 37's "Minimal legacy" API example: only
+	// path/inputs, nothing release-related, nothing new at all.
+	payload := []byte(`{"inputs":["` + media + `"]}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/jobs", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer test-api-token")
+	response := httptest.NewRecorder()
+	New(cfg, manager, runner, authManager, post, database, logger).Handler().ServeHTTP(response, req)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("status %d: %s", response.Code, response.Body.String())
+	}
+	var job jobs.Job
+	if err := json.Unmarshal(response.Body.Bytes(), &job); err != nil {
+		t.Fatal(err)
+	}
+	if job.ReleaseExternalID != "" || job.JAVBeaconReleaseID != nil || job.ReleaseTitle != "" || job.ReleaseStory != "" {
+		t.Fatalf("a legacy minimal request must not gain any release metadata: %#v", job)
+	}
+}
+
 func TestTranslationSettingsArePersistentAndKeyIsWriteOnly(t *testing.T) {
 	root := t.TempDir()
 	cfg := config.Config{APIToken: "test-api-token", Translation: config.TranslationConfig{Mode: "direct", BatchSize: 24, TimeoutSec: 120}}

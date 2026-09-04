@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"javbeaconsubs/internal/config"
@@ -131,5 +132,142 @@ func TestCreateResolvesMixedRecursiveFilesIndependently(t *testing.T) {
 	}
 	if job.FileSettings[filepath.Join(javDir, "one.mp4")].Profile != "jav" || job.FileSettings[filepath.Join(gigaDir, "two.mp4")].ASRMode != "balanced" {
 		t.Fatalf("file settings = %#v", job.FileSettings)
+	}
+}
+
+func TestCreateReleaseExternalIDFallsBackToExternalIDWithNoJAVBeaconConfigured(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "one.mp4")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{cfg: config.Config{}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 1), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+
+	job, err := m.Create(Request{Inputs: []string{path}, ExternalID: "movie-123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.ExternalID != "movie-123" {
+		t.Fatalf("external_id = %q", job.ExternalID)
+	}
+	if job.ReleaseExternalID != "movie-123" {
+		t.Fatalf("release_external_id did not fall back to external_id: %q", job.ReleaseExternalID)
+	}
+	// No JAVBeacon configured (releaseClient is nil): the ExternalID
+	// fallback still counts as an external-id lookup attempt, so it must be
+	// reported as unmatched with a non-fatal lookup error - not silently
+	// treated as a match, and not blocking job creation either.
+	if job.ReleaseLookupMethod != "external_release_id" || job.ReleaseLookupMatched {
+		t.Fatalf("resolution should not report a match with no client configured: method=%q matched=%v", job.ReleaseLookupMethod, job.ReleaseLookupMatched)
+	}
+	if job.ReleaseLookupError == "" {
+		t.Fatal("expected a non-fatal release_lookup_error when no JAVBeacon client is configured")
+	}
+}
+
+func TestCreateReleaseExternalIDOverridesExternalIDWhenBothSupplied(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "one.mp4")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{cfg: config.Config{}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 1), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+
+	job, err := m.Create(Request{Inputs: []string{path}, ExternalID: "legacy-name", ReleaseExternalID: "ADN-803"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.ExternalID != "legacy-name" {
+		t.Fatalf("external_id should be preserved unchanged: %q", job.ExternalID)
+	}
+	if job.ReleaseExternalID != "ADN-803" {
+		t.Fatalf("release_external_id should take precedence when explicitly supplied: %q", job.ReleaseExternalID)
+	}
+}
+
+func TestCreateManualReleaseTitleAndStoryPersistAsManual(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "one.mp4")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{cfg: config.Config{}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 1), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+
+	job, err := m.Create(Request{Inputs: []string{path}, ReleaseTitle: "  My Title  ", ReleaseStory: "My story.\nSecond line."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.ReleaseTitle != "My Title" || job.ReleaseTitleSource != "manual" {
+		t.Fatalf("release title = %q source = %q", job.ReleaseTitle, job.ReleaseTitleSource)
+	}
+	if job.ReleaseStory != "My story.\nSecond line." || job.ReleaseStorySource != "manual" {
+		t.Fatalf("release story = %q source = %q", job.ReleaseStory, job.ReleaseStorySource)
+	}
+}
+
+func TestCreateRejectsOversizedReleaseTitleAndStory(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "one.mp4")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{cfg: config.Config{}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 1), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+
+	if _, err := m.Create(Request{Inputs: []string{path}, ReleaseTitle: strings.Repeat("x", maxReleaseTitleBytes+1)}); err == nil {
+		t.Fatal("expected an error for an oversized release_title")
+	}
+	if _, err := m.Create(Request{Inputs: []string{path}, ReleaseStory: strings.Repeat("x", maxReleaseStoryBytes+1)}); err == nil {
+		t.Fatal("expected an error for an oversized release_story")
+	}
+	// A title/story right at the limit must still be accepted.
+	if _, err := m.Create(Request{Inputs: []string{path}, ReleaseTitle: strings.Repeat("x", maxReleaseTitleBytes)}); err != nil {
+		t.Fatalf("release_title at the exact limit should be accepted: %v", err)
+	}
+}
+
+// presetPersistence returns a fixed set of stored jobs from Load(), for
+// exercising jobs.New()'s legacy-record backfill.
+type presetPersistence struct{ jobs []*Job }
+
+func (presetPersistence) Save(*Job) error         { return nil }
+func (p presetPersistence) Load() ([]*Job, error) { return p.jobs, nil }
+
+func TestNewBackfillsLegacyReleaseFieldsOnOldRecords(t *testing.T) {
+	stored := &Job{
+		ID: "sub_legacy", ExternalID: "legacy-ref", Status: "complete",
+		ReleaseTitle: "Old Title", ReleaseStory: "Old story.",
+		// ReleaseExternalID, ReleaseTitleSource, ReleaseStorySource left
+		// unset, as a pre-Stage-1 persisted record would have them.
+	}
+	cfg := config.Config{Profiles: config.ProfilesConfig{DefaultProfile: "jav"}}
+	m, err := New(cfg, nil, presetPersistence{jobs: []*Job{stored}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := m.Get("sub_legacy")
+	if !ok {
+		t.Fatal("legacy job not loaded")
+	}
+	if got.ReleaseExternalID != "legacy-ref" {
+		t.Fatalf("release_external_id should backfill from external_id: %q", got.ReleaseExternalID)
+	}
+	if got.ReleaseTitleSource != "legacy" || got.ReleaseStorySource != "legacy" {
+		t.Fatalf("legacy title/story should be marked as such: title_source=%q story_source=%q", got.ReleaseTitleSource, got.ReleaseStorySource)
+	}
+}
+
+func TestNewLeavesReleaseSourceEmptyWhenJobNeverHadMetadata(t *testing.T) {
+	stored := &Job{ID: "sub_plain", Status: "complete"}
+	cfg := config.Config{Profiles: config.ProfilesConfig{DefaultProfile: "jav"}}
+	m, err := New(cfg, nil, presetPersistence{jobs: []*Job{stored}}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := m.Get("sub_plain")
+	if !ok {
+		t.Fatal("job not loaded")
+	}
+	if got.ReleaseTitleSource != "" || got.ReleaseStorySource != "" {
+		t.Fatalf("a job that never had release metadata should not gain a source marker: title_source=%q story_source=%q", got.ReleaseTitleSource, got.ReleaseStorySource)
 	}
 }
