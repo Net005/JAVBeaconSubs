@@ -143,6 +143,40 @@ func TestWebUIProvidesJAVBeaconAutoDetectionAndFreshLookupTests(t *testing.T) {
 	}
 }
 
+func TestWebUICategorizesJAVBeaconReleaseLookupResult(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{
+		"releaseLookupResult", "lookup-result", "lookup-grid", "lookup-label",
+		"Title", "Story", "Filename", "Video ID", "Matched using",
+		"Full file path", "Local Stash status",
+	} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("categorized JAVBeacon lookup result is missing %q", required)
+		}
+	}
+}
+
+func TestWebUIPlacesJAVBeaconBesideTranslationAndSaveAtBottom(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{
+		"arrangeSettingsLayout", "settings-translation-card", "settings-post-card",
+		"settings-javbeacon-card", "settings-save-bar", "Save all settings",
+		"Applies Translation, Post-processing, and JAVBeacon changes",
+	} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("settings layout is missing %q", required)
+		}
+	}
+}
+
 func TestWebUIGroupsLargeJobDownloadsBySourceFile(t *testing.T) {
 	html, err := assets.ReadFile("web/index.html")
 	if err != nil {

@@ -86,6 +86,23 @@ func testClient(t *testing.T, server *httptest.Server) *Client {
 	return c
 }
 
+func TestTrimVideoIDPrefix(t *testing.T) {
+	tests := []struct {
+		title, videoID, want string
+	}{
+		{"DSOD-03 For One Week", "DSOD-03", "For One Week"},
+		{"dsod-03: For One Week", "DSOD-03", "For One Week"},
+		{"DSOD-03 — For One Week", "DSOD-03", "For One Week"},
+		{"DSOD-030 Is Different", "DSOD-03", "DSOD-030 Is Different"},
+		{"DSOD-03", "DSOD-03", "DSOD-03"},
+	}
+	for _, tc := range tests {
+		if got := trimVideoIDPrefix(tc.title, tc.videoID); got != tc.want {
+			t.Errorf("trimVideoIDPrefix(%q, %q) = %q, want %q", tc.title, tc.videoID, got, tc.want)
+		}
+	}
+}
+
 func TestResolveByJAVBeaconReleaseIDSucceeds(t *testing.T) {
 	server := fakeJAVBeacon(t,
 		map[int64]Release{12345: {ID: 12345, VideoID: "ADN-803", Title: "Example Title", Story: "Example story.", Source: "GIGA"}},

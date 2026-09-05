@@ -128,7 +128,7 @@ func TestJAVBeaconSettingsArePersistentAndKeyIsWriteOnly(t *testing.T) {
 
 func TestJAVBeaconTestEndpointReportsMatchedRelease(t *testing.T) {
 	fake := newTestJAVBeaconServer(t, "test-key", map[int64]map[string]any{
-		42: {"id": 42, "video_id": "ADN-803", "title": "Sample Title", "story": "Sample story.", "source": "javbeacon"},
+		42: {"id": 42, "video_id": "ADN-803", "title": "ADN-803 Sample Title", "story": "Sample story.", "source": "javbeacon"},
 	})
 	cfg := config.Config{APIToken: "test-api-token"}
 	srv, _, _ := newTestServerWithManager(t, cfg)
