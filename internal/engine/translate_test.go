@@ -279,6 +279,39 @@ func TestReleaseContextInstructionsTitleAndStory(t *testing.T) {
 	}
 }
 
+func TestTranslationUsageProvesReleaseContextReachedModel(t *testing.T) {
+	server, calls := newFakeTranslationServer(t, func(call fakeTranslationCall) map[int]string {
+		return map[int]string{0: "Moon Angel confronts Contra."}
+	})
+	runner := newRepairTestRunner(server.URL, true)
+	runner.activeReleaseTitle = "The Heroine's Fall: Spandexer Moon Angel"
+	runner.activeReleaseStory = "Contra of Makina deploys the Spandexer Killer using Terrarium Ore."
+	out, usage, err := runner.translate(context.Background(), []subtitle.Segment{{StartMS: 0, EndMS: 2000, Text: "ムーンエンジェルはコントラと戦う"}}, func(string, int, string) {}, NewTranslationMemory())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 || !usage.ReleaseContextUsed {
+		t.Fatalf("translation output/usage = %#v / %#v", out, usage)
+	}
+	if len(*calls) != 1 || !strings.Contains((*calls)[0].System, "Release title:") || !strings.Contains((*calls)[0].System, "Release story:") {
+		t.Fatalf("release context did not reach translation prompt: %#v", *calls)
+	}
+}
+
+func TestTranslationUsageDoesNotClaimEmptyReleaseContext(t *testing.T) {
+	server, _ := newFakeTranslationServer(t, func(call fakeTranslationCall) map[int]string {
+		return map[int]string{0: "Hello."}
+	})
+	runner := newRepairTestRunner(server.URL, true)
+	_, usage, err := runner.translate(context.Background(), []subtitle.Segment{{StartMS: 0, EndMS: 1000, Text: "こんにちは"}}, func(string, int, string) {}, NewTranslationMemory())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usage.ReleaseContextUsed {
+		t.Fatal("translation claimed release context with no title or story")
+	}
+}
+
 func TestReleaseContextInstructionsStoryOnlyGuardrailAlwaysPresent(t *testing.T) {
 	got := releaseContextInstructions("", "Only a story, no title.")
 	if strings.Contains(got, "Release title:") {

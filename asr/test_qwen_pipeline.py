@@ -22,7 +22,7 @@ SPEC.loader.exec_module(pipeline)
 class PipelineUtilitiesTest(unittest.TestCase):
     def run_synthetic_pipeline(
         self, transcript, align_side_effect=None, mode="balanced", retry_transcript=None,
-        speech_probability=0.55, classification="speech",
+        speech_probability=0.55, classification="speech", legacy_context="",
     ):
         samplerate = 1000
         audio = np.zeros(samplerate * 30, dtype=np.float32)
@@ -39,8 +39,24 @@ class PipelineUtilitiesTest(unittest.TestCase):
             retry_value = retry_transcript if retry_transcript is not None else transcript
             arguments = [
                 "qwen_pipeline.py", "--input", str(input_path), "--output", str(output_path),
-                "--device", "cpu", "--mode", mode, "--disable-reazon", "--disable-whisper", "--debug",
+                "--device", "cpu", "--mode", mode, "--context", legacy_context,
+                "--disable-reazon", "--disable-whisper", "--debug",
             ]
+
+            def fake_qwen_worker(*worker_args, **_worker_kwargs):
+                recognition_context = worker_args[5]
+                self.assertEqual(recognition_context, pipeline.PROFILE_CONTEXT["jav"])
+                if legacy_context:
+                    self.assertNotIn(legacy_context, recognition_context)
+                return ({0: transcript}, {
+                    "retry_results": (
+                        [{"index": 0, "text": retry_value}] if wants_retry else []
+                    ),
+                    "retry_reasons": ({
+                        "0": "prompt_leakage_unresolved" if "prompt_leakage" in reasons else retry_reason
+                    } if wants_retry else {}),
+                })
+
             with (
                 mock.patch.object(sys, "argv", arguments),
                 mock.patch.object(
@@ -50,14 +66,7 @@ class PipelineUtilitiesTest(unittest.TestCase):
                 mock.patch.object(
                     pipeline,
                     "qwen_worker_transcribe",
-                    return_value=({0: transcript}, {
-                        "retry_results": (
-                            [{"index": 0, "text": retry_value}] if wants_retry else []
-                        ),
-                        "retry_reasons": ({
-                            "0": "prompt_leakage_unresolved" if "prompt_leakage" in reasons else retry_reason
-                        } if wants_retry else {}),
-                    }),
+                    side_effect=fake_qwen_worker,
                 ),
                 mock.patch.object(pipeline, "load_aligner", return_value=aligner),
                 mock.patch.object(
@@ -76,6 +85,14 @@ class PipelineUtilitiesTest(unittest.TestCase):
             self.assertFalse(pipeline.has_meaningful_transcript(value), value)
         for value in ["あ", "はい", "A", "NHK", "123"]:
             self.assertTrue(pipeline.has_meaningful_transcript(value), value)
+
+    def test_release_metadata_like_context_never_enters_asr_or_aligner(self):
+        japanese = "ムーンエンジェルはコントラと戦う"
+        metadata = "Release title: SPSF-50\nRelease story: Contra attacks Moon Angel."
+        _result, aligner = self.run_synthetic_pipeline(japanese, legacy_context=metadata)
+        self.assertTrue(aligner.align.called)
+        self.assertEqual(aligner.align.call_args.kwargs["text"], japanese)
+        self.assertNotIn(metadata, aligner.align.call_args.kwargs["text"])
 
     def test_recognition_vocabulary_accepts_legacy_empty_override_array(self):
         payload = {
@@ -717,6 +734,7 @@ class PipelineUtilitiesTest(unittest.TestCase):
         self.assertIn("-ojf", run.call_args.args[0])
         self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("-l") + 1], "ja")
         self.assertNotIn("-tr", run.call_args.args[0])
+        self.assertNotIn("--prompt", run.call_args.args[0])
         self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("-t") + 1], "12")
         self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("-bs") + 1], "3")
         self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("-bo") + 1], "2")

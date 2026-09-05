@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"javbeaconsubs/internal/config"
+	"javbeaconsubs/internal/engine"
 	"javbeaconsubs/internal/jobs"
 )
 
@@ -20,6 +21,11 @@ func TestSQLiteRoundTrip(t *testing.T) {
 		ID: "sub_test", ExternalID: "movie-7", Status: "complete", Progress: 100,
 		Inputs: []string{"/media/movie.mkv"}, Files: []string{"/media/movie.mkv"},
 		CallbackURL: "http://javbeacon/callback", Overwrite: true, KeepJapanese: true, CreatedAt: created,
+		Results: []engine.Result{{Input: "/media/movie.mkv", ReleaseContext: &engine.ReleaseContextDiagnostics{
+			ReleaseExternalID: "SPSF-50", TitlePresent: true, StoryPresent: true,
+			TitleSource: "javbeacon", StorySource: "javbeacon", LookupMethod: "external_release_id",
+			LookupMatched: true, UsedForTranslation: true,
+		}}},
 	}
 	if err := database.Save(want); err != nil {
 		t.Fatal(err)
@@ -34,6 +40,9 @@ func TestSQLiteRoundTrip(t *testing.T) {
 	got := loaded[0]
 	if got.ID != want.ID || got.ExternalID != want.ExternalID || got.CallbackURL != want.CallbackURL || !got.Overwrite || !got.KeepJapanese {
 		t.Fatalf("round trip mismatch: %#v", got)
+	}
+	if len(got.Results) != 1 || got.Results[0].ReleaseContext == nil || !got.Results[0].ReleaseContext.UsedForTranslation || got.Results[0].ReleaseContext.LookupMethod != "external_release_id" {
+		t.Fatalf("release context diagnostics did not persist: %#v", got.Results)
 	}
 }
 

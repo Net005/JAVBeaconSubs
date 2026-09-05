@@ -244,6 +244,8 @@ Set `"auto_detect_release": true` (JSON), send `auto_detect_release=true` (multi
 
 Matched `release_title`/`release_story` values are auto-filled unless supplied manually (manual values always win). The resolved job document also carries `release_title_source`, `release_story_source`, `release_lookup_method`, `release_lookup_matched`, `release_lookup_error`, `release_provider`, `release_stash_file_path`, and (when the matched release is locally present in the operator's StashApp library) `release_stash_scene_id`/`release_stash_url`. Folder jobs expose independently resolved entries in `file_release_metadata`. Release metadata is translation context only — it is never sent to speech recognition and never changes the recognized Japanese text.
 
+Each completed file result and its `.subtitles.json` project include a compact `release_context` diagnostic block when release metadata was resolved. It records the external/internal ID, title/story presence, metadata sources, actual lookup method, match state, and whether the guarded context reached at least one successful contextual-translation request. It deliberately does not duplicate the title or full story text. Translation usage also records title/story-context use, Japanese-script leak and selective-repair counts, repair successes, and proper-name variant flags.
+
 External clients send `Authorization: Bearer …` or `X-API-Key: …` to `/api/*` requests. Browser requests are authorized by the web login session instead; the browser never stores or asks for the external API token.
 
 ## Backups and updates

@@ -356,6 +356,30 @@ func TestCreateFileReleaseOverridesResolvedPerFile(t *testing.T) {
 	}
 }
 
+func TestReleaseContextForFileUsesJobAndPerFileLookupProvenance(t *testing.T) {
+	jobID := int64(50)
+	overrideID := int64(611)
+	job := &Job{
+		ReleaseExternalID: "SPSF-50", JAVBeaconReleaseID: &jobID,
+		ReleaseTitleSource: "javbeacon", ReleaseStorySource: "javbeacon",
+		ReleaseLookupMethod: "external_release_id", ReleaseLookupMatched: true,
+		FileReleaseMetadata: map[string]FileReleaseMetadata{
+			"/media/START-611.mp4": {
+				ReleaseExternalID: "START-611", JAVBeaconReleaseID: &overrideID,
+				ReleaseTitleSource: "manual", ReleaseLookupMethod: "javbeacon_release_id", ReleaseLookupMatched: true,
+			},
+		},
+	}
+	base := releaseContextForFile(job, "/media/SPSF-50.mp4")
+	if base.ReleaseExternalID != "SPSF-50" || base.LookupMethod != "external_release_id" || base.StorySource != "javbeacon" {
+		t.Fatalf("job-level release context = %#v", base)
+	}
+	override := releaseContextForFile(job, "/media/START-611.mp4")
+	if override.ReleaseExternalID != "START-611" || override.JAVBeaconReleaseID == nil || *override.JAVBeaconReleaseID != overrideID || override.LookupMethod != "javbeacon_release_id" || override.StorySource != "" {
+		t.Fatalf("per-file release context = %#v", override)
+	}
+}
+
 func TestCreateFileReleaseOverridesRejectsUnknownFile(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "one.mp4")

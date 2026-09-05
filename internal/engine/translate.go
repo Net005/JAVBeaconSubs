@@ -47,6 +47,9 @@ type tokenUsage struct {
 	// ProperNameVariants is set once, after translate()'s repair pass, by
 	// DetectProperNameVariants (TODO Part 22). Diagnostic only.
 	ProperNameVariants []ProperNameVariant `json:"-"`
+	// ReleaseContextUsed is true only after at least one successful model call
+	// whose system prompt contained the guarded release title/story block.
+	ReleaseContextUsed bool `json:"-"`
 }
 type translationResult struct {
 	Translations []struct {
@@ -483,6 +486,7 @@ func (r *Runner) repairMixedScriptLeaks(ctx context.Context, source []subtitle.S
 		usage.PromptTokens += callUsage.PromptTokens
 		usage.CompletionTokens += callUsage.CompletionTokens
 		usage.TotalTokens += callUsage.TotalTokens
+		usage.ReleaseContextUsed = usage.ReleaseContextUsed || releaseContext != ""
 		byID := make(map[int]string, len(repairedResult.Translations))
 		for _, item := range repairedResult.Translations {
 			byID[item.ID] = strings.TrimSpace(item.Text)
@@ -558,6 +562,7 @@ func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progr
 		totalUsage.CompletionTokens += usage.CompletionTokens
 		totalUsage.TotalTokens += usage.TotalTokens
 		totalUsage.Batches++
+		totalUsage.ReleaseContextUsed = totalUsage.ReleaseContextUsed || releaseContext != ""
 		byID := make(map[int]string, len(translated.Translations))
 		for _, item := range translated.Translations {
 			byID[item.ID] = strings.TrimSpace(item.Text)
@@ -593,6 +598,7 @@ func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progr
 		totalUsage.PromptTokens += repairUsage.PromptTokens
 		totalUsage.CompletionTokens += repairUsage.CompletionTokens
 		totalUsage.TotalTokens += repairUsage.TotalTokens
+		totalUsage.ReleaseContextUsed = totalUsage.ReleaseContextUsed || repairUsage.ReleaseContextUsed
 		totalUsage.RowsWithJapaneseScript = detected
 		totalUsage.RowsRepaired = repairedCount
 	}

@@ -4,6 +4,11 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Added a compact per-file `release_context` diagnostic snapshot and one body-free summary log to job results and `.subtitles.json`, recording release IDs, title/story presence and sources, lookup method/match state, and whether the guarded metadata reached a successful contextual-translation request without duplicating full title/story bodies.
+- Expanded `.subtitles.json` translation usage observability with title/story-context use, Japanese-script leak and selective-repair counts, repair successes, and proper-name variant counts.
+
 ### Fixed
 
 - Fixed titled/JAVBeacon-aware Qwen jobs failing with `'list' object has no attribute 'get'`: the bundled vocabulary now stores `title_or_series_overrides` as an object, while the loader still accepts the supported legacy empty-array representation as empty.
