@@ -5664,7 +5664,7 @@
       }
     ]
   },
-  "title_or_series_overrides": [],
+  "title_or_series_overrides": {},
   "observed_but_not_promoted": [
     {
       "source": "SPSF-57",

@@ -4,6 +4,16 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed titled/JAVBeacon-aware Qwen jobs failing with `'list' object has no attribute 'get'`: the bundled vocabulary now stores `title_or_series_overrides` as an object, while the loader still accepts the supported legacy empty-array representation as empty.
+- Allowed a tightly bounded amount of Whisper whole-file timestamp drift while continuing to reject corrupt multi-minute segments, preventing valid 30-second fallback cues with a few seconds of token-timestamp overrun from failing the entire job.
+- Preserved expanded release stories during Activity's automatic refresh instead of collapsing them every three seconds.
+
+### Changed
+
+- Redesigned Activity job details into distinct current-step, filename, file-path, release metadata, and expandable-story sections for faster scanning and less visual density.
+
 ## [0.12.0] - 2026-09-05
 
 ### Added

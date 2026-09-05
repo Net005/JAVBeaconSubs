@@ -943,10 +943,27 @@ func (r *Runner) transcribeWhisper(ctx context.Context, wav, prefix string, tran
 		}
 		out = append(out, subtitle.Segment{StartMS: start, EndMS: end, Text: item.Text})
 	}
-	if err := validateSegments(out, 0, int64(c.MaxSegmentSec)*1000); err != nil {
+	if err := validateSegments(out, 0, whisperSegmentSafetyLimit(int64(c.MaxSegmentSec)*1000)); err != nil {
 		return nil, fmt.Errorf("validate whisper output: %w", err)
 	}
 	return out, nil
+}
+
+// whisperSegmentSafetyLimit allows a small amount of timestamp drift from
+// whisper.cpp's whole-file compatibility output. Token timestamps can extend
+// a valid cue a few seconds beyond the ASR region target; downstream subtitle
+// normalization still splits the cue for presentation. The bounded allowance
+// remains far below the multi-minute collapsed-tail failures this validation
+// is intended to reject.
+func whisperSegmentSafetyLimit(configured int64) int64 {
+	if configured <= 0 {
+		return configured
+	}
+	allowance := configured / 3
+	if allowance > 10_000 {
+		allowance = 10_000
+	}
+	return configured + allowance
 }
 
 func validateSegments(segments []subtitle.Segment, durationMS, maxSegmentMS int64) error {

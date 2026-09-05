@@ -270,3 +270,20 @@ func TestWebUIDisplaysFriendlyJobMetadataCards(t *testing.T) {
 		}
 	}
 }
+
+func TestWebUISeparatesJobDetailsAndPreservesExpandedStory(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{
+		"job-stage", "Current step", "job-current-card", "Filename", "File path",
+		"job-release-card", "Release information", "Matched using", "Metadata source",
+		"expandedStoryIDs", "rememberStoryState", "data-story-id",
+	} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("structured job details are missing %q", required)
+		}
+	}
+}

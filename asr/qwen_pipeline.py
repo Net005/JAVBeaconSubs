@@ -795,15 +795,36 @@ def active_recognition_vocabulary(path: str, profile: str, title: str) -> tuple[
     try:
         with open(path, encoding="utf-8") as handle:
             payload = json.load(handle)
+        if not isinstance(payload, dict):
+            return set(), set()
+        scopes = payload.get("scopes", {})
+        if not isinstance(scopes, dict):
+            scopes = {}
         scoped: set[str] = set()
         for scope in ("global", profile) if profile in {"jav", "giga"} else ("global",):
-            scoped.update(normalize_text(item.get("term", "")) for item in payload.get("scopes", {}).get(scope, []))
+            entries = scopes.get(scope, [])
+            if isinstance(entries, list):
+                scoped.update(
+                    normalize_text(item.get("term", ""))
+                    for item in entries
+                    if isinstance(item, dict)
+                )
+        overrides = payload.get("title_or_series_overrides", {})
+        # Vocabulary v1 historically serialized an empty override mapping as
+        # []; accept that representation as empty instead of aborting every
+        # titled/JAVBeacon-aware job before Qwen inference begins.
+        if not isinstance(overrides, dict):
+            overrides = {}
+        title_entries = overrides.get(title, []) if title else []
+        if not isinstance(title_entries, list):
+            title_entries = []
         titled = {
             normalize_text(item.get("term", ""))
-            for item in payload.get("title_or_series_overrides", {}).get(title, [])
-        } if title else set()
+            for item in title_entries
+            if isinstance(item, dict)
+        }
         return {item for item in scoped if item}, {item for item in titled if item}
-    except (OSError, ValueError, TypeError):
+    except (OSError, ValueError, TypeError, AttributeError):
         return set(), set()
 
 
