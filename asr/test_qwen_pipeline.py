@@ -77,6 +77,39 @@ class PipelineUtilitiesTest(unittest.TestCase):
         for value in ["あ", "はい", "A", "NHK", "123"]:
             self.assertTrue(pipeline.has_meaningful_transcript(value), value)
 
+    def test_recognition_vocabulary_accepts_legacy_empty_override_array(self):
+        payload = {
+            "scopes": {
+                "global": [{"term": "変身"}],
+                "giga": [{"term": "ヒロイン"}],
+            },
+            "title_or_series_overrides": [],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "vocabulary.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            scoped, titled = pipeline.active_recognition_vocabulary(
+                str(path), "giga", "SPSF-50"
+            )
+        self.assertEqual(scoped, {"変身", "ヒロイン"})
+        self.assertEqual(titled, set())
+
+    def test_recognition_vocabulary_loads_structured_title_overrides(self):
+        payload = {
+            "scopes": {"global": [{"term": "変身"}]},
+            "title_or_series_overrides": {
+                "SPSF-50": [{"term": "ムーンエンジェル"}],
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "vocabulary.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            scoped, titled = pipeline.active_recognition_vocabulary(
+                str(path), "giga", "SPSF-50"
+            )
+        self.assertEqual(scoped, {"変身"})
+        self.assertEqual(titled, {"ムーンエンジェル"})
+
     def test_punctuation_only_never_aligns_or_emits(self):
         result, aligner = self.run_synthetic_pipeline("。")
         self.assertEqual(result["segments"], [])

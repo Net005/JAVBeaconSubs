@@ -89,6 +89,19 @@ func TestValidateSegmentsAcceptsOrderedSubtitleRows(t *testing.T) {
 	}
 }
 
+func TestWhisperSegmentSafetyLimitAllowsBoundedTimestampDrift(t *testing.T) {
+	limit := whisperSegmentSafetyLimit(30_000)
+	if limit != 40_000 {
+		t.Fatalf("whisper safety limit = %dms, want 40000ms", limit)
+	}
+	if err := validateSegments([]subtitle.Segment{{StartMS: 0, EndMS: 35_040, Text: "valid fallback cue"}}, 0, limit); err != nil {
+		t.Fatalf("bounded whisper timestamp drift was rejected: %v", err)
+	}
+	if err := validateSegments([]subtitle.Segment{{StartMS: 0, EndMS: 188_780, Text: "collapsed tail"}}, 0, limit); err == nil {
+		t.Fatal("multi-minute collapsed Whisper segment was accepted")
+	}
+}
+
 func TestExistingArtifactOnlyReturnsRegularFiles(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "movie.en.srt")
