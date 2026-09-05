@@ -151,7 +151,8 @@ func TestWebUIGroupsLargeJobDownloadsBySourceFile(t *testing.T) {
 	page := string(html)
 	for _, required := range []string{
 		"outputArtifactLinks", "output-list", "output-file-name",
-		"output-file-path", "scrollable", "max-height:min(520px,55vh)",
+		"output-file-path", "scrollable", "max-height:min(460px,52vh)",
+		"flex:1 1 100%", "results.length>3", "::-webkit-scrollbar",
 		"r.input||j.files?.[i]", "${i+1} / ${results.length}",
 	} {
 		if !strings.Contains(page, required) {
