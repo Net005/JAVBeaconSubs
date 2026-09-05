@@ -91,6 +91,24 @@ func TestWebUIExposesJapaneseSidecarAndOwnershipSetup(t *testing.T) {
 	}
 }
 
+func TestSetupCurlIncludesDiagnosticsAndJapaneseSidecars(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{
+		`"debug_mode": true`, `"keep_japanese": true`, `"write_ass": true`,
+		"debug_mode=true retains detailed per-segment diagnostics",
+		"keep_japanese=true always retains .ja.srt",
+		"write_ass=true adds .en.ass and also .ja.ass when keep_japanese is true",
+	} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("complete Setup curl example is missing %q", required)
+		}
+	}
+}
+
 func TestWebUIProvidesASSExportToggle(t *testing.T) {
 	html, err := assets.ReadFile("web/index.html")
 	if err != nil {
@@ -100,6 +118,23 @@ func TestWebUIProvidesASSExportToggle(t *testing.T) {
 	for _, required := range []string{"writeAss", "write_ass", "Also export"} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("web UI is missing the ASS export toggle %q", required)
+		}
+	}
+}
+
+func TestWebUIExplainsJapaneseAndASSOutputInteraction(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{
+		"clarifyOutputOptions", "Keep Japanese subtitle track (.ja.srt)",
+		"Export ASS copies (.en.ass and optional .ja.ass)",
+		"Japanese .ja.ass is created only when both options are enabled",
+	} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("subtitle output interaction is missing %q", required)
 		}
 	}
 }

@@ -226,7 +226,15 @@ The response is `202 Accepted`, includes the job, and sets `Location: /api/v1/jo
 - `GET /api/v1/health` — dependency and model readiness.
 - `GET /api/v1/settings` and `PUT /api/v1/settings` — read/update persistent translation and post-processing settings (credentials are write-only).
 
-The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, `overwrite`, `keep_japanese`, `write_ass`, `asr_mode`, `profile`, `debug_mode`, `auto_detect_release`, `release_external_id`, `javbeacon_release_id`, `release_title`, and `release_story` fields. The legacy `asr_profile` field remains accepted as an alias. For JSON and multipart jobs, omitting `keep_japanese` uses `output.keep_japanese` from service configuration, and omitting `write_ass` uses `output.write_ass` (`true` by default). Set `"write_ass": false` (or uncheck **Also export `.ass` subtitles** in the web UI) to generate only `.srt` files without the matching `.ass` track. Generated files are available through `GET /api/v1/jobs/{id}/outputs/{zeroBasedResultIndex}/{en|ja|en-ass|ja-ass|json|en-provenance|ja-provenance}`; the `-ass` outputs return `404` for a job that had ASS export disabled.
+The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, `overwrite`, `keep_japanese`, `write_ass`, `asr_mode`, `profile`, `debug_mode`, `auto_detect_release`, `release_external_id`, `javbeacon_release_id`, `release_title`, and `release_story` fields. The legacy `asr_profile` field remains accepted as an alias. For JSON and multipart jobs, omitting `keep_japanese` uses `output.keep_japanese` from service configuration, and omitting `write_ass` uses `output.write_ass` (`true` by default).
+
+The two output fields are independent and have the same behavior in JSON, multipart, and the web form:
+
+- `"keep_japanese": true` always retains the Japanese `.ja.srt` track.
+- `"write_ass": true` exports `.en.ass`; it also exports `.ja.ass` when `keep_japanese` resolves to `true`.
+- `"write_ass": false` generates SRT files only, so Japanese retention produces `.ja.srt` but never `.ja.ass`.
+
+Generated files are available through `GET /api/v1/jobs/{id}/outputs/{zeroBasedResultIndex}/{en|ja|en-ass|ja-ass|json|en-provenance|ja-provenance}`; the `-ass` outputs return `404` for a job that had ASS export disabled.
 
 If `callback_url` is supplied, the terminal job document is POSTed there. `external_id` round-trips unchanged so JAVBeacon can associate it with its own movie or task record.
 
