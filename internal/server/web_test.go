@@ -160,3 +160,22 @@ func TestWebUIGroupsLargeJobDownloadsBySourceFile(t *testing.T) {
 		}
 	}
 }
+
+func TestWebUIDisplaysFriendlyJobMetadataCards(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{
+		"decorateJobMetadata", "job-meta-chip", "job-meta-label",
+		"High Accuracy", "Path rule", "Recognition", "Content profile",
+		"Total files", "Completed", "Scanned path", "commonOutputDirectory",
+		"card.querySelector('.pill.complete,.pill.skipped')",
+		"new MutationObserver(decorateJobMetadata)",
+	} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("friendly job metadata display is missing %q", required)
+		}
+	}
+}
