@@ -4,9 +4,12 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-05
+
 ### Added
 
-- Reorganized Settings into a balanced two-column layout with Translation on the left and Post-processing plus JAVBeacon stacked on the right. The single Save settings action now lives in a full-width footer clearly labeled as applying all three sections, instead of appearing to belong to Post-processing.
+- Reorganized Settings into two independently stacking columns with Translation on the left and Post-processing plus JAVBeacon on the right, eliminating the empty grid space previously left between the right-hand cards. The single Save settings action now lives in a full-width footer clearly labeled as applying all three sections, instead of appearing to belong to Post-processing.
+- Added detailed in-context explanations for every translation setting, including request batching, timeouts, scene boundaries, job-local translation memory, cost estimation, and the distinct roles of legacy free-form instructions, global style rules, and structured terminology. Renamed "Japanese term mappings" to "Custom translation overrides" and documented that these personal mappings are selectively applied after Translation Glossary v2 and take precedence over matching Global, JAV, GIGA, or title-specific catalog entries.
 - JAVBeacon release titles are now normalized as they enter JAVBeaconSubs: when a provider redundantly prefixes a title with its exact video ID (for example `DSOD-03 DSOD title...`), the ID and adjacent separator are removed from the title while the dedicated `video_id` field remains unchanged. Similar-looking title prefixes without a clear boundary are preserved.
 - Redesigned the JAVBeacon test lookup result as a spaced, categorized card showing Title, Story, Filename, Video ID, source, winning match method, full file path, and local Stash status instead of an unlabeled text block.
 - Replaced Activity's raw internal profile/mode mapping text with a responsive visual metadata strip for total files, completed files, recognition accuracy, and content profile. Internal values such as `high_accuracy` and `path_mapping` are presented as friendly labels such as **High Accuracy** and **Matched: Path rule** with distinct visual indicators. Multi-file jobs also show their common scanned path, while completed jobs no longer duplicate the last processed filename/path above the per-file output cards.

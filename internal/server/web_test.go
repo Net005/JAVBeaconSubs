@@ -43,6 +43,28 @@ func TestWebUIProvidesValidatedLocalGlossaryImport(t *testing.T) {
 	}
 }
 
+func TestWebUIExplainsTranslationSettingsAndOverridePrecedence(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{
+		"Legacy free-form translation instructions",
+		"Custom translation overrides",
+		"layered on top of Translation Glossary v2",
+		"Custom translation overrides from Settings are merged last and win",
+		"settings-column",
+	} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("web translation settings are missing %q", required)
+		}
+	}
+	if strings.Contains(page, "settings-javbeacon-card{grid-column:2;grid-row:2}") {
+		t.Fatal("JAVBeacon settings card is still pinned below an empty grid row")
+	}
+}
+
 func TestWebUICanShowEveryGlossaryMapping(t *testing.T) {
 	html, err := assets.ReadFile("web/index.html")
 	if err != nil {
@@ -167,8 +189,8 @@ func TestWebUIPlacesJAVBeaconBesideTranslationAndSaveAtBottom(t *testing.T) {
 	}
 	page := string(html)
 	for _, required := range []string{
-		"arrangeSettingsLayout", "settings-translation-card", "settings-post-card",
-		"settings-javbeacon-card", "settings-save-bar", "Save all settings",
+		"arrangeSettingsLayout", "settings-column", "left.append(cards[0])",
+		"right.append(cards[1],cards[2])", "settings-save-bar", "Save all settings",
 		"Applies Translation, Post-processing, and JAVBeacon changes",
 	} {
 		if !strings.Contains(page, required) {
