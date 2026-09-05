@@ -4,6 +4,8 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-05
+
 ### Added
 
 - Added a compact per-file `release_context` diagnostic snapshot and one body-free summary log to job results and `.subtitles.json`, recording release IDs, title/story presence and sources, lookup method/match state, and whether the guarded metadata reached a successful contextual-translation request without duplicating full title/story bodies.
