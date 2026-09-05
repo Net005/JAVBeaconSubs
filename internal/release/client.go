@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Release mirrors the fields of JAVBeacon's domain.Release that translation
@@ -35,6 +37,34 @@ type Release struct {
 	// non-empty StashSceneID with Local true.
 	Local        bool   `json:"local"`
 	StashSceneID string `json:"stash_scene_id,omitempty"`
+}
+
+// trimVideoIDPrefix removes the redundant catalog code some JAVBeacon
+// providers include at the beginning of Title. It only trims an exact,
+// case-insensitive ID at a clear separator boundary, so a title that merely
+// starts with similar characters is left untouched.
+func trimVideoIDPrefix(title, videoID string) string {
+	title = strings.TrimSpace(title)
+	videoID = strings.TrimSpace(videoID)
+	if videoID == "" || len(title) <= len(videoID) || !strings.EqualFold(title[:len(videoID)], videoID) {
+		return title
+	}
+	remainder := title[len(videoID):]
+	first, _ := utf8.DecodeRuneInString(remainder)
+	if !unicode.IsSpace(first) && !strings.ContainsRune("-–—:|", first) {
+		return title
+	}
+	trimmed := strings.TrimLeftFunc(remainder, func(r rune) bool {
+		return unicode.IsSpace(r) || strings.ContainsRune("-–—:|", r)
+	})
+	if trimmed == "" {
+		return title
+	}
+	return trimmed
+}
+
+func normalizeRelease(item *Release) {
+	item.Title = trimVideoIDPrefix(item.Title, item.VideoID)
 }
 
 // ErrNotFound is returned by ByID when JAVBeacon reports 404 for the given
@@ -113,6 +143,7 @@ func (c *Client) ByID(ctx context.Context, id int64) (Release, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return Release{}, fmt.Errorf("%w: decode response: %v", ErrUnavailable, err)
 	}
+	normalizeRelease(&out)
 	return out, nil
 }
 
@@ -142,6 +173,9 @@ func (c *Client) byExactField(ctx context.Context, field, value string) ([]Relea
 	var out []Release
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, fmt.Errorf("%w: decode response: %v", ErrUnavailable, err)
+	}
+	for i := range out {
+		normalizeRelease(&out[i])
 	}
 	return out, nil
 }
