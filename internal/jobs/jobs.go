@@ -250,6 +250,22 @@ func buildFileReleaseMetadata(externalID string, javbeaconID *int64, resolution 
 	}
 }
 
+func releaseContextForFile(job *Job, file string) engine.ReleaseContextDiagnostics {
+	context := engine.ReleaseContextDiagnostics{
+		ReleaseExternalID: job.ReleaseExternalID, JAVBeaconReleaseID: job.JAVBeaconReleaseID,
+		TitleSource: job.ReleaseTitleSource, StorySource: job.ReleaseStorySource,
+		LookupMethod: job.ReleaseLookupMethod, LookupMatched: job.ReleaseLookupMatched,
+	}
+	if override, ok := job.FileReleaseMetadata[file]; ok {
+		context = engine.ReleaseContextDiagnostics{
+			ReleaseExternalID: override.ReleaseExternalID, JAVBeaconReleaseID: override.JAVBeaconReleaseID,
+			TitleSource: override.ReleaseTitleSource, StorySource: override.ReleaseStorySource,
+			LookupMethod: override.ReleaseLookupMethod, LookupMatched: override.ReleaseLookupMatched,
+		}
+	}
+	return context
+}
+
 // JAVBeacon returns the current JAVBeacon lookup client configuration.
 func (m *Manager) JAVBeacon() config.JAVBeaconConfig {
 	m.mu.RLock()
@@ -560,7 +576,7 @@ func (m *Manager) process(ctx context.Context, id string) {
 		if override, ok := job.FileReleaseMetadata[file]; ok {
 			titleKey, releaseTitle, releaseStory = override.ReleaseExternalID, override.ReleaseTitle, override.ReleaseStory
 		}
-		result, err := m.runner.ProcessWithOptions(ctx, file, job.Overwrite, job.KeepJapanese, engine.ProcessOptions{ASRMode: resolution.ASRMode, ASRProfile: resolution.Profile, DebugMode: job.DebugMode, Title: titleKey, ReleaseTitle: releaseTitle, ReleaseStory: releaseStory, WriteASS: &job.WriteASS}, progress, translationMemory)
+		result, err := m.runner.ProcessWithOptions(ctx, file, job.Overwrite, job.KeepJapanese, engine.ProcessOptions{ASRMode: resolution.ASRMode, ASRProfile: resolution.Profile, DebugMode: job.DebugMode, Title: titleKey, ReleaseTitle: releaseTitle, ReleaseStory: releaseStory, ReleaseContext: releaseContextForFile(job, file), WriteASS: &job.WriteASS}, progress, translationMemory)
 		if err != nil {
 			m.finish(id, "failed", err.Error())
 			return

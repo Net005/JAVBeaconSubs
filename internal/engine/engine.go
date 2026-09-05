@@ -41,52 +41,72 @@ type ProcessOptions struct {
 	// for translation only. Neither ever reaches speech recognition.
 	ReleaseTitle string
 	ReleaseStory string
+	// ReleaseContext carries lookup provenance for compact result diagnostics.
+	// It deliberately contains no title/story body; those remain translation-
+	// only inputs above and are never exposed as a duplicated prompt dump.
+	ReleaseContext ReleaseContextDiagnostics
 	// WriteASS overrides Output.WriteASS for one job when non-nil.
 	WriteASS *bool
 }
 
+// ReleaseContextDiagnostics proves which release metadata was resolved and
+// whether it was actually supplied to the contextual translation model. It is
+// intentionally compact: title/story presence is recorded, never their text.
+type ReleaseContextDiagnostics struct {
+	ReleaseExternalID  string `json:"release_external_id,omitempty"`
+	JAVBeaconReleaseID *int64 `json:"javbeacon_release_id,omitempty"`
+	TitlePresent       bool   `json:"title_present"`
+	StoryPresent       bool   `json:"story_present"`
+	TitleSource        string `json:"title_source,omitempty"`
+	StorySource        string `json:"story_source,omitempty"`
+	LookupMethod       string `json:"lookup_method,omitempty"`
+	LookupMatched      bool   `json:"lookup_matched"`
+	UsedForTranslation bool   `json:"used_for_translation"`
+}
+
 type Result struct {
-	Input                                    string                    `json:"input"`
-	EnglishSRT                               string                    `json:"english_srt,omitempty"`
-	JapaneseSRT                              string                    `json:"japanese_srt,omitempty"`
-	EnglishSRTProvenance                     string                    `json:"english_srt_provenance,omitempty"`
-	JapaneseSRTProvenance                    string                    `json:"japanese_srt_provenance,omitempty"`
-	EnglishASS                               string                    `json:"english_ass,omitempty"`
-	JapaneseASS                              string                    `json:"japanese_ass,omitempty"`
-	ProjectJSON                              string                    `json:"project_json,omitempty"`
-	Segments                                 int                       `json:"segments"`
-	Skipped                                  bool                      `json:"skipped,omitempty"`
-	SkipReason                               string                    `json:"skip_reason,omitempty"`
-	TranslationInputTokens                   int                       `json:"translation_input_tokens,omitempty"`
-	TranslationOutputTokens                  int                       `json:"translation_output_tokens,omitempty"`
-	TranslationTotalTokens                   int                       `json:"translation_total_tokens,omitempty"`
-	TranslationBatches                       int                       `json:"translation_batches,omitempty"`
-	TranslationRows                          int                       `json:"translation_rows,omitempty"`
-	TranslationContextRows                   int                       `json:"translation_context_rows,omitempty"`
-	TranslationReusedRows                    int                       `json:"translation_reused_rows,omitempty"`
-	TranslationTokensPerMinute               float64                   `json:"translation_tokens_per_source_minute,omitempty"`
-	TranslationCostEstimateUSD               float64                   `json:"translation_cost_estimate_usd,omitempty"`
-	TranslationCostPerSourceHour             float64                   `json:"translation_cost_per_source_hour_usd,omitempty"`
-	Profile                                  string                    `json:"profile,omitempty"`
-	ASRMode                                  string                    `json:"asr_mode,omitempty"`
-	RecognitionVocabularyVersion             int                       `json:"recognition_vocabulary_version,omitempty"`
-	RecognitionVocabularyScopes              []string                  `json:"recognition_vocabulary_scopes,omitempty"`
-	TranslationGlossaryVersion               int                       `json:"translation_glossary_version,omitempty"`
-	TranslationGlossaryScopes                []string                  `json:"translation_glossary_scopes,omitempty"`
-	TranslationReleaseTitleContextUsed       bool                      `json:"translation_release_title_context_used,omitempty"`
-	TranslationReleaseStoryContextUsed       bool                      `json:"translation_release_story_context_used,omitempty"`
-	TranslationRowsWithJapaneseScript        int                       `json:"translation_rows_with_japanese_script,omitempty"`
-	TranslationRowsRetranslatedForValidation int                       `json:"translation_rows_retranslated_for_validation,omitempty"`
-	TranslationRetranslationSuccess          int                       `json:"translation_retranslation_success,omitempty"`
-	CanonicalDensityAnomalyRows              int                       `json:"canonical_rows_over_extreme_cps,omitempty"`
-	CanonicalDensityAnomalies                []subtitle.DensityAnomaly `json:"canonical_density_anomalies,omitempty"`
-	TranslationProperNameVariantsDetected    int                       `json:"translation_proper_name_variants_detected,omitempty"`
-	TranslationProperNameVariants            []ProperNameVariant       `json:"translation_proper_name_variants,omitempty"`
-	PipelineVersion                          string                    `json:"pipeline_version,omitempty"`
-	Models                                   map[string]string         `json:"models,omitempty"`
-	DiagnosticSummary                        map[string]any            `json:"diagnostic_summary,omitempty"`
-	SubtitleProvenance                       []ProvenanceArtifact      `json:"subtitle_provenance,omitempty"`
-	Warnings                                 []string                  `json:"warnings,omitempty"`
+	Input                                    string                     `json:"input"`
+	EnglishSRT                               string                     `json:"english_srt,omitempty"`
+	JapaneseSRT                              string                     `json:"japanese_srt,omitempty"`
+	EnglishSRTProvenance                     string                     `json:"english_srt_provenance,omitempty"`
+	JapaneseSRTProvenance                    string                     `json:"japanese_srt_provenance,omitempty"`
+	EnglishASS                               string                     `json:"english_ass,omitempty"`
+	JapaneseASS                              string                     `json:"japanese_ass,omitempty"`
+	ProjectJSON                              string                     `json:"project_json,omitempty"`
+	Segments                                 int                        `json:"segments"`
+	Skipped                                  bool                       `json:"skipped,omitempty"`
+	SkipReason                               string                     `json:"skip_reason,omitempty"`
+	TranslationInputTokens                   int                        `json:"translation_input_tokens,omitempty"`
+	TranslationOutputTokens                  int                        `json:"translation_output_tokens,omitempty"`
+	TranslationTotalTokens                   int                        `json:"translation_total_tokens,omitempty"`
+	TranslationBatches                       int                        `json:"translation_batches,omitempty"`
+	TranslationRows                          int                        `json:"translation_rows,omitempty"`
+	TranslationContextRows                   int                        `json:"translation_context_rows,omitempty"`
+	TranslationReusedRows                    int                        `json:"translation_reused_rows,omitempty"`
+	TranslationTokensPerMinute               float64                    `json:"translation_tokens_per_source_minute,omitempty"`
+	TranslationCostEstimateUSD               float64                    `json:"translation_cost_estimate_usd,omitempty"`
+	TranslationCostPerSourceHour             float64                    `json:"translation_cost_per_source_hour_usd,omitempty"`
+	Profile                                  string                     `json:"profile,omitempty"`
+	ASRMode                                  string                     `json:"asr_mode,omitempty"`
+	RecognitionVocabularyVersion             int                        `json:"recognition_vocabulary_version,omitempty"`
+	RecognitionVocabularyScopes              []string                   `json:"recognition_vocabulary_scopes,omitempty"`
+	TranslationGlossaryVersion               int                        `json:"translation_glossary_version,omitempty"`
+	TranslationGlossaryScopes                []string                   `json:"translation_glossary_scopes,omitempty"`
+	TranslationReleaseTitleContextUsed       bool                       `json:"translation_release_title_context_used,omitempty"`
+	TranslationReleaseStoryContextUsed       bool                       `json:"translation_release_story_context_used,omitempty"`
+	TranslationRowsWithJapaneseScript        int                        `json:"translation_rows_with_japanese_script,omitempty"`
+	TranslationRowsRetranslatedForValidation int                        `json:"translation_rows_retranslated_for_validation,omitempty"`
+	TranslationRetranslationSuccess          int                        `json:"translation_retranslation_success,omitempty"`
+	CanonicalDensityAnomalyRows              int                        `json:"canonical_rows_over_extreme_cps,omitempty"`
+	CanonicalDensityAnomalies                []subtitle.DensityAnomaly  `json:"canonical_density_anomalies,omitempty"`
+	TranslationProperNameVariantsDetected    int                        `json:"translation_proper_name_variants_detected,omitempty"`
+	TranslationProperNameVariants            []ProperNameVariant        `json:"translation_proper_name_variants,omitempty"`
+	ReleaseContext                           *ReleaseContextDiagnostics `json:"release_context,omitempty"`
+	PipelineVersion                          string                     `json:"pipeline_version,omitempty"`
+	Models                                   map[string]string          `json:"models,omitempty"`
+	DiagnosticSummary                        map[string]any             `json:"diagnostic_summary,omitempty"`
+	SubtitleProvenance                       []ProvenanceArtifact       `json:"subtitle_provenance,omitempty"`
+	Warnings                                 []string                   `json:"warnings,omitempty"`
 }
 
 type ProvenanceArtifact struct {
@@ -106,6 +126,7 @@ type Runner struct {
 	activeTitle           string
 	activeReleaseTitle    string
 	activeReleaseStory    string
+	activeReleaseContext  ReleaseContextDiagnostics
 }
 
 func New(cfg config.Config, log *slog.Logger) *Runner {
@@ -250,7 +271,38 @@ func (r *Runner) ProcessWithOptions(ctx context.Context, input string, overwrite
 	worker.activeTitle = options.Title
 	worker.activeReleaseTitle = options.ReleaseTitle
 	worker.activeReleaseStory = options.ReleaseStory
+	worker.activeReleaseContext = options.ReleaseContext
 	return worker.process(ctx, input, overwrite, keepJapanese, progress, memory)
+}
+
+func releaseContextDiagnostics(seed ReleaseContextDiagnostics, title, story string) *ReleaseContextDiagnostics {
+	seed.ReleaseExternalID = strings.TrimSpace(seed.ReleaseExternalID)
+	seed.TitlePresent = strings.TrimSpace(title) != ""
+	seed.StoryPresent = strings.TrimSpace(story) != ""
+	seed.UsedForTranslation = false
+	if seed.ReleaseExternalID == "" && seed.JAVBeaconReleaseID == nil && !seed.TitlePresent && !seed.StoryPresent &&
+		seed.TitleSource == "" && seed.StorySource == "" && seed.LookupMethod == "" && !seed.LookupMatched {
+		return nil
+	}
+	return &seed
+}
+
+func (r *Runner) logReleaseContext(result Result) {
+	if result.ReleaseContext == nil {
+		return
+	}
+	context := result.ReleaseContext
+	r.log.Info("release context diagnostics",
+		"release_external_id", context.ReleaseExternalID,
+		"javbeacon_release_id_present", context.JAVBeaconReleaseID != nil,
+		"title_present", context.TitlePresent,
+		"story_present", context.StoryPresent,
+		"title_source", context.TitleSource,
+		"story_source", context.StorySource,
+		"lookup_method", context.LookupMethod,
+		"lookup_matched", context.LookupMatched,
+		"used_for_translation", context.UsedForTranslation,
+	)
 }
 
 // applyCatalogs resolves the translation glossary (recognition vocabulary is
@@ -285,6 +337,7 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		"asr_experimental": r.cfg.Whisper.ReazonModel,
 		"translator":       r.cfg.Translation.Model,
 	}}
+	result.ReleaseContext = releaseContextDiagnostics(r.activeReleaseContext, r.activeReleaseTitle, r.activeReleaseStory)
 	if r.recognitionVocabulary != nil {
 		_, result.RecognitionVocabularyScopes = r.recognitionVocabulary.Terms(r.cfg.Whisper.Profile, r.activeTitle, 0)
 		result.RecognitionVocabularyVersion = catalog.RecognitionVersion
@@ -297,8 +350,6 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		_, result.TranslationGlossaryScopes = r.translationGlossary.Resolve(r.cfg.Whisper.Profile, key)
 		result.TranslationGlossaryVersion = catalog.GlossaryVersion
 	}
-	result.TranslationReleaseTitleContextUsed = strings.TrimSpace(r.activeReleaseTitle) != ""
-	result.TranslationReleaseStoryContextUsed = strings.TrimSpace(r.activeReleaseStory) != ""
 	base := strings.TrimSuffix(input, filepath.Ext(input))
 	englishPath := base + r.cfg.Output.EnglishSuffix
 	japanesePath := base + r.cfg.Output.JapaneseSuffix
@@ -415,6 +466,11 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		result.TranslationRetranslationSuccess = usage.RowsRepaired
 		result.TranslationProperNameVariantsDetected = len(usage.ProperNameVariants)
 		result.TranslationProperNameVariants = usage.ProperNameVariants
+		result.TranslationReleaseTitleContextUsed = usage.ReleaseContextUsed && strings.TrimSpace(r.activeReleaseTitle) != ""
+		result.TranslationReleaseStoryContextUsed = usage.ReleaseContextUsed && strings.TrimSpace(r.activeReleaseStory) != ""
+		if result.ReleaseContext != nil {
+			result.ReleaseContext.UsedForTranslation = usage.ReleaseContextUsed
+		}
 		durationSeconds, _ := result.DiagnosticSummary["source_duration_seconds"].(float64)
 		if durationSeconds > 0 {
 			result.TranslationTokensPerMinute = float64(usage.TotalTokens) / (durationSeconds / 60)
@@ -446,6 +502,9 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 			"recognition_vocabulary": map[string]any{"format": catalog.RecognitionFormat, "version": result.RecognitionVocabularyVersion, "active_scopes": result.RecognitionVocabularyScopes},
 			"translation_glossary":   map[string]any{"format": catalog.GlossaryFormat, "version": result.TranslationGlossaryVersion, "active_scopes": result.TranslationGlossaryScopes},
 		}
+		if result.ReleaseContext != nil {
+			project["release_context"] = result.ReleaseContext
+		}
 		if r.cfg.Whisper.DebugMode {
 			if raw, readErr := os.ReadFile(transcriptPrefix + ".qwen.json"); readErr == nil {
 				var diagnostics any
@@ -463,6 +522,7 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		}
 		result.ProjectJSON = projectPath
 		result.Segments = len(japaneseOutput)
+		r.logReleaseContext(result)
 		return result, nil
 	}
 
@@ -491,7 +551,13 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 			"input_tokens": result.TranslationInputTokens, "output_tokens": result.TranslationOutputTokens, "total_tokens": result.TranslationTotalTokens,
 			"batches": result.TranslationBatches, "rows": result.TranslationRows, "context_rows": result.TranslationContextRows, "reused_rows": result.TranslationReusedRows,
 			"tokens_per_source_minute": result.TranslationTokensPerMinute, "cost_estimate_usd": result.TranslationCostEstimateUSD, "cost_per_source_hour_usd": result.TranslationCostPerSourceHour,
+			"release_title_context_used": result.TranslationReleaseTitleContextUsed, "release_story_context_used": result.TranslationReleaseStoryContextUsed,
+			"rows_with_japanese_script": result.TranslationRowsWithJapaneseScript, "rows_retranslated_for_validation": result.TranslationRowsRetranslatedForValidation,
+			"retranslation_success": result.TranslationRetranslationSuccess, "proper_name_variants_detected": result.TranslationProperNameVariantsDetected,
 		},
+	}
+	if result.ReleaseContext != nil {
+		project["release_context"] = result.ReleaseContext
 	}
 	if r.cfg.Whisper.DebugMode {
 		if raw, readErr := os.ReadFile(transcriptPrefix + ".qwen.json"); readErr == nil {
@@ -514,6 +580,7 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 	}
 	result.ProjectJSON = projectPath
 	result.Segments = len(englishOutput)
+	r.logReleaseContext(result)
 	progress("complete", 100, "Subtitle generation complete")
 	return result, nil
 }

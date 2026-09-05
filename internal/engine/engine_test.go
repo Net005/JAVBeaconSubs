@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"javbeaconsubs/internal/config"
@@ -25,6 +26,59 @@ func TestApplyCatalogsCatalogIDOverrideWinsOverReleaseTitle(t *testing.T) {
 	r.applyCatalogs("ADN-803", "Release Title")
 	if got := r.cfg.Translation.StructuredGlossary.Terms["先生"]; got != "instructor" {
 		t.Fatalf("resolved term = %q, want catalog ID override to win (instructor)", got)
+	}
+}
+
+func TestReleaseContextDiagnosticsTitleAndStory(t *testing.T) {
+	id := int64(38188)
+	got := releaseContextDiagnostics(ReleaseContextDiagnostics{
+		ReleaseExternalID: " SPSF-50 ", JAVBeaconReleaseID: &id,
+		TitleSource: "javbeacon", StorySource: "javbeacon",
+		LookupMethod: "external_release_id", LookupMatched: true,
+	}, "The Heroine's Fall", "Contra returns for revenge.")
+	if got == nil {
+		t.Fatal("release context diagnostics were omitted")
+	}
+	if got.ReleaseExternalID != "SPSF-50" || !got.TitlePresent || !got.StoryPresent || got.UsedForTranslation {
+		t.Fatalf("release context diagnostics = %#v", got)
+	}
+	if got.JAVBeaconReleaseID == nil || *got.JAVBeaconReleaseID != id || got.LookupMethod != "external_release_id" || !got.LookupMatched {
+		t.Fatalf("release lookup provenance = %#v", got)
+	}
+}
+
+func TestReleaseContextDiagnosticsTitleOnlyAndNone(t *testing.T) {
+	got := releaseContextDiagnostics(ReleaseContextDiagnostics{TitleSource: "manual"}, "START-611", "")
+	if got == nil || !got.TitlePresent || got.StoryPresent {
+		t.Fatalf("title-only release context = %#v", got)
+	}
+	if none := releaseContextDiagnostics(ReleaseContextDiagnostics{}, "", ""); none != nil {
+		t.Fatalf("empty release context should be omitted, got %#v", none)
+	}
+}
+
+func TestHistoricalResultWithoutReleaseContextStillDecodes(t *testing.T) {
+	var result Result
+	if err := json.Unmarshal([]byte(`{"input":"/media/old.mp4","segments":42,"translation_release_title_context_used":true}`), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.ReleaseContext != nil || result.Input != "/media/old.mp4" || result.Segments != 42 {
+		t.Fatalf("historical result decoded incorrectly: %#v", result)
+	}
+}
+
+func TestReleaseContextDiagnosticsDoesNotContainMetadataBody(t *testing.T) {
+	context := releaseContextDiagnostics(ReleaseContextDiagnostics{ReleaseExternalID: "SPSF-50"}, "Secret title body", "Sensitive full story body")
+	encoded, err := json.Marshal(context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(encoded)
+	if strings.Contains(text, "Secret title body") || strings.Contains(text, "Sensitive full story body") {
+		t.Fatalf("release diagnostics leaked metadata body: %s", text)
+	}
+	if !strings.Contains(text, `"title_present":true`) || !strings.Contains(text, `"story_present":true`) {
+		t.Fatalf("release presence flags missing: %s", text)
 	}
 }
 
