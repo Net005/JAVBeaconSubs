@@ -4,6 +4,12 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-06
+
+### Changed
+
+- Replaced Activity's unbounded per-file release-title dump with a compact batch match summary and a collapsed, scrollable review panel. Each reviewed file separates filename, title, story, and match method, while the currently processed file retains the full structured release card and expansion state survives automatic refreshes.
+
 ## [0.13.0] - 2026-09-05
 
 ### Added

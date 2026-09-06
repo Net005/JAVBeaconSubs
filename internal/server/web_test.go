@@ -287,3 +287,21 @@ func TestWebUISeparatesJobDetailsAndPreservesExpandedStory(t *testing.T) {
 		}
 	}
 }
+
+func TestWebUICollapsesAndStructuresBatchReleaseDetails(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{
+		"batch-release-details", "Batch release matches", "Review files",
+		"max-height:360px", "expandedBatchReleaseIDs", "rememberBatchReleaseState",
+		"currentRelease(j)", "Release information · Current file", "entries.length<2",
+		"batchReleaseField('Title'", "batchReleaseField('Story'",
+	} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("structured batch release display is missing %q", required)
+		}
+	}
+}
