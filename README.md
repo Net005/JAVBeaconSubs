@@ -226,6 +226,42 @@ The response is `202 Accepted`, includes the job, and sets `Location: /api/v1/jo
 - `GET /api/v1/health` — dependency and model readiness.
 - `GET /api/v1/settings` and `PUT /api/v1/settings` — read/update persistent translation and post-processing settings (credentials are write-only).
 
+### Scheduled jobs
+
+The Schedules tab and `/api/v1/schedules` API store multiple independent recurring job templates in SQLite. Each schedule has its own paths and job options. Supported recurrence forms are every N hours, daily at a fixed time, every N days at a chosen time, and selected weekdays at a fixed time. `timezone` accepts an IANA timezone such as `Europe/Amsterdam`, so wall-clock times follow daylight-saving changes.
+
+```json
+{
+  "name": "Nightly JAV scan",
+  "enabled": true,
+  "cadence": "daily",
+  "interval": 1,
+  "time_of_day": "03:00",
+  "timezone": "Europe/Amsterdam",
+  "job": {
+    "inputs": ["/mnt/data/movies"],
+    "recursive": true,
+    "overwrite": false,
+    "profile": "jav",
+    "asr_mode": "balanced",
+    "debug_mode": true,
+    "keep_japanese": true,
+    "write_ass": true,
+    "auto_detect_release": true
+  }
+}
+```
+
+- `GET /api/v1/schedules` — list schedules and their next/last run details.
+- `POST /api/v1/schedules` — create a schedule.
+- `PUT /api/v1/schedules/{id}` — replace a schedule or enable/pause it.
+- `DELETE /api/v1/schedules/{id}` — delete the schedule without removing jobs it created.
+- `POST /api/v1/schedules/{id}/run` — immediately queue one job without changing the next automatic run.
+
+For `cadence: "hourly"`, omit `time_of_day` and `weekdays`. Daily schedules require `time_of_day` in 24-hour `HH:MM` form; use interval `1` for a simple fixed time every day. Weekly schedules require `time_of_day` and one or more full lowercase names in `weekdays`, for example `"weekdays":["monday","wednesday","saturday"]`. The legacy singular `weekday` field remains accepted. The nested `job` object accepts the same fields as `POST /api/v1/jobs`.
+
+Jobs created by automation include `schedule_id` and `schedule_name` in their job record and display their source schedule in Activity.
+
 The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, `overwrite`, `keep_japanese`, `write_ass`, `asr_mode`, `profile`, `debug_mode`, `auto_detect_release`, `release_external_id`, `javbeacon_release_id`, `release_title`, and `release_story` fields. The legacy `asr_profile` field remains accepted as an alias. For JSON and multipart jobs, omitting `keep_japanese` uses `output.keep_japanese` from service configuration, and omitting `write_ass` uses `output.write_ass` (`true` by default).
 
 The two output fields are independent and have the same behavior in JSON, multipart, and the web form:

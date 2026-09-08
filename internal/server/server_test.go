@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"mime/multipart"
@@ -52,6 +53,72 @@ func TestOptionalFormBool(t *testing.T) {
 	}
 	if _, err := optionalFormBool("keep_japanese", "sometimes"); err == nil {
 		t.Fatal("invalid boolean was accepted")
+	}
+}
+
+func TestScheduleCRUDAndRunNowAPI(t *testing.T) {
+	root := t.TempDir()
+	media := filepath.Join(root, "movie.mp4")
+	if err := os.WriteFile(media, []byte("fake media"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{APIToken: "test-api-token", Workers: 1, Output: config.OutputConfig{WriteASS: true}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	database, err := store.Open(filepath.Join(root, "jobs.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	runner := engine.New(cfg, logger)
+	post := jobs.NewPostProcessor(config.PostProcessingConfig{Mode: "none", TimeoutSec: 60}, logger)
+	manager, err := jobs.New(cfg, runner, database, post, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authManager, err := auth.New(database, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := New(cfg, manager, runner, authManager, post, database, logger).Handler()
+	payload := fmt.Sprintf(`{"name":"Three nights","enabled":true,"cadence":"weekly","interval":1,"time_of_day":"22:30","weekdays":["monday","wednesday","saturday"],"timezone":"Europe/Amsterdam","job":{"inputs":[%q],"overwrite":false,"profile":"jav","asr_mode":"balanced","keep_japanese":true,"write_ass":true}}`, media)
+
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/schedules", strings.NewReader(payload))
+	request.Header.Set("Authorization", "Bearer test-api-token")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create status %d: %s", response.Code, response.Body.String())
+	}
+	var schedule jobs.Schedule
+	if err := json.Unmarshal(response.Body.Bytes(), &schedule); err != nil {
+		t.Fatal(err)
+	}
+	if schedule.ID == "" || schedule.NextRunAt == nil || len(schedule.Weekdays) != 3 {
+		t.Fatalf("unexpected schedule: %#v", schedule)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/api/v1/schedules", nil)
+	request.Header.Set("Authorization", "Bearer test-api-token")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), schedule.ID) {
+		t.Fatalf("list status %d: %s", response.Code, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/api/v1/schedules/"+schedule.ID+"/run", nil)
+	request.Header.Set("Authorization", "Bearer test-api-token")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusAccepted || !strings.Contains(response.Body.String(), `"status":"queued"`) || !strings.Contains(response.Body.String(), `"schedule_name":"Three nights"`) {
+		t.Fatalf("run-now status %d: %s", response.Code, response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodDelete, "/api/v1/schedules/"+schedule.ID, nil)
+	request.Header.Set("Authorization", "Bearer test-api-token")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("delete status %d: %s", response.Code, response.Body.String())
 	}
 }
 

@@ -60,6 +60,11 @@ func (s *SQLite) migrate() error {
 			value BLOB NOT NULL,
 			updated_at TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS schedules (
+			id TEXT PRIMARY KEY,
+			payload BLOB NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.Exec(statement); err != nil {
@@ -115,6 +120,56 @@ func (s *SQLite) Load() ([]*jobs.Job, error) {
 		result = append(result, &job)
 	}
 	return result, rows.Err()
+}
+
+func (s *SQLite) SaveSchedule(schedule *jobs.Schedule) error {
+	payload, err := json.Marshal(schedule)
+	if err != nil {
+		return fmt.Errorf("encode schedule %s: %w", schedule.ID, err)
+	}
+	_, err = s.db.Exec(`INSERT INTO schedules (id,payload,updated_at) VALUES (?,?,?)
+		ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at`,
+		schedule.ID, payload, time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return fmt.Errorf("save schedule %s: %w", schedule.ID, err)
+	}
+	return nil
+}
+
+func (s *SQLite) LoadSchedules() ([]*jobs.Schedule, error) {
+	rows, err := s.db.Query(`SELECT payload FROM schedules ORDER BY updated_at DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("load schedules: %w", err)
+	}
+	defer rows.Close()
+	var result []*jobs.Schedule
+	for rows.Next() {
+		var payload []byte
+		if err := rows.Scan(&payload); err != nil {
+			return nil, err
+		}
+		var schedule jobs.Schedule
+		if err := json.Unmarshal(payload, &schedule); err != nil {
+			return nil, fmt.Errorf("decode stored schedule: %w", err)
+		}
+		result = append(result, &schedule)
+	}
+	return result, rows.Err()
+}
+
+func (s *SQLite) DeleteSchedule(id string) error {
+	result, err := s.db.Exec(`DELETE FROM schedules WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete schedule %s: %w", id, err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return fmt.Errorf("schedule not found")
+	}
+	return nil
 }
 
 func (s *SQLite) ListPage(page, pageSize int, filter string) ([]*jobs.Job, int, error) {

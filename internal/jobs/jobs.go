@@ -43,6 +43,8 @@ type Request struct {
 	DebugMode    bool     `json:"debug_mode,omitempty"`
 	ExternalID   string   `json:"external_id,omitempty"`
 	CallbackURL  string   `json:"callback_url,omitempty"`
+	ScheduleID   string   `json:"-"`
+	ScheduleName string   `json:"-"`
 
 	// Release metadata (all optional; see internal/release for lookup
 	// precedence). ReleaseExternalID falls back to ExternalID when empty and
@@ -75,6 +77,8 @@ type ReleaseOverrideRequest struct {
 
 type Job struct {
 	ID                   string                         `json:"id"`
+	ScheduleID           string                         `json:"schedule_id,omitempty"`
+	ScheduleName         string                         `json:"schedule_name,omitempty"`
 	ExternalID           string                         `json:"external_id,omitempty"`
 	ReleaseExternalID    string                         `json:"release_external_id,omitempty"`
 	JAVBeaconReleaseID   *int64                         `json:"javbeacon_release_id,omitempty"`
@@ -149,6 +153,7 @@ type Manager struct {
 	log           *slog.Logger
 	mu            sync.RWMutex
 	jobs          map[string]*Job
+	schedules     map[string]*Schedule
 	queue         chan string
 	subscribers   map[chan []byte]struct{}
 	persistence   Persistence
@@ -164,7 +169,7 @@ type Persistence interface {
 func New(cfg config.Config, runner *engine.Runner, persistence Persistence, post *PostProcessor, log *slog.Logger) (*Manager, error) {
 	releaseTimeout := time.Duration(cfg.JAVBeacon.TimeoutSec) * time.Second
 	releaseClient := release.NewClient(cfg.JAVBeacon.BaseURL, cfg.JAVBeacon.APIKey, releaseTimeout)
-	m := &Manager{cfg: cfg, runner: runner, persistence: persistence, post: post, log: log, jobs: make(map[string]*Job), queue: make(chan string, 256), subscribers: make(map[chan []byte]struct{}), releaseClient: releaseClient}
+	m := &Manager{cfg: cfg, runner: runner, persistence: persistence, post: post, log: log, jobs: make(map[string]*Job), schedules: make(map[string]*Schedule), queue: make(chan string, 256), subscribers: make(map[chan []byte]struct{}), releaseClient: releaseClient}
 	stored, err := persistence.Load()
 	if err != nil {
 		return nil, err
@@ -200,6 +205,9 @@ func New(cfg config.Config, runner *engine.Runner, persistence Persistence, post
 		}
 		m.jobs[job.ID] = job
 	}
+	if err := m.loadSchedules(); err != nil {
+		return nil, err
+	}
 	return m, nil
 }
 
@@ -207,6 +215,7 @@ func (m *Manager) Run(ctx context.Context) {
 	for i := 0; i < m.cfg.Workers; i++ {
 		go m.worker(ctx)
 	}
+	go m.runSchedules(ctx.Done())
 	<-ctx.Done()
 }
 
@@ -379,6 +388,7 @@ func (m *Manager) Create(req Request) (*Job, error) {
 	}
 	job := &Job{
 		ID: newID(), ExternalID: req.ExternalID, Status: "queued", Progress: 0, Message: "Waiting for subtitle worker",
+		ScheduleID: req.ScheduleID, ScheduleName: req.ScheduleName,
 		Inputs: req.Inputs, Files: files, CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, KeepJapanese: keepJapanese, WriteASS: writeASS,
 		ASRMode: firstResolution.ASRMode, ASRProfile: firstResolution.Profile, Profile: firstResolution.Profile,
 		ProfileSource: firstResolution.ProfileSource, ASRModeSource: firstResolution.ASRModeSource, FileSettings: fileSettings,

@@ -4,6 +4,13 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-08
+
+### Added
+
+- Added persistent multi-schedule automation backed by SQLite. Each named schedule can run every N hours, daily at a fixed time, every N days at a chosen time, or on any selected combination of weekdays at a fixed time in an IANA timezone, with independent paths, recursion, recognition/profile, overwrite, diagnostics, Japanese/ASS output, callback, and JAVBeacon auto-detection options.
+- Added a Schedules web tab with create, edit, enable/pause, run-now, and delete controls, plus authenticated REST endpoints and in-app Setup examples for schedule management.
+
 ## [0.14.0] - 2026-09-06
 
 ### Changed

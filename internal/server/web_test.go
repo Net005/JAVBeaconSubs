@@ -305,3 +305,22 @@ func TestWebUICollapsesAndStructuresBatchReleaseDetails(t *testing.T) {
 		}
 	}
 }
+
+func TestWebUIProvidesPersistentMultipleSchedules(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{
+		"schedulesNav", "schedulesPanel", "Daily at a fixed time",
+		"Selected days at a fixed time", "scheduleDayMonday", "scheduleDaySunday",
+		"scheduleTimezone", "scheduleAutoRelease", "scheduleKeepJapanese", "scheduleWriteASS",
+		"Create schedule", "Saved schedules", "runScheduleNow", "toggleSchedule", "deleteSchedule",
+		"/api/v1/schedules", "weekdays", "time_of_day", "schedule-origin", "Scheduled · ",
+	} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("schedule UI/API documentation is missing %q", required)
+		}
+	}
+}

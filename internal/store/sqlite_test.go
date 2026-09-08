@@ -68,6 +68,36 @@ func TestTranslationSettingsRoundTrip(t *testing.T) {
 	}
 }
 
+func TestScheduleRoundTripAndDelete(t *testing.T) {
+	database, err := Open(filepath.Join(t.TempDir(), "schedules.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	next := time.Now().UTC().Add(time.Hour).Truncate(time.Microsecond)
+	want := &jobs.Schedule{
+		ID: "sch_test", Name: "Night scan", Enabled: true, Cadence: jobs.ScheduleWeekly,
+		Interval: 1, TimeOfDay: "22:30", Weekdays: []string{"monday", "friday"}, Timezone: "Europe/Amsterdam",
+		Job: jobs.Request{Inputs: []string{"/media/jav"}, Recursive: true, AutoDetectRelease: true}, NextRunAt: &next,
+	}
+	if err := database.SaveSchedule(want); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := database.LoadSchedules()
+	if err != nil || len(loaded) != 1 {
+		t.Fatalf("load schedules: count=%d err=%v", len(loaded), err)
+	}
+	if got := loaded[0]; got.ID != want.ID || len(got.Weekdays) != 2 || !got.Job.Recursive || got.NextRunAt == nil || !got.NextRunAt.Equal(next) {
+		t.Fatalf("schedule round trip mismatch: %#v", got)
+	}
+	if err := database.DeleteSchedule(want.ID); err != nil {
+		t.Fatal(err)
+	}
+	if loaded, err = database.LoadSchedules(); err != nil || len(loaded) != 0 {
+		t.Fatalf("schedule was not deleted: count=%d err=%v", len(loaded), err)
+	}
+}
+
 func TestJobPaginationAndWildcardFiltering(t *testing.T) {
 	database, err := Open(filepath.Join(t.TempDir(), "jobs.db"))
 	if err != nil {

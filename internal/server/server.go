@@ -82,6 +82,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/v1/profiles/catalogs", s.updateCatalogs)
 	mux.HandleFunc("GET /api/v1/models", s.listModels)
 	mux.HandleFunc("POST /api/v1/models/{id}/check", s.checkModel)
+	mux.HandleFunc("GET /api/v1/schedules", s.listSchedules)
+	mux.HandleFunc("POST /api/v1/schedules", s.createSchedule)
+	mux.HandleFunc("PUT /api/v1/schedules/{id}", s.updateSchedule)
+	mux.HandleFunc("DELETE /api/v1/schedules/{id}", s.deleteSchedule)
+	mux.HandleFunc("POST /api/v1/schedules/{id}/run", s.runSchedule)
 	mux.HandleFunc("GET /api/v1/jobs", s.listJobs)
 	mux.HandleFunc("POST /api/v1/jobs", s.createJob)
 	mux.HandleFunc("POST /api/v1/jobs/upload", s.uploadJob)
@@ -632,6 +637,69 @@ func (s *Server) createJob(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Location", "/api/v1/jobs/"+job.ID)
 	writeJSON(w, 202, job)
+}
+
+func (s *Server) listSchedules(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"schedules": s.jobs.ListSchedules()})
+}
+
+func (s *Server) createSchedule(w http.ResponseWriter, r *http.Request) {
+	var input jobs.Schedule
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+		return
+	}
+	created, err := s.jobs.CreateSchedule(input)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	w.Header().Set("Location", "/api/v1/schedules/"+created.ID)
+	writeJSON(w, http.StatusCreated, created)
+}
+
+func (s *Server) updateSchedule(w http.ResponseWriter, r *http.Request) {
+	var input jobs.Schedule
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+		return
+	}
+	updated, err := s.jobs.UpdateSchedule(r.PathValue("id"), input)
+	if err != nil {
+		status := http.StatusBadRequest
+		if err.Error() == "schedule not found" {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+func (s *Server) deleteSchedule(w http.ResponseWriter, r *http.Request) {
+	if err := s.jobs.DeleteSchedule(r.PathValue("id")); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) runSchedule(w http.ResponseWriter, r *http.Request) {
+	job, err := s.jobs.RunScheduleNow(r.PathValue("id"))
+	if err != nil {
+		status := http.StatusBadRequest
+		if err.Error() == "schedule not found" {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	w.Header().Set("Location", "/api/v1/jobs/"+job.ID)
+	writeJSON(w, http.StatusAccepted, job)
 }
 
 func (s *Server) uploadJob(w http.ResponseWriter, r *http.Request) {
