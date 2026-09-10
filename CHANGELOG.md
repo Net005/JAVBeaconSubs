@@ -4,6 +4,16 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-09-10
+
+### Changed
+
+- Redesigned the Activity job list so each job reads as a clearly separated card: stronger background contrast against the page, more breathing room between cards, a status-colored accent border (running/complete/failed/cancelled/skipped), and a divider between the job header and its details, instead of the previous low-contrast, tightly packed stack.
+
+### Added
+
+- The New Subtitle Job form's recognition accuracy, content profile, and option checkboxes (diagnostics, replace existing, keep Japanese, export ASS, auto-detect release, include subfolders) are now remembered in the browser and restored automatically after a server restart or a page reload.
+
 ## [0.15.0] - 2026-09-08
 
 ### Added
