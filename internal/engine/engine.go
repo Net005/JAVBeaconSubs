@@ -366,6 +366,7 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 			result.loadExistingProvenance(projectPath, englishPath, japanesePath)
 			result.Skipped = true
 			result.SkipReason = "English subtitles already exist; enable Replace existing subtitles to rerun recognition or change accuracy"
+			r.alignArtifactTimes(input, &result)
 			return result, nil
 		}
 	}
@@ -523,6 +524,7 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		result.ProjectJSON = projectPath
 		result.Segments = len(japaneseOutput)
 		r.logReleaseContext(result)
+		r.alignArtifactTimes(input, &result)
 		return result, nil
 	}
 
@@ -581,6 +583,7 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 	result.ProjectJSON = projectPath
 	result.Segments = len(englishOutput)
 	r.logReleaseContext(result)
+	r.alignArtifactTimes(input, &result)
 	progress("complete", 100, "Subtitle generation complete")
 	return result, nil
 }
@@ -591,6 +594,30 @@ func existingArtifact(path string) string {
 		return ""
 	}
 	return path
+}
+
+// alignArtifactTimes sets the modification time of every non-empty
+// subtitle/provenance/diagnostic sidecar path recorded on result to match
+// the source video's modification time. Folders sorted by date then keep
+// each video and its generated files grouped together. Runs for freshly
+// generated files as well as files that already existed and were only
+// discovered (the "skip — already exists" path), so a rescan realigns
+// older files too. Best-effort: stat/chtimes failures are logged, never
+// fatal to the job.
+func (r *Runner) alignArtifactTimes(input string, result *Result) {
+	info, err := os.Stat(input)
+	if err != nil {
+		return
+	}
+	modTime := info.ModTime()
+	for _, path := range []string{result.EnglishSRT, result.JapaneseSRT, result.EnglishASS, result.JapaneseASS, result.ProjectJSON, result.EnglishSRTProvenance, result.JapaneseSRTProvenance} {
+		if path == "" {
+			continue
+		}
+		if err := os.Chtimes(path, modTime, modTime); err != nil {
+			r.log.Warn("align subtitle file time with video", "file", path, "error", err)
+		}
+	}
 }
 
 func (r *Runner) normalizeSubtitles(track, input string, segments []subtitle.Segment) ([]subtitle.Segment, error) {

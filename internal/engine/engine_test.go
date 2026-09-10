@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"javbeaconsubs/internal/config"
 	catalog "javbeaconsubs/internal/profile"
@@ -212,5 +213,62 @@ func TestExistingProvenancePrefersSubtitleProjectMetadata(t *testing.T) {
 	result.loadExistingProvenance(projectPath, srtPath)
 	if len(result.SubtitleProvenance) != 1 || result.SubtitleProvenance[0].Status != subtitle.ProvenanceValid || result.SubtitleProvenance[0].SidecarPath != "" {
 		t.Fatalf("project provenance was not used: %#v", result.SubtitleProvenance)
+	}
+}
+
+func TestAlignArtifactTimesMatchesVideoModTime(t *testing.T) {
+	root := t.TempDir()
+	videoPath := filepath.Join(root, "movie.mp4")
+	srtPath := filepath.Join(root, "movie.en.srt")
+	jsonPath := filepath.Join(root, "movie.subtitles.json")
+	for _, path := range []string{videoPath, srtPath, jsonPath} {
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	videoModTime := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+	if err := os.Chtimes(videoPath, videoModTime, videoModTime); err != nil {
+		t.Fatal(err)
+	}
+	sidecarModTime := time.Now()
+	if err := os.Chtimes(srtPath, sidecarModTime, sidecarModTime); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(jsonPath, sidecarModTime, sidecarModTime); err != nil {
+		t.Fatal(err)
+	}
+	runner := &Runner{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	result := &Result{EnglishSRT: srtPath, ProjectJSON: jsonPath}
+	runner.alignArtifactTimes(videoPath, result)
+	for _, path := range []string{srtPath, jsonPath} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !info.ModTime().Equal(videoModTime) {
+			t.Fatalf("%s mod time = %v, want %v", path, info.ModTime(), videoModTime)
+		}
+	}
+}
+
+func TestAlignArtifactTimesIgnoresEmptyFieldsAndMissingVideo(t *testing.T) {
+	root := t.TempDir()
+	srtPath := filepath.Join(root, "movie.en.srt")
+	if err := os.WriteFile(srtPath, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before := time.Date(2021, 6, 7, 8, 9, 10, 0, time.UTC)
+	if err := os.Chtimes(srtPath, before, before); err != nil {
+		t.Fatal(err)
+	}
+	runner := &Runner{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	result := &Result{EnglishSRT: srtPath}
+	runner.alignArtifactTimes(filepath.Join(root, "missing-video.mp4"), result)
+	info, err := os.Stat(srtPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.ModTime().Equal(before) {
+		t.Fatalf("sidecar time changed despite missing video: got %v, want unchanged %v", info.ModTime(), before)
 	}
 }

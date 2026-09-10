@@ -4,6 +4,13 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-09-10
+
+### Added
+
+- Generated subtitle, ASS, diagnostics (`.subtitles.json`), and provenance sidecar files now have their modification time set to match their source video's modification time, so a folder sorted by date keeps each video grouped with its own subtitle files. This applies both to freshly generated output and, on any rescan, to files that already existed and were only discovered (the "already exists, skipped" path) — rescanning an older folder realigns its existing files without regenerating them.
+- The New Subtitle Job form's Server paths (the folder/file list for path-based submissions) are now remembered alongside the other form defaults, restored automatically after a server restart or a page reload.
+
 ## [0.16.0] - 2026-09-10
 
 ### Changed
