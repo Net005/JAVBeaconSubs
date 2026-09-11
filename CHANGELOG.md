@@ -4,6 +4,12 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-09-11
+
+### Fixed
+
+- A translation batch response that omits a single row (a known structured-output slip from the translation model, not a JSON error) no longer aborts the whole job. The batch is retried once; if the row is still missing afterward, its original Japanese source text is kept in place rather than failing the file. A new `translation_rows_untranslated` diagnostic (in `.subtitles.json`'s `translation_usage` and the job API) reports how many rows fell back this way, for QA visibility.
+
 ## [0.18.0] - 2026-09-11
 
 ### Fixed

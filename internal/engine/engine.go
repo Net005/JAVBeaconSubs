@@ -97,6 +97,7 @@ type Result struct {
 	TranslationRowsWithJapaneseScript        int                        `json:"translation_rows_with_japanese_script,omitempty"`
 	TranslationRowsRetranslatedForValidation int                        `json:"translation_rows_retranslated_for_validation,omitempty"`
 	TranslationRetranslationSuccess          int                        `json:"translation_retranslation_success,omitempty"`
+	TranslationRowsUntranslated              int                        `json:"translation_rows_untranslated,omitempty"`
 	CanonicalDensityAnomalyRows              int                        `json:"canonical_rows_over_extreme_cps,omitempty"`
 	CanonicalDensityAnomalies                []subtitle.DensityAnomaly  `json:"canonical_density_anomalies,omitempty"`
 	TranslationProperNameVariantsDetected    int                        `json:"translation_proper_name_variants_detected,omitempty"`
@@ -465,6 +466,7 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		result.TranslationRowsWithJapaneseScript = usage.RowsWithJapaneseScript
 		result.TranslationRowsRetranslatedForValidation = usage.RowsWithJapaneseScript
 		result.TranslationRetranslationSuccess = usage.RowsRepaired
+		result.TranslationRowsUntranslated = usage.RowsUntranslated
 		result.TranslationProperNameVariantsDetected = len(usage.ProperNameVariants)
 		result.TranslationProperNameVariants = usage.ProperNameVariants
 		result.TranslationReleaseTitleContextUsed = usage.ReleaseContextUsed && strings.TrimSpace(r.activeReleaseTitle) != ""
@@ -556,6 +558,7 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 			"release_title_context_used": result.TranslationReleaseTitleContextUsed, "release_story_context_used": result.TranslationReleaseStoryContextUsed,
 			"rows_with_japanese_script": result.TranslationRowsWithJapaneseScript, "rows_retranslated_for_validation": result.TranslationRowsRetranslatedForValidation,
 			"retranslation_success": result.TranslationRetranslationSuccess, "proper_name_variants_detected": result.TranslationProperNameVariantsDetected,
+			"rows_untranslated": result.TranslationRowsUntranslated,
 		},
 	}
 	if result.ReleaseContext != nil {

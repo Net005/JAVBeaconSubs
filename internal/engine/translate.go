@@ -50,6 +50,10 @@ type tokenUsage struct {
 	// ReleaseContextUsed is true only after at least one successful model call
 	// whose system prompt contained the guarded release title/story block.
 	ReleaseContextUsed bool `json:"-"`
+	// RowsUntranslated counts rows that still had no translation after a
+	// batch-level retry; their source text is kept in place rather than
+	// failing the whole job. Diagnostic only.
+	RowsUntranslated int `json:"-"`
 }
 type translationResult struct {
 	Translations []struct {
@@ -503,6 +507,22 @@ func (r *Runner) repairMixedScriptLeaks(ctx context.Context, source []subtitle.S
 	return detected, repaired, usage, nil
 }
 
+// missingTranslationIDs returns, in ascending order, every row ID in
+// [start,end) that translate() requested a translation for but byID holds
+// no non-empty text for.
+func missingTranslationIDs(translateIDs map[int]bool, start, end int, byID map[int]string) []int {
+	var missing []int
+	for i := start; i < end; i++ {
+		if !translateIDs[i] {
+			continue
+		}
+		if text, ok := byID[i]; !ok || text == "" {
+			missing = append(missing, i)
+		}
+	}
+	return missing
+}
+
 func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progress ProgressFunc, memory *TranslationMemory) ([]subtitle.Segment, tokenUsage, error) {
 	// Defense in depth: punctuation-only ASR artifacts must never consume paid
 	// translation tokens even if a future caller bypasses the ASR cleanup path.
@@ -567,13 +587,43 @@ func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progr
 		for _, item := range translated.Translations {
 			byID[item.ID] = strings.TrimSpace(item.Text)
 		}
+		// A model occasionally omits one row's ID from an otherwise valid JSON
+		// response. Give the batch one retry before falling back, rather than
+		// failing a file that is otherwise translating cleanly.
+		if missing := missingTranslationIDs(translateIDs, start, end, byID); len(missing) > 0 {
+			r.log.Warn("translation batch omitted rows; retrying batch once", "rows", start+1, "end", end, "missing_rows", missing)
+			var retried translationResult
+			retryUsage, retryErr := r.chat(ctx, requestBody, &retried)
+			if retryErr != nil {
+				r.log.Warn("translation batch retry failed", "rows", start+1, "end", end, "error", retryErr)
+			} else {
+				totalUsage.PromptTokens += retryUsage.PromptTokens
+				totalUsage.CompletionTokens += retryUsage.CompletionTokens
+				totalUsage.TotalTokens += retryUsage.TotalTokens
+				totalUsage.Batches++
+				for _, item := range retried.Translations {
+					if existing, ok := byID[item.ID]; ok && existing != "" {
+						continue
+					}
+					if text := strings.TrimSpace(item.Text); text != "" {
+						byID[item.ID] = text
+					}
+				}
+			}
+			for _, id := range missingTranslationIDs(translateIDs, start, end, byID) {
+				r.log.Warn("translation row still missing after retry; keeping source text", "row", id)
+				totalUsage.RowsUntranslated++
+			}
+		}
 		for i := start; i < end; i++ {
 			if !translateIDs[i] {
 				continue
 			}
 			text, ok := byID[i]
 			if !ok || text == "" {
-				return nil, totalUsage, fmt.Errorf("translation response omitted row %d", i)
+				// Left as the original source text (out was seeded from
+				// source above); already counted in RowsUntranslated.
+				continue
 			}
 			out[i].Text = text
 			if r.cfg.Translation.TranslationMemory {

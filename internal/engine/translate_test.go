@@ -580,3 +580,58 @@ func equalInts(a, b []int) bool {
 	}
 	return true
 }
+
+func TestTranslateRetriesBatchOnceWhenRowOmitted(t *testing.T) {
+	attempt := 0
+	server, calls := newFakeTranslationServer(t, func(call fakeTranslationCall) map[int]string {
+		attempt++
+		if attempt == 1 {
+			return map[int]string{0: "Hello."} // row 1 omitted on the first attempt
+		}
+		return map[int]string{0: "Hello.", 1: "Goodbye."}
+	})
+	runner := newRepairTestRunner(server.URL, false)
+	out, usage, err := runner.translate(context.Background(), repairTestSegments(), func(string, int, string) {}, NewTranslationMemory())
+	if err != nil {
+		t.Fatalf("translate returned an error despite a successful retry: %v", err)
+	}
+	if len(*calls) != 2 {
+		t.Fatalf("expected exactly one retry (2 calls total), got %d", len(*calls))
+	}
+	if out[1].Text != "Goodbye." {
+		t.Fatalf("row 1 text = %q, want the retried translation", out[1].Text)
+	}
+	if usage.RowsUntranslated != 0 {
+		t.Fatalf("RowsUntranslated = %d, want 0 after a successful retry", usage.RowsUntranslated)
+	}
+}
+
+func TestTranslateFallsBackToSourceTextWhenRetryStillOmitsRow(t *testing.T) {
+	server, calls := newFakeTranslationServer(t, func(call fakeTranslationCall) map[int]string {
+		return map[int]string{0: "Hello."} // row 1 always omitted
+	})
+	runner := newRepairTestRunner(server.URL, false)
+	segments := repairTestSegments()
+	out, usage, err := runner.translate(context.Background(), segments, func(string, int, string) {}, NewTranslationMemory())
+	if err != nil {
+		t.Fatalf("translate failed the whole job over one persistently omitted row: %v", err)
+	}
+	if len(*calls) != 2 {
+		t.Fatalf("expected exactly one retry attempt (2 calls total), got %d", len(*calls))
+	}
+	if out[1].Text != segments[1].Text {
+		t.Fatalf("row 1 text = %q, want the original source text %q kept as a fallback", out[1].Text, segments[1].Text)
+	}
+	if usage.RowsUntranslated != 1 {
+		t.Fatalf("RowsUntranslated = %d, want 1", usage.RowsUntranslated)
+	}
+}
+
+func TestMissingTranslationIDsFindsOnlyRequestedGaps(t *testing.T) {
+	translateIDs := map[int]bool{1: true, 2: true, 3: true}
+	byID := map[int]string{1: "one", 2: "", 3: "three"}
+	got := missingTranslationIDs(translateIDs, 0, 5, byID)
+	if len(got) != 1 || got[0] != 2 {
+		t.Fatalf("missing = %v, want [2] (only the requested-but-empty row)", got)
+	}
+}
