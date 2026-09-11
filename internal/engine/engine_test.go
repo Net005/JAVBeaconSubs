@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -270,5 +271,85 @@ func TestAlignArtifactTimesIgnoresEmptyFieldsAndMissingVideo(t *testing.T) {
 	}
 	if !info.ModTime().Equal(before) {
 		t.Fatalf("sidecar time changed despite missing video: got %v, want unchanged %v", info.ModTime(), before)
+	}
+}
+
+func TestSplitOversizedSegmentDividesTextAndAnchorsAcrossSubCues(t *testing.T) {
+	segment := subtitle.Segment{
+		StartMS:       0,
+		EndMS:         100_000,
+		Text:          "one two three four five six seven eight nine ten",
+		TimingAnchors: []int64{5_000, 15_000, 45_000, 65_000, 95_000},
+	}
+	parts := splitOversizedSegment(segment, 40_000)
+	if len(parts) != 3 {
+		t.Fatalf("parts = %d, want 3 (ceil(100000/40000))", len(parts))
+	}
+	var words []string
+	for i, part := range parts {
+		if part.EndMS-part.StartMS > 40_000 {
+			t.Fatalf("part %d spans %dms, exceeds 40000ms limit", i, part.EndMS-part.StartMS)
+		}
+		if part.StartMS != 0 && i > 0 && part.StartMS != parts[i-1].EndMS {
+			t.Fatalf("part %d starts at %d, want contiguous with previous end %d", i, part.StartMS, parts[i-1].EndMS)
+		}
+		words = append(words, strings.Fields(part.Text)...)
+	}
+	if parts[len(parts)-1].EndMS != segment.EndMS {
+		t.Fatalf("last part ends at %d, want %d", parts[len(parts)-1].EndMS, segment.EndMS)
+	}
+	if got, want := strings.Join(words, " "), segment.Text; got != want {
+		t.Fatalf("reassembled text = %q, want %q (no words lost or reordered)", got, want)
+	}
+	for _, part := range parts {
+		for _, anchor := range part.TimingAnchors {
+			if anchor < part.StartMS || anchor >= part.EndMS {
+				t.Fatalf("anchor %d assigned to part [%d,%d) is outside its range", anchor, part.StartMS, part.EndMS)
+			}
+		}
+	}
+}
+
+func TestSplitOversizedSegmentLeavesSmallSegmentsAlone(t *testing.T) {
+	segment := subtitle.Segment{StartMS: 1_000, EndMS: 5_000, Text: "short cue"}
+	parts := splitOversizedSegment(segment, 40_000)
+	if len(parts) != 1 || !reflect.DeepEqual(parts[0], segment) {
+		t.Fatalf("parts = %#v, want the original segment unchanged", parts)
+	}
+}
+
+func TestSplitOversizedSegmentsResolvesPreviouslyRejectedCollapsedTail(t *testing.T) {
+	runner := &Runner{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	limit := whisperSegmentSafetyLimit(30_000)
+	segments := []subtitle.Segment{
+		{StartMS: 0, EndMS: 5_000, Text: "normal cue"},
+		{StartMS: 5_000, EndMS: 193_780, Text: "a long collapsed stretch of transcribed filler text spanning several minutes"},
+	}
+	split := runner.splitOversizedSegments(segments, limit, "test")
+	if err := validateSegments(split, 0, limit); err != nil {
+		t.Fatalf("split segments still fail validation: %v", err)
+	}
+	if len(split) < 3 {
+		t.Fatalf("expected the collapsed segment to be split into multiple sub-cues, got %d total segments", len(split))
+	}
+	if !reflect.DeepEqual(split[0], segments[0]) {
+		t.Fatalf("the already-valid leading segment should be untouched: %#v", split[0])
+	}
+}
+
+func TestSplitOversizedSegmentsIsNoOpWhenNothingExceedsLimit(t *testing.T) {
+	runner := &Runner{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	segments := []subtitle.Segment{
+		{StartMS: 0, EndMS: 1_000, Text: "a"},
+		{StartMS: 1_000, EndMS: 2_000, Text: "b"},
+	}
+	got := runner.splitOversizedSegments(segments, 40_000, "test")
+	if len(got) != len(segments) {
+		t.Fatalf("got %d segments, want %d unchanged", len(got), len(segments))
+	}
+	for i := range segments {
+		if !reflect.DeepEqual(got[i], segments[i]) {
+			t.Fatalf("segment %d changed: got %#v, want %#v", i, got[i], segments[i])
+		}
 	}
 }

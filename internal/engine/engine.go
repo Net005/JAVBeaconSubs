@@ -905,6 +905,7 @@ func (r *Runner) transcribeQwen(ctx context.Context, wav, prefix string, useGPU 
 	for _, item := range doc.Segments {
 		segments = append(segments, subtitle.Segment{StartMS: item.StartMS, EndMS: item.EndMS, Text: item.Text, TimingAnchors: item.TimingAnchors})
 	}
+	segments = r.splitOversizedSegments(segments, int64(c.MaxSegmentSec)*1000, "Qwen")
 	if err := validateSegments(segments, doc.DurationMS, int64(c.MaxSegmentSec)*1000); err != nil {
 		return nil, fmt.Errorf("validate Qwen pipeline output: %w", err)
 	}
@@ -958,6 +959,7 @@ func (r *Runner) transcribeReazon(ctx context.Context, wav, prefix string, useGP
 	for _, item := range doc.Segments {
 		segments = append(segments, subtitle.Segment{StartMS: item.StartMS, EndMS: item.EndMS, Text: item.Text})
 	}
+	segments = r.splitOversizedSegments(segments, int64(c.MaxSegmentSec)*1000, "ReazonSpeech")
 	if err := validateSegments(segments, doc.DurationMS, int64(c.MaxSegmentSec)*1000); err != nil {
 		return nil, fmt.Errorf("validate ReazonSpeech output: %w", err)
 	}
@@ -1037,6 +1039,7 @@ func (r *Runner) transcribeWhisper(ctx context.Context, wav, prefix string, tran
 		}
 		out = append(out, subtitle.Segment{StartMS: start, EndMS: end, Text: item.Text})
 	}
+	out = r.splitOversizedSegments(out, whisperSegmentSafetyLimit(int64(c.MaxSegmentSec)*1000), "whisper fallback")
 	if err := validateSegments(out, 0, whisperSegmentSafetyLimit(int64(c.MaxSegmentSec)*1000)); err != nil {
 		return nil, fmt.Errorf("validate whisper output: %w", err)
 	}
@@ -1058,6 +1061,77 @@ func whisperSegmentSafetyLimit(configured int64) int64 {
 		allowance = 10_000
 	}
 	return configured + allowance
+}
+
+// splitOversizedSegments breaks any segment whose span exceeds maxSegmentMS
+// into consecutive sub-segments that each fit within the limit, so a single
+// collapsed ASR segment (usually a stretch of non-speech audio the
+// transcription engine failed to break up on its own) no longer fails the
+// whole job. Logs once per call when a split actually happens, naming the
+// source ASR path for operational visibility.
+func (r *Runner) splitOversizedSegments(segments []subtitle.Segment, maxSegmentMS int64, source string) []subtitle.Segment {
+	if maxSegmentMS <= 0 {
+		return segments
+	}
+	split := 0
+	out := make([]subtitle.Segment, 0, len(segments))
+	for _, segment := range segments {
+		if segment.EndMS-segment.StartMS <= maxSegmentMS {
+			out = append(out, segment)
+			continue
+		}
+		split++
+		out = append(out, splitOversizedSegment(segment, maxSegmentMS)...)
+	}
+	if split == 0 {
+		return segments
+	}
+	r.log.Warn("collapsed ASR segment split into sub-cues instead of failing the job", "source", source, "segments_split", split, "original_count", len(segments), "resulting_count", len(out))
+	return out
+}
+
+// splitOversizedSegment divides one oversized segment into consecutive
+// sub-segments of at most maxSegmentMS each, distributing its text across
+// them in proportion to word count and reassigning any TimingAnchors that
+// fall within each sub-segment's range. This is a best-effort recovery for
+// what is already a degenerate ASR result: text boundaries here are not
+// real sentence breaks, only an even split across the available time.
+// Downstream cue normalization re-paces the result using the project's
+// usual chunking rules.
+func splitOversizedSegment(segment subtitle.Segment, maxSegmentMS int64) []subtitle.Segment {
+	total := segment.EndMS - segment.StartMS
+	parts := int((total + maxSegmentMS - 1) / maxSegmentMS)
+	if parts < 2 {
+		return []subtitle.Segment{segment}
+	}
+	words := strings.Fields(segment.Text)
+	out := make([]subtitle.Segment, 0, parts)
+	start := segment.StartMS
+	for i := 0; i < parts; i++ {
+		end := start + maxSegmentMS
+		if i == parts-1 || end > segment.EndMS {
+			end = segment.EndMS
+		}
+		wordStart := i * len(words) / parts
+		wordEnd := (i + 1) * len(words) / parts
+		if i == parts-1 {
+			wordEnd = len(words)
+		}
+		var anchors []int64
+		for _, anchor := range segment.TimingAnchors {
+			if anchor >= start && anchor < end {
+				anchors = append(anchors, anchor)
+			}
+		}
+		out = append(out, subtitle.Segment{
+			StartMS:       start,
+			EndMS:         end,
+			Text:          strings.Join(words[wordStart:wordEnd], " "),
+			TimingAnchors: anchors,
+		})
+		start = end
+	}
+	return out
 }
 
 func validateSegments(segments []subtitle.Segment, durationMS, maxSegmentMS int64) error {

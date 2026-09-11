@@ -4,6 +4,12 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-09-11
+
+### Fixed
+
+- A single collapsed ASR segment (typically a long stretch of non-speech audio the transcription engine failed to break up, spanning multiple minutes as one cue) no longer fails the whole job. Qwen, ReazonSpeech, and the whisper.cpp whole-file fallback all now split any segment that exceeds the configured safety limit into consecutive sub-cues before validation, distributing its text and timing anchors across them; the usual cue normalization then re-paces the result. The oversized-segment rejection itself is unchanged for genuinely invalid output (reversed or out-of-order timestamps still fail as before) — this only prevents a merely-too-long-but-otherwise-valid segment from aborting an entire file.
+
 ## [0.17.0] - 2026-09-10
 
 ### Added
