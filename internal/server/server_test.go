@@ -167,10 +167,10 @@ func TestSingleFileUploadCreatesPersistedJob(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &job); err != nil {
 		t.Fatal(err)
 	}
-	if job.ExternalID != "movie-42" || len(job.Files) != 1 || !job.KeepJapanese || job.WriteASS {
+	if job.ExternalID != "movie-42" || len(job.Inputs) != 1 || len(job.Files) != 0 || job.Status != "queued" || !job.KeepJapanese || job.WriteASS {
 		t.Fatalf("unexpected job: %#v", job)
 	}
-	if _, err := os.Stat(job.Files[0]); err != nil {
+	if _, err := os.Stat(job.Inputs[0]); err != nil {
 		t.Fatalf("uploaded file was not stored: %v", err)
 	}
 	stored, err := database.Load()
@@ -241,10 +241,16 @@ func TestUploadJobWithReleaseContextFieldsPersists(t *testing.T) {
 	if job.ReleaseStory != "Example story context." || job.ReleaseStorySource != "manual" {
 		t.Fatalf("release story = %q source = %q", job.ReleaseStory, job.ReleaseStorySource)
 	}
-	if job.ReleaseLookupMatched {
-		t.Fatalf("no JAVBeacon is configured, so the lookup must not report a match: %#v", job)
+	deadline := time.Now().Add(time.Second)
+	current := &job
+	for current.ReleaseLookupMethod == "" && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+		current, _ = manager.Get(job.ID)
 	}
-	if job.ReleaseLookupError == "" {
+	if current.ReleaseLookupMatched {
+		t.Fatalf("no JAVBeacon is configured, so the lookup must not report a match: %#v", current)
+	}
+	if current.ReleaseLookupError == "" {
 		t.Fatal("expected a non-fatal release_lookup_error to be reported")
 	}
 }

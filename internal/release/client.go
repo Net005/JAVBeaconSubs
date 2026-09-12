@@ -27,6 +27,7 @@ import (
 type Release struct {
 	ID            int64  `json:"id"`
 	VideoID       string `json:"video_id"`
+	ReleaseDate   string `json:"release_date,omitempty"`
 	StashFilePath string `json:"stash_file_path,omitempty"`
 	Title         string `json:"title"`
 	Story         string `json:"story"`

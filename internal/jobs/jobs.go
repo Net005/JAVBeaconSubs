@@ -55,6 +55,8 @@ type Request struct {
 	ReleaseTitle       string `json:"release_title,omitempty"`
 	ReleaseStory       string `json:"release_story,omitempty"`
 	AutoDetectRelease  bool   `json:"auto_detect_release,omitempty"`
+	OnlyNewReleases    bool   `json:"only_new_releases,omitempty"`
+	ReleaseStartDate   string `json:"release_start_date,omitempty"`
 
 	// FileReleaseOverrides sets per-file release metadata for a batch job
 	// (TODO Part 33), keyed by the same path used in Inputs for that file.
@@ -90,10 +92,14 @@ type Job struct {
 	ReleaseLookupMatched bool                           `json:"release_lookup_matched,omitempty"`
 	ReleaseLookupError   string                         `json:"release_lookup_error,omitempty"`
 	ReleaseProvider      string                         `json:"release_provider,omitempty"`
+	ReleaseDate          string                         `json:"release_date,omitempty"`
 	ReleaseStashSceneID  string                         `json:"release_stash_scene_id,omitempty"`
 	ReleaseStashURL      string                         `json:"release_stash_url,omitempty"`
 	ReleaseStashFilePath string                         `json:"release_stash_file_path,omitempty"`
 	AutoDetectRelease    bool                           `json:"auto_detect_release,omitempty"`
+	OnlyNewReleases      bool                           `json:"only_new_releases,omitempty"`
+	ReleaseStartDate     string                         `json:"release_start_date,omitempty"`
+	ScanResults          []ScanResult                   `json:"scan_results,omitempty"`
 	Status               string                         `json:"status"`
 	Phase                string                         `json:"phase,omitempty"`
 	Progress             int                            `json:"progress"`
@@ -128,9 +134,8 @@ type Job struct {
 }
 
 // FileReleaseMetadata is one file's resolved release metadata inside a
-// batch job (TODO Part 33) - present only for files with an explicit
-// override in Request.FileReleaseOverrides; absence means "use the
-// job-level release fields," mirroring FileSettings' fallback shape.
+// batch job. It is populated for explicit overrides and per-file automatic
+// matches; absence means "use the job-level release fields."
 type FileReleaseMetadata struct {
 	ReleaseExternalID    string `json:"release_external_id,omitempty"`
 	JAVBeaconReleaseID   *int64 `json:"javbeacon_release_id,omitempty"`
@@ -142,9 +147,26 @@ type FileReleaseMetadata struct {
 	ReleaseLookupMatched bool   `json:"release_lookup_matched,omitempty"`
 	ReleaseLookupError   string `json:"release_lookup_error,omitempty"`
 	ReleaseProvider      string `json:"release_provider,omitempty"`
+	ReleaseDate          string `json:"release_date,omitempty"`
 	ReleaseStashSceneID  string `json:"release_stash_scene_id,omitempty"`
 	ReleaseStashURL      string `json:"release_stash_url,omitempty"`
 	ReleaseStashFilePath string `json:"release_stash_file_path,omitempty"`
+}
+
+// ScanResult explains whether a discovered media file was admitted to the
+// translation queue. It remains on the job so operators can audit release
+// matches and date-filter decisions without searching logs.
+type ScanResult struct {
+	Path           string `json:"path"`
+	Filename       string `json:"filename"`
+	Included       bool   `json:"included"`
+	Reason         string `json:"reason"`
+	ReleaseMatched bool   `json:"release_matched"`
+	ReleaseDate    string `json:"release_date,omitempty"`
+	VideoID        string `json:"video_id,omitempty"`
+	Title          string `json:"title,omitempty"`
+	Provider       string `json:"provider,omitempty"`
+	LookupMethod   string `json:"lookup_method,omitempty"`
 }
 
 type Manager struct {
@@ -254,7 +276,7 @@ func buildFileReleaseMetadata(externalID string, javbeaconID *int64, resolution 
 		ReleaseTitle: resolution.Title, ReleaseStory: resolution.Story,
 		ReleaseTitleSource: resolution.TitleSource, ReleaseStorySource: resolution.StorySource,
 		ReleaseLookupMethod: resolution.LookupMethod, ReleaseLookupMatched: resolution.LookupMatched, ReleaseLookupError: resolution.LookupError,
-		ReleaseProvider: resolution.Provider, ReleaseStashSceneID: resolution.StashSceneID, ReleaseStashURL: resolution.StashURL,
+		ReleaseProvider: resolution.Provider, ReleaseDate: resolution.ReleaseDate, ReleaseStashSceneID: resolution.StashSceneID, ReleaseStashURL: resolution.StashURL,
 		ReleaseStashFilePath: resolution.StashFilePath,
 	}
 }
@@ -295,10 +317,115 @@ func (m *Manager) UpdateJAVBeacon(value config.JAVBeaconConfig) {
 	m.mu.Unlock()
 }
 
+// Create retains the synchronous preparation contract used by internal
+// callers and tests. HTTP and scheduled submissions use Queue so discovery
+// and JAVBeacon matching are visible as job progress immediately.
 func (m *Manager) Create(req Request) (*Job, error) {
-	if len(req.Inputs) == 0 {
-		return nil, fmt.Errorf("inputs must contain at least one file or folder")
+	return m.prepare(req, "", time.Time{})
+}
+
+// Queue persists a lightweight job before doing filesystem discovery or
+// network lookups. This makes a submission visible immediately, even when a
+// large recursive scan or JAVBeacon matching takes time.
+func (m *Manager) Queue(req Request) (*Job, error) {
+	if err := validateRequest(req); err != nil {
+		return nil, err
 	}
+	if req.OnlyNewReleases {
+		req.AutoDetectRelease = true
+	}
+	keepJapanese := m.cfg.Output.KeepJapanese
+	if req.KeepJapanese != nil {
+		keepJapanese = *req.KeepJapanese
+	}
+	writeASS := m.cfg.Output.WriteASS
+	if req.WriteASS != nil {
+		writeASS = *req.WriteASS
+	}
+	now := time.Now().UTC()
+	releaseExternalID := strings.TrimSpace(req.ReleaseExternalID)
+	if releaseExternalID == "" && !req.AutoDetectRelease {
+		releaseExternalID = strings.TrimSpace(req.ExternalID)
+	}
+	titleSource, storySource := "", ""
+	if strings.TrimSpace(req.ReleaseTitle) != "" {
+		titleSource = "manual"
+	}
+	if strings.TrimSpace(req.ReleaseStory) != "" {
+		storySource = "manual"
+	}
+	requestedProfile := req.ASRProfile
+	if strings.TrimSpace(req.Profile) != "" {
+		requestedProfile = req.Profile
+	}
+	job := &Job{
+		ID: newID(), ScheduleID: req.ScheduleID, ScheduleName: req.ScheduleName,
+		ExternalID: req.ExternalID, Inputs: append([]string(nil), req.Inputs...),
+		ReleaseExternalID: releaseExternalID, JAVBeaconReleaseID: req.JAVBeaconReleaseID,
+		ReleaseTitle: strings.TrimSpace(req.ReleaseTitle), ReleaseStory: req.ReleaseStory,
+		ReleaseTitleSource: titleSource, ReleaseStorySource: storySource,
+		Status: "queued", Phase: "queued", Progress: 1,
+		Message:     "Queued for file discovery and JAVBeacon matching",
+		CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, KeepJapanese: keepJapanese, WriteASS: writeASS,
+		ASRMode: config.NormalizeASRMode(req.ASRMode), ASRProfile: config.NormalizeProfile(requestedProfile), Profile: config.NormalizeProfile(requestedProfile),
+		DebugMode: req.DebugMode, AutoDetectRelease: req.AutoDetectRelease,
+		OnlyNewReleases: req.OnlyNewReleases, ReleaseStartDate: strings.TrimSpace(req.ReleaseStartDate),
+		CreatedAt: now,
+	}
+	m.mu.Lock()
+	m.jobs[job.ID] = job
+	m.mu.Unlock()
+	m.publish(job)
+	response := clone(job)
+	go func(id string, submitted Request, created time.Time) {
+		if _, err := m.prepare(submitted, id, created); err != nil {
+			m.finishPreparation(id, err)
+		}
+	}(job.ID, req, now)
+	return response, nil
+}
+
+func validateRequest(req Request) error {
+	if len(req.Inputs) == 0 {
+		return fmt.Errorf("inputs must contain at least one file or folder")
+	}
+	if req.OnlyNewReleases {
+		if strings.TrimSpace(req.ReleaseStartDate) == "" {
+			return fmt.Errorf("release_start_date is required when only_new_releases is enabled")
+		}
+		if _, err := time.Parse("2006-01-02", strings.TrimSpace(req.ReleaseStartDate)); err != nil {
+			return fmt.Errorf("release_start_date must use YYYY-MM-DD")
+		}
+	}
+	mode := config.NormalizeASRMode(req.ASRMode)
+	if mode != "" && mode != "fast" && mode != "balanced" && mode != "high_accuracy" {
+		return fmt.Errorf("asr_mode must be fast, balanced, or high_accuracy")
+	}
+	profile := req.ASRProfile
+	if strings.TrimSpace(req.Profile) != "" {
+		profile = req.Profile
+	}
+	profile = config.NormalizeProfile(profile)
+	if profile != "" && profile != "standard" && profile != "jav" && profile != "giga" {
+		return fmt.Errorf("profile must be standard, jav, or giga")
+	}
+	if len(strings.TrimSpace(req.ReleaseTitle)) > maxReleaseTitleBytes {
+		return fmt.Errorf("release_title exceeds %d bytes", maxReleaseTitleBytes)
+	}
+	if len(strings.Trim(req.ReleaseStory, " \t\r\n")) > maxReleaseStoryBytes {
+		return fmt.Errorf("release_story exceeds %d bytes", maxReleaseStoryBytes)
+	}
+	return nil
+}
+
+func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (*Job, error) {
+	if err := validateRequest(req); err != nil {
+		return nil, err
+	}
+	if req.OnlyNewReleases {
+		req.AutoDetectRelease = true
+	}
+	m.preparationProgress(existingID, "scanning", 5, "Scanning input paths for supported media", "", 0, 0)
 	files, err := m.discover(req.Inputs, req.Recursive)
 	if err != nil {
 		return nil, err
@@ -306,6 +433,7 @@ func (m *Manager) Create(req Request) (*Job, error) {
 	if len(files) == 0 {
 		return nil, fmt.Errorf("no supported media files found")
 	}
+	m.preparationProgress(existingID, "matching_releases", 15, fmt.Sprintf("Found %d media file(s); matching JAVBeacon releases", len(files)), "", 0, len(files))
 	req.ASRMode = config.NormalizeASRMode(req.ASRMode)
 	if req.ASRMode != "" && req.ASRMode != "fast" && req.ASRMode != "balanced" && req.ASRMode != "high_accuracy" {
 		return nil, fmt.Errorf("asr_mode must be fast, balanced, or high_accuracy")
@@ -326,10 +454,15 @@ func (m *Manager) Create(req Request) (*Job, error) {
 	resolutionPath := ""
 	if autoDetectSingle {
 		resolutionPath = files[0]
+		m.preparationProgress(existingID, "matching_releases", 20, "Matching JAVBeacon release information", resolutionPath, 1, 1)
 	}
 	resolution, err := m.resolveFileRelease(req.JAVBeaconReleaseID, releaseExternalID, req.ReleaseTitle, req.ReleaseStory, resolutionPath, autoDetectSingle)
 	if err != nil {
 		return nil, err
+	}
+	if autoDetectSingle {
+		partial := buildScanResults(files, resolution, nil, req.OnlyNewReleases, strings.TrimSpace(req.ReleaseStartDate))
+		m.preparationScanResult(existingID, partial[0])
 	}
 	if resolution.MatchedVideoID != "" {
 		releaseExternalID = resolution.MatchedVideoID
@@ -357,27 +490,46 @@ func (m *Manager) Create(req Request) (*Job, error) {
 				return nil, fmt.Errorf("file_release_overrides[%s]: %w", rawKey, resolveErr)
 			}
 			fileReleaseMetadata[key] = buildFileReleaseMetadata(fileExternalID, override.JAVBeaconReleaseID, fileResolution)
+			partial := buildScanResults([]string{key}, release.Resolution{}, fileReleaseMetadata, req.OnlyNewReleases, strings.TrimSpace(req.ReleaseStartDate))
+			m.preparationScanResult(existingID, partial[0])
 			overridden[key] = true
 		}
 	}
 	if req.AutoDetectRelease && !hasExplicitRelease && len(files) > 1 {
-		for _, file := range files {
+		for index, file := range files {
 			if overridden[file] {
 				continue
 			}
+			m.preparationProgress(existingID, "matching_releases", 15+(index*30/len(files)), "Matching release information", file, index+1, len(files))
 			fileResolution, resolveErr := m.resolveFileRelease(nil, "", req.ReleaseTitle, req.ReleaseStory, file, true)
 			if resolveErr != nil {
 				return nil, fmt.Errorf("auto-detect release for %s: %w", file, resolveErr)
 			}
 			fileReleaseMetadata[file] = buildFileReleaseMetadata("", nil, fileResolution)
+			partial := buildScanResults([]string{file}, release.Resolution{}, fileReleaseMetadata, req.OnlyNewReleases, strings.TrimSpace(req.ReleaseStartDate))
+			m.preparationScanResult(existingID, partial[0])
 		}
 	}
+	scanResults := buildScanResults(files, resolution, fileReleaseMetadata, req.OnlyNewReleases, strings.TrimSpace(req.ReleaseStartDate))
+	if req.OnlyNewReleases {
+		eligible := make([]string, 0, len(files))
+		for _, result := range scanResults {
+			if result.Included {
+				eligible = append(eligible, result.Path)
+			}
+		}
+		files = eligible
+	}
+	m.preparationProgress(existingID, "preparing", 48, scanSummary(scanResults), "", len(files), len(scanResults))
 	fileSettings := make(map[string]profiles.Resolution, len(files))
 	profileSettings := m.Profiles()
 	for _, file := range files {
 		fileSettings[file] = profiles.Resolve(profileSettings, file, req.ASRProfile, req.ASRMode)
 	}
-	firstResolution := fileSettings[files[0]]
+	firstResolution := profiles.Resolve(profileSettings, "", req.ASRProfile, req.ASRMode)
+	if len(files) > 0 {
+		firstResolution = fileSettings[files[0]]
+	}
 	keepJapanese := m.cfg.Output.KeepJapanese
 	if req.KeepJapanese != nil {
 		keepJapanese = *req.KeepJapanese
@@ -386,26 +538,164 @@ func (m *Manager) Create(req Request) (*Job, error) {
 	if req.WriteASS != nil {
 		writeASS = *req.WriteASS
 	}
+	jobID := existingID
+	if jobID == "" {
+		jobID = newID()
+	}
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
 	job := &Job{
-		ID: newID(), ExternalID: req.ExternalID, Status: "queued", Progress: 0, Message: "Waiting for subtitle worker",
+		ID: jobID, ExternalID: req.ExternalID, Status: "queued", Phase: "ready", Progress: 50, Message: "Ready for subtitle worker",
 		ScheduleID: req.ScheduleID, ScheduleName: req.ScheduleName,
 		Inputs: req.Inputs, Files: files, CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, KeepJapanese: keepJapanese, WriteASS: writeASS,
 		ASRMode: firstResolution.ASRMode, ASRProfile: firstResolution.Profile, Profile: firstResolution.Profile,
 		ProfileSource: firstResolution.ProfileSource, ASRModeSource: firstResolution.ASRModeSource, FileSettings: fileSettings,
-		DebugMode: req.DebugMode, AutoDetectRelease: req.AutoDetectRelease, CreatedAt: time.Now().UTC(),
+		DebugMode: req.DebugMode, AutoDetectRelease: req.AutoDetectRelease, OnlyNewReleases: req.OnlyNewReleases,
+		ReleaseStartDate: strings.TrimSpace(req.ReleaseStartDate), ScanResults: scanResults, CreatedAt: createdAt,
 		ReleaseExternalID: releaseExternalID, JAVBeaconReleaseID: req.JAVBeaconReleaseID,
 		ReleaseTitle: resolution.Title, ReleaseStory: resolution.Story,
 		ReleaseTitleSource: resolution.TitleSource, ReleaseStorySource: resolution.StorySource,
 		ReleaseLookupMethod: resolution.LookupMethod, ReleaseLookupMatched: resolution.LookupMatched, ReleaseLookupError: resolution.LookupError,
-		ReleaseProvider: resolution.Provider, ReleaseStashSceneID: resolution.StashSceneID, ReleaseStashURL: resolution.StashURL, ReleaseStashFilePath: resolution.StashFilePath,
+		ReleaseProvider: resolution.Provider, ReleaseDate: resolution.ReleaseDate, ReleaseStashSceneID: resolution.StashSceneID, ReleaseStashURL: resolution.StashURL, ReleaseStashFilePath: resolution.StashFilePath,
 		FileReleaseMetadata: fileReleaseMetadata,
 	}
 	m.mu.Lock()
+	if previous := m.jobs[job.ID]; previous != nil && previous.Status == "cancelled" {
+		m.mu.Unlock()
+		return clone(previous), nil
+	}
 	m.jobs[job.ID] = job
 	m.mu.Unlock()
 	m.publish(job)
+	if len(files) == 0 {
+		m.finishFiltered(job.ID)
+		result, _ := m.Get(job.ID)
+		return result, nil
+	}
 	m.queue <- job.ID
 	return clone(job), nil
+}
+
+func buildScanResults(files []string, jobRelease release.Resolution, perFile map[string]FileReleaseMetadata, onlyNew bool, startDate string) []ScanResult {
+	results := make([]ScanResult, 0, len(files))
+	for _, file := range files {
+		item := ScanResult{Path: file, Filename: filepath.Base(file), Included: true}
+		if metadata, ok := perFile[file]; ok {
+			item.ReleaseMatched = metadata.ReleaseLookupMatched
+			item.ReleaseDate = metadata.ReleaseDate
+			item.VideoID = metadata.ReleaseExternalID
+			item.Title = metadata.ReleaseTitle
+			item.Provider = metadata.ReleaseProvider
+			item.LookupMethod = metadata.ReleaseLookupMethod
+		} else {
+			item.ReleaseMatched = jobRelease.LookupMatched
+			item.ReleaseDate = jobRelease.ReleaseDate
+			item.VideoID = jobRelease.MatchedVideoID
+			item.Title = jobRelease.Title
+			item.Provider = jobRelease.Provider
+			item.LookupMethod = jobRelease.LookupMethod
+		}
+		if !onlyNew {
+			if item.ReleaseMatched {
+				item.Reason = "JAVBeacon release matched"
+			} else {
+				item.Reason = "No JAVBeacon release matched; date filter is disabled"
+			}
+		} else if !item.ReleaseMatched {
+			item.Included = false
+			item.Reason = "Excluded: no JAVBeacon release match"
+		} else if _, err := time.Parse("2006-01-02", item.ReleaseDate); err != nil {
+			item.Included = false
+			item.Reason = "Excluded: JAVBeacon release date is missing or invalid"
+		} else if item.ReleaseDate < startDate {
+			item.Included = false
+			item.Reason = "Excluded: release predates " + startDate
+		} else {
+			item.Reason = "Included: released on or after " + startDate
+		}
+		results = append(results, item)
+	}
+	return results
+}
+
+func scanSummary(results []ScanResult) string {
+	included, matched := 0, 0
+	for _, result := range results {
+		if result.Included {
+			included++
+		}
+		if result.ReleaseMatched {
+			matched++
+		}
+	}
+	return fmt.Sprintf("Scan complete: %d/%d included, %d JAVBeacon release match(es)", included, len(results), matched)
+}
+
+func (m *Manager) preparationProgress(id, phase string, progress int, message, path string, current, total int) {
+	if id == "" {
+		return
+	}
+	m.mu.Lock()
+	job := m.jobs[id]
+	if job == nil || job.Status == "cancelled" {
+		m.mu.Unlock()
+		return
+	}
+	job.Phase, job.Progress, job.Message = phase, progress, message
+	job.CurrentPath, job.CurrentFile = path, filepath.Base(path)
+	job.CurrentFileNumber = current
+	snapshot := clone(job)
+	m.mu.Unlock()
+	m.publish(snapshot)
+}
+
+func (m *Manager) preparationScanResult(id string, result ScanResult) {
+	if id == "" {
+		return
+	}
+	m.mu.Lock()
+	job := m.jobs[id]
+	if job == nil || job.Status == "cancelled" {
+		m.mu.Unlock()
+		return
+	}
+	job.ScanResults = append(job.ScanResults, result)
+	job.Message = result.Reason
+	snapshot := clone(job)
+	m.mu.Unlock()
+	m.publish(snapshot)
+}
+
+func (m *Manager) finishPreparation(id string, err error) {
+	m.mu.Lock()
+	job := m.jobs[id]
+	if job == nil || job.Status == "cancelled" {
+		m.mu.Unlock()
+		return
+	}
+	job.Status, job.Phase, job.Error, job.Message = "failed", "preparing", err.Error(), err.Error()
+	job.Progress = 100
+	now := time.Now().UTC()
+	job.FinishedAt = &now
+	snapshot := clone(job)
+	m.mu.Unlock()
+	m.publish(snapshot)
+}
+
+func (m *Manager) finishFiltered(id string) {
+	m.mu.Lock()
+	job := m.jobs[id]
+	job.Status, job.Phase, job.Progress = "skipped", "complete", 100
+	job.Message = "No discovered files matched the new-release date filter"
+	now := time.Now().UTC()
+	job.FinishedAt = &now
+	snapshot := clone(job)
+	m.mu.Unlock()
+	m.publish(snapshot)
+	if snapshot.CallbackURL != "" {
+		go callback(snapshot)
+	}
 }
 
 func (m *Manager) Get(id string) (*Job, bool) {
@@ -566,7 +856,9 @@ func (m *Manager) process(ctx context.Context, id string) {
 			current := m.jobs[id]
 			if current.Status != "cancelled" {
 				current.Phase = phase
-				current.Progress = (index*100 + pct) / len(job.Files)
+				// File discovery and release matching occupy the first half of
+				// the progress bar; recognition/translation occupy the second.
+				current.Progress = 50 + (index*50+pct/2)/len(job.Files)
 				current.Message = message
 				if current.StartedAt != nil && current.Progress > 0 && current.Progress < 100 {
 					elapsed := time.Since(*current.StartedAt)

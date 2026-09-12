@@ -73,3 +73,17 @@ func TestPrepareSchedulePreservesLegacySingularWeekday(t *testing.T) {
 		t.Fatalf("legacy weekday was not retained: %#v", item)
 	}
 }
+
+func TestPrepareScheduleValidatesNewReleaseFilter(t *testing.T) {
+	item := Schedule{Name: "Fresh releases", Enabled: true, Cadence: ScheduleDaily, Interval: 1, TimeOfDay: "03:00", Timezone: "UTC", Job: Request{Inputs: []string{"/media"}, OnlyNewReleases: true, ReleaseStartDate: "2026-09-01"}}
+	if err := prepareSchedule(&item, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if !item.Job.AutoDetectRelease {
+		t.Fatal("new-release schedule did not enable JAVBeacon auto-detection")
+	}
+	item.Job.ReleaseStartDate = ""
+	if err := prepareSchedule(&item, time.Now().UTC()); err == nil {
+		t.Fatal("new-release schedule accepted an empty start date")
+	}
+}

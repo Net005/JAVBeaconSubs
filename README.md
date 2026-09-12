@@ -112,10 +112,12 @@ Authentication and translation credentials have separate purposes:
 
 ## Web interface
 
-The job form has two explicit modes:
+The job form opens on **Server paths** by default and separates the normal workflow from a collapsible Advanced options area:
 
-- **Upload one file** streams one video/audio file into managed storage. When processing finishes, English SRT/ASS, optional Japanese SRT/ASS, and diagnostic JSON downloads appear on its job card. `.ass` export is on by default and can be turned off per job (or by default for every job via `output.write_ass` in configuration) to generate only `.srt` files.
+- **Upload one file** streams one video/audio file into managed storage. Supporting browsers securely retain the last selected file handle and start the next Browse action in that location; other browsers retain whatever location their native picker supports. A web page cannot direct a client file dialog to an arbitrary container path, so when no local location is available the form displays the first Server paths entry and provides **Use server path** instead. When processing finishes, English SRT/ASS, optional Japanese SRT/ASS, and diagnostic JSON downloads appear on its job card. `.ass` export is on by default and can be turned off per job (or by default for every job via `output.write_ass` in configuration) to generate only `.srt` files.
 - **Server paths** accepts one or more exact files and/or folders already visible to the service. Folder traversal happens only when requested.
+
+Enable **Only translate releases on or after a start date** to use JAVBeacon's `release_date` as an inclusive lower bound, with no end-date restriction. The choice and date are remembered in browser storage across page and service reloads. Files that do not match a JAVBeacon release, have no valid release date, or predate the boundary are not translated; every included and excluded file remains visible in the job's Discovery & release decisions report.
 
 The canonical content profiles are `standard`, `jav`, and `giga`; legacy `tokusatsu` and `akiba` inputs normalize to `giga`. Their Qwen hints are deliberately minimal Japanese-only strings to prevent prompt text leaking into subtitles. Profile and recognition accuracy can each be Auto, explicitly selected, or resolved independently per file by case-insensitive path mappings in the Profiles tab. **Also keep Japanese** writes `.ja.srt` and `.ja.ass` from the canonical Japanese transcript without another ASR pass.
 
@@ -182,6 +184,8 @@ curl --fail-with-body --request POST 'http://localhost:8097/api/v1/jobs' \
     "keep_japanese": true,
     "write_ass": true,
     "auto_detect_release": true,
+    "only_new_releases": true,
+    "release_start_date": "2026-09-01",
     "asr_mode": "balanced",
     "profile": "jav",
     "debug_mode": false
@@ -216,7 +220,7 @@ Content-Type: application/json
 }
 ```
 
-The response is `202 Accepted`, includes the job, and sets `Location: /api/v1/jobs/{id}`. JAVBeacon can then:
+The response is `202 Accepted`, immediately includes a queued job, and sets `Location: /api/v1/jobs/{id}`. Filesystem discovery and JAVBeacon matching continue asynchronously while `phase`, `progress`, `current_path`, `current_file_number`, and `message` update. JAVBeacon can then:
 
 - `GET /api/v1/jobs/{id}` — poll one job.
 - `GET /api/v1/jobs?page=1&page_size=50&filter=*SPSF*` — paginated/filterable history.
@@ -247,7 +251,9 @@ The Schedules tab and `/api/v1/schedules` API store multiple independent recurri
     "debug_mode": true,
     "keep_japanese": true,
     "write_ass": true,
-    "auto_detect_release": true
+    "auto_detect_release": true,
+    "only_new_releases": true,
+    "release_start_date": "2026-09-01"
   }
 }
 ```
@@ -262,7 +268,7 @@ For `cadence: "hourly"`, omit `time_of_day` and `weekdays`. Daily schedules requ
 
 Jobs created by automation include `schedule_id` and `schedule_name` in their job record and display their source schedule in Activity.
 
-The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, `overwrite`, `keep_japanese`, `write_ass`, `asr_mode`, `profile`, `debug_mode`, `auto_detect_release`, `release_external_id`, `javbeacon_release_id`, `release_title`, and `release_story` fields. The legacy `asr_profile` field remains accepted as an alias. For JSON and multipart jobs, omitting `keep_japanese` uses `output.keep_japanese` from service configuration, and omitting `write_ass` uses `output.write_ass` (`true` by default).
+The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, `overwrite`, `keep_japanese`, `write_ass`, `asr_mode`, `profile`, `debug_mode`, `auto_detect_release`, `only_new_releases`, `release_start_date`, `release_external_id`, `javbeacon_release_id`, `release_title`, and `release_story` fields. The legacy `asr_profile` field remains accepted as an alias. For JSON and multipart jobs, omitting `keep_japanese` uses `output.keep_japanese` from service configuration, and omitting `write_ass` uses `output.write_ass` (`true` by default).
 
 The two output fields are independent and have the same behavior in JSON, multipart, and the web form:
 
@@ -278,7 +284,9 @@ All release fields are optional and every existing client/job keeps working unch
 
 Set `"auto_detect_release": true` (JSON), send `auto_detect_release=true` (multipart), or enable the matching web checkbox to resolve each discovered media file automatically. The lookup order is deterministic and case-insensitive: exact full file path against `GET /api/releases?stash_file_path=...`, filename without its extension against `GET /api/releases?video_id=...`, then that filename with ASCII hyphens removed against the same `video_id` endpoint. For example, `/p2p/http/ADN-816.mp4` tries the path, `ADN-816`, and `ADN816`; a direct lower-case lookup such as `video_id=ssis-001` is also valid. There is no fuzzy matching, and ambiguous matches fail instead of selecting an arbitrary release. Full-path matching requires JAVBeacon v1.0.71 or newer and requires both containers to see the same media path; filename fallback still works when their mount paths differ.
 
-Matched `release_title`/`release_story` values are auto-filled unless supplied manually (manual values always win). The resolved job document also carries `release_title_source`, `release_story_source`, `release_lookup_method`, `release_lookup_matched`, `release_lookup_error`, `release_provider`, `release_stash_file_path`, and (when the matched release is locally present in the operator's StashApp library) `release_stash_scene_id`/`release_stash_url`. Folder jobs expose independently resolved entries in `file_release_metadata`. Release metadata is translation context only — it is never sent to speech recognition and never changes the recognized Japanese text.
+Set `"only_new_releases": true` with `"release_start_date": "YYYY-MM-DD"` to translate only positively matched JAVBeacon releases on or after that date. Enabling the filter implies auto-detection. The date is inclusive and there is intentionally no end date. Unknown, missing-date, and older releases are excluded conservatively and listed in `scan_results` with their match state and reason.
+
+Matched `release_title`/`release_story` values are auto-filled unless supplied manually (manual values always win). The resolved job document also carries `release_title_source`, `release_story_source`, `release_lookup_method`, `release_lookup_matched`, `release_lookup_error`, `release_provider`, `release_date`, `release_stash_file_path`, and (when the matched release is locally present in the operator's StashApp library) `release_stash_scene_id`/`release_stash_url`. Folder jobs expose independently resolved entries in `file_release_metadata`. Release metadata is translation context only — it is never sent to speech recognition and never changes the recognized Japanese text.
 
 Each completed file result and its `.subtitles.json` project include a compact `release_context` diagnostic block when release metadata was resolved. It records the external/internal ID, title/story presence, metadata sources, actual lookup method, match state, and whether the guarded context reached at least one successful contextual-translation request. It deliberately does not duplicate the title or full story text. Translation usage also records title/story-context use, Japanese-script leak and selective-repair counts, repair successes, and proper-name variant flags.
 

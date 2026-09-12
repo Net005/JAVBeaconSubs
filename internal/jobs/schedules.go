@@ -181,6 +181,12 @@ func prepareSchedule(item *Schedule, now time.Time) error {
 			return fmt.Errorf("schedule input paths cannot be blank")
 		}
 	}
+	if item.Job.OnlyNewReleases {
+		item.Job.AutoDetectRelease = true
+	}
+	if err := validateRequest(item.Job); err != nil {
+		return err
+	}
 	if item.Interval < 1 {
 		return fmt.Errorf("schedule interval must be at least 1")
 	}
@@ -359,7 +365,7 @@ func (m *Manager) executeSchedule(item *Schedule, runAt time.Time) (*Job, error)
 	request := item.Job
 	request.ScheduleID = item.ID
 	request.ScheduleName = item.Name
-	job, err := m.Create(request)
+	job, err := m.Queue(request)
 	m.mu.Lock()
 	current, ok := m.schedules[item.ID]
 	if ok {

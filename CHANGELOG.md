@@ -4,6 +4,18 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-09-12
+
+### Added
+
+- Added an optional inclusive JAVBeacon release-date filter for manual and scheduled jobs. `only_new_releases` with `release_start_date` translates only positively matched releases on or after the selected date and retains an auditable per-file report of included, older, unmatched, and missing-date candidates.
+- Job submission now returns and persists a queued job immediately, with live filesystem-discovery and JAVBeacon-matching phases before recognition begins.
+
+### Changed
+
+- Redesigned the Jobs workspace around the primary Server paths workflow, a compact translation plan, collapsible advanced options, and clearer full-width Activity cards with distinct progress, current-file, release-date, story, match-decision, profile, and output sections.
+- The local video/audio picker now remembers its last selected location in supporting browsers. When no client-side location is available, the picker explains the first configured Server paths entry and offers a direct switch to that server-side source.
+
 ## [0.19.0] - 2026-09-11
 
 ### Fixed

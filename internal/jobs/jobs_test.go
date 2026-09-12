@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"javbeaconsubs/internal/config"
 	"javbeaconsubs/internal/engine"
+	"javbeaconsubs/internal/release"
 )
 
 type testPersistence struct{}
@@ -79,6 +81,53 @@ func TestDiscoverAllowsAnyReadablePath(t *testing.T) {
 	files, err := m.discover([]string{path}, false)
 	if err != nil || len(files) != 1 || files[0] != path {
 		t.Fatalf("discover any readable path: %#v, %v", files, err)
+	}
+}
+
+func TestNewReleaseFilterExplainsEveryDecision(t *testing.T) {
+	files := []string{"/media/NEW-1.mp4", "/media/OLD-1.mp4", "/media/UNKNOWN.mp4", "/media/NODATE.mp4"}
+	metadata := map[string]FileReleaseMetadata{
+		files[0]: {ReleaseLookupMatched: true, ReleaseDate: "2026-09-01", ReleaseExternalID: "NEW-1", ReleaseTitle: "New", ReleaseProvider: "JavLibrary"},
+		files[1]: {ReleaseLookupMatched: true, ReleaseDate: "2026-08-31", ReleaseExternalID: "OLD-1"},
+		files[3]: {ReleaseLookupMatched: true, ReleaseExternalID: "NODATE"},
+	}
+	results := buildScanResults(files, release.Resolution{}, metadata, true, "2026-09-01")
+	if len(results) != 4 || !results[0].Included || results[1].Included || results[2].Included || results[3].Included {
+		t.Fatalf("unexpected release decisions: %#v", results)
+	}
+	if results[0].ReleaseDate != "2026-09-01" || !strings.Contains(results[1].Reason, "predates") || !strings.Contains(results[2].Reason, "no JAVBeacon") || !strings.Contains(results[3].Reason, "missing") {
+		t.Fatalf("release decisions are not auditable: %#v", results)
+	}
+}
+
+func TestQueueReturnsBeforePreparationFailure(t *testing.T) {
+	m := &Manager{cfg: config.Config{}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 1), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+	job, err := m.Queue(Request{Inputs: []string{filepath.Join(t.TempDir(), "missing.mp4")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.Status != "queued" || job.Phase != "queued" || job.Progress != 1 {
+		t.Fatalf("submission was not immediately queued: %#v", job)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		current, _ := m.Get(job.ID)
+		if current.Status == "failed" {
+			if !strings.Contains(current.Error, "missing.mp4") {
+				t.Fatalf("preparation error lost its path: %#v", current)
+			}
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("asynchronous preparation failure was not published")
+}
+
+func TestNewReleaseFilterRequiresValidStartDate(t *testing.T) {
+	for _, value := range []string{"", "09/01/2026", "2026-13-01"} {
+		if _, err := (&Manager{}).Queue(Request{Inputs: []string{"/media"}, OnlyNewReleases: true, ReleaseStartDate: value}); err == nil {
+			t.Fatalf("accepted invalid release_start_date %q", value)
+		}
 	}
 }
 

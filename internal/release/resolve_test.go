@@ -105,7 +105,7 @@ func TestTrimVideoIDPrefix(t *testing.T) {
 
 func TestResolveByJAVBeaconReleaseIDSucceeds(t *testing.T) {
 	server := fakeJAVBeacon(t,
-		map[int64]Release{12345: {ID: 12345, VideoID: "ADN-803", Title: "Example Title", Story: "Example story.", Source: "GIGA"}},
+		map[int64]Release{12345: {ID: 12345, VideoID: "ADN-803", Title: "Example Title", Story: "Example story.", Source: "GIGA", ReleaseDate: "2026-09-01"}},
 		nil, nil,
 	)
 	client := testClient(t, server)
@@ -117,7 +117,7 @@ func TestResolveByJAVBeaconReleaseIDSucceeds(t *testing.T) {
 	if !res.LookupMatched || res.LookupMethod != "javbeacon_release_id" {
 		t.Fatalf("resolution = %#v", res)
 	}
-	if res.Title != "Example Title" || res.TitleSource != "javbeacon" || res.Story != "Example story." || res.StorySource != "javbeacon" || res.Provider != "GIGA" {
+	if res.Title != "Example Title" || res.TitleSource != "javbeacon" || res.Story != "Example story." || res.StorySource != "javbeacon" || res.Provider != "GIGA" || res.ReleaseDate != "2026-09-01" {
 		t.Fatalf("resolution = %#v", res)
 	}
 }

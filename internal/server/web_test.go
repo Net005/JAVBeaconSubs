@@ -324,3 +324,35 @@ func TestWebUIProvidesPersistentMultipleSchedules(t *testing.T) {
 		}
 	}
 }
+
+func TestWebUIProvidesNewReleaseFilteringAndImmediateProgressDesign(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{
+		"let mode='paths'", "setMode('paths')", "onlyNewReleases", "releaseStartDate",
+		"only_new_releases", "release_start_date", "Inclusive start date",
+		"Discovery &amp; release decisions", "scan_results", "release_date",
+		"Create subtitle job", "Advanced options", "Subtitle activity",
+		"scheduleOnlyNew", "scheduleReleaseStart",
+	} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("new release/job workspace UI is missing %q", required)
+		}
+	}
+}
+
+func TestWebUIRemembersLocalMediaPickerAndOffersServerPathFallback(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{"showOpenFilePicker", "javbeaconsubs-file-picker", "last-media", "startIn", "firstServerPath", "Use server path", "picker-memory"} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("remembering media picker is missing %q", required)
+		}
+	}
+}
