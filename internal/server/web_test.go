@@ -333,10 +333,10 @@ func TestWebUIProvidesNewReleaseFilteringAndImmediateProgressDesign(t *testing.T
 	page := string(html)
 	for _, required := range []string{
 		"let mode='paths'", "setMode('paths')", "onlyNewReleases", "releaseStartDate",
-		"only_new_releases", "release_start_date", "Inclusive start date",
+		"release_within_days", "Released within the last (days)", "javbeaconsubs.jobFormDefaults",
 		"Discovery &amp; release decisions", "scan_results", "release_date",
 		"Create subtitle job", "Advanced options", "Subtitle activity",
-		"scheduleOnlyNew", "scheduleReleaseStart",
+		"scheduleOnlyNew", "scheduleReleaseStart", "grid-template-columns:minmax(390px,520px) minmax(0,1fr)",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("new release/job workspace UI is missing %q", required)

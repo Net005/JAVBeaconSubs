@@ -776,6 +776,14 @@ func (s *Server) uploadJob(w http.ResponseWriter, r *http.Request) {
 		}
 		javbeaconReleaseID = &parsed
 	}
+	releaseWithinDays := 0
+	if raw := strings.TrimSpace(r.FormValue("release_within_days")); raw != "" {
+		releaseWithinDays, err = strconv.Atoi(raw)
+		if err != nil {
+			writeJSON(w, 400, map[string]string{"error": "release_within_days must be an integer"})
+			return
+		}
+	}
 	job, err := s.jobs.Queue(jobs.Request{
 		Inputs:             []string{destination},
 		Overwrite:          r.FormValue("overwrite") == "true",
@@ -793,6 +801,7 @@ func (s *Server) uploadJob(w http.ResponseWriter, r *http.Request) {
 		AutoDetectRelease:  autoDetectRelease != nil && *autoDetectRelease,
 		OnlyNewReleases:    onlyNewReleases != nil && *onlyNewReleases,
 		ReleaseStartDate:   strings.TrimSpace(r.FormValue("release_start_date")),
+		ReleaseWithinDays:  releaseWithinDays,
 	})
 	if err != nil {
 		writeJSON(w, 400, map[string]string{"error": err.Error()})

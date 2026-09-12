@@ -57,6 +57,7 @@ type Request struct {
 	AutoDetectRelease  bool   `json:"auto_detect_release,omitempty"`
 	OnlyNewReleases    bool   `json:"only_new_releases,omitempty"`
 	ReleaseStartDate   string `json:"release_start_date,omitempty"`
+	ReleaseWithinDays  int    `json:"release_within_days,omitempty"`
 
 	// FileReleaseOverrides sets per-file release metadata for a batch job
 	// (TODO Part 33), keyed by the same path used in Inputs for that file.
@@ -100,6 +101,7 @@ type Job struct {
 	AutoDetectRelease    bool                           `json:"auto_detect_release,omitempty"`
 	OnlyNewReleases      bool                           `json:"only_new_releases,omitempty"`
 	ReleaseStartDate     string                         `json:"release_start_date,omitempty"`
+	ReleaseWithinDays    int                            `json:"release_within_days,omitempty"`
 	ScanResults          []ScanResult                   `json:"scan_results,omitempty"`
 	Status               string                         `json:"status"`
 	Phase                string                         `json:"phase,omitempty"`
@@ -337,6 +339,7 @@ func (m *Manager) Create(req Request) (*Job, error) {
 // network lookups. This makes a submission visible immediately, even when a
 // large recursive scan or JAVBeacon matching takes time.
 func (m *Manager) Queue(req Request) (*Job, error) {
+	req = resolveRelativeReleaseWindow(req, time.Now().UTC())
 	if err := validateRequest(req); err != nil {
 		return nil, err
 	}
@@ -378,7 +381,7 @@ func (m *Manager) Queue(req Request) (*Job, error) {
 		CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, KeepJapanese: keepJapanese, WriteASS: writeASS,
 		ASRMode: config.NormalizeASRMode(req.ASRMode), ASRProfile: config.NormalizeProfile(requestedProfile), Profile: config.NormalizeProfile(requestedProfile),
 		DebugMode: req.DebugMode, AutoDetectRelease: req.AutoDetectRelease,
-		OnlyNewReleases: req.OnlyNewReleases, ReleaseStartDate: strings.TrimSpace(req.ReleaseStartDate),
+		OnlyNewReleases: req.OnlyNewReleases, ReleaseStartDate: strings.TrimSpace(req.ReleaseStartDate), ReleaseWithinDays: req.ReleaseWithinDays,
 		CreatedAt: now,
 	}
 	m.mu.Lock()
@@ -398,12 +401,17 @@ func validateRequest(req Request) error {
 	if len(req.Inputs) == 0 {
 		return fmt.Errorf("inputs must contain at least one file or folder")
 	}
+	if req.ReleaseWithinDays < 0 || req.ReleaseWithinDays > 36500 {
+		return fmt.Errorf("release_within_days must be 0 (disabled) or between 1 and 36500")
+	}
 	if req.OnlyNewReleases {
-		if strings.TrimSpace(req.ReleaseStartDate) == "" {
+		if req.ReleaseWithinDays == 0 && strings.TrimSpace(req.ReleaseStartDate) == "" {
 			return fmt.Errorf("release_start_date is required when only_new_releases is enabled")
 		}
-		if _, err := time.Parse("2006-01-02", strings.TrimSpace(req.ReleaseStartDate)); err != nil {
-			return fmt.Errorf("release_start_date must use YYYY-MM-DD")
+		if strings.TrimSpace(req.ReleaseStartDate) != "" {
+			if _, err := time.Parse("2006-01-02", strings.TrimSpace(req.ReleaseStartDate)); err != nil {
+				return fmt.Errorf("release_start_date must use YYYY-MM-DD")
+			}
 		}
 	}
 	mode := config.NormalizeASRMode(req.ASRMode)
@@ -427,7 +435,18 @@ func validateRequest(req Request) error {
 	return nil
 }
 
+func resolveRelativeReleaseWindow(req Request, now time.Time) Request {
+	if req.ReleaseWithinDays > 0 {
+		req.OnlyNewReleases = true
+		req.AutoDetectRelease = true
+		cutoff := now.UTC().Truncate(24*time.Hour).AddDate(0, 0, -req.ReleaseWithinDays)
+		req.ReleaseStartDate = cutoff.Format("2006-01-02")
+	}
+	return req
+}
+
 func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (*Job, error) {
+	req = resolveRelativeReleaseWindow(req, time.Now().UTC())
 	if err := validateRequest(req); err != nil {
 		return nil, err
 	}
@@ -564,7 +583,7 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 		ASRMode: firstResolution.ASRMode, ASRProfile: firstResolution.Profile, Profile: firstResolution.Profile,
 		ProfileSource: firstResolution.ProfileSource, ASRModeSource: firstResolution.ASRModeSource, FileSettings: fileSettings,
 		DebugMode: req.DebugMode, AutoDetectRelease: req.AutoDetectRelease, OnlyNewReleases: req.OnlyNewReleases,
-		ReleaseStartDate: strings.TrimSpace(req.ReleaseStartDate), ScanResults: scanResults, CreatedAt: createdAt,
+		ReleaseStartDate: strings.TrimSpace(req.ReleaseStartDate), ReleaseWithinDays: req.ReleaseWithinDays, ScanResults: scanResults, CreatedAt: createdAt,
 		ReleaseExternalID: releaseExternalID, JAVBeaconReleaseID: req.JAVBeaconReleaseID,
 		ReleaseTitle: resolution.Title, ReleaseStory: resolution.Story,
 		ReleaseTitleSource: resolution.TitleSource, ReleaseStorySource: resolution.StorySource,

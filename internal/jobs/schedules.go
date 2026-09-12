@@ -181,6 +181,9 @@ func prepareSchedule(item *Schedule, now time.Time) error {
 			return fmt.Errorf("schedule input paths cannot be blank")
 		}
 	}
+	if item.Job.ReleaseWithinDays > 0 {
+		item.Job.OnlyNewReleases = true
+	}
 	if item.Job.OnlyNewReleases {
 		item.Job.AutoDetectRelease = true
 	}

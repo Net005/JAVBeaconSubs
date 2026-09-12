@@ -4,6 +4,17 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-09-12
+
+### Added
+
+- Jobs and schedules can now use `release_within_days` to translate only JAVBeacon releases from a rolling number of days before the current date. The browser remembers the manual job value across reloads, while scheduled values persist in SQLite.
+
+### Changed
+
+- The Jobs page now uses a bounded two-pane desktop workspace with compact creation controls beside independently scrollable Activity, falling back to a single column on narrower screens.
+- The web form and Setup examples now use a simple relative day window instead of requiring operators to continually update a calendar date. Legacy `only_new_releases` plus `release_start_date` API requests remain compatible.
+
 ## [0.21.0] - 2026-09-12
 
 ### Added

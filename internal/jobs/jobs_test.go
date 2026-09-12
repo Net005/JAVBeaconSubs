@@ -131,6 +131,22 @@ func TestNewReleaseFilterRequiresValidStartDate(t *testing.T) {
 	}
 }
 
+func TestRelativeReleaseWindowResolvesFromCurrentDate(t *testing.T) {
+	now := time.Date(2026, 9, 12, 18, 30, 0, 0, time.FixedZone("CEST", 2*60*60))
+	req := resolveRelativeReleaseWindow(Request{ReleaseWithinDays: 30}, now)
+	if !req.OnlyNewReleases || !req.AutoDetectRelease || req.ReleaseStartDate != "2026-08-13" {
+		t.Fatalf("relative release window = %#v", req)
+	}
+	if err := validateRequest(Request{Inputs: []string{"/media"}, ReleaseWithinDays: 30}); err != nil {
+		t.Fatalf("relative API filter rejected: %v", err)
+	}
+	for _, days := range []int{-1, 36501} {
+		if err := validateRequest(Request{Inputs: []string{"/media"}, ReleaseWithinDays: days}); err == nil {
+			t.Fatalf("accepted release_within_days=%d", days)
+		}
+	}
+}
+
 func TestReserveFilesExcludesPathsAlreadyQueuedOrRunning(t *testing.T) {
 	m := &Manager{jobs: map[string]*Job{
 		"first":  {ID: "first", Status: "running", Files: []string{"/media/one.mp4"}},
