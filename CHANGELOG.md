@@ -4,6 +4,17 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-09-12
+
+### Added
+
+- Failed files are retained in job history and API responses with their filename, full path, failure time, and processing error; the web interface presents them in an expandable per-job summary.
+
+### Fixed
+
+- Retry damaged AAC/audio streams with conservative FFmpeg packet recovery and timestamp resynchronization, while validating that recovery produced usable audio.
+- Treat recognition, decoding, and translation errors as per-file failures so one bad media file no longer aborts the remaining batch queue.
+
 ## [0.24.0] - 2026-09-12
 
 ### Added

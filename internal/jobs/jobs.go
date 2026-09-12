@@ -115,6 +115,7 @@ type Job struct {
 	Inputs               []string                       `json:"inputs"`
 	Files                []string                       `json:"files"`
 	Results              []engine.Result                `json:"results,omitempty"`
+	FileFailures         []FileFailure                  `json:"file_failures,omitempty"`
 	Error                string                         `json:"error,omitempty"`
 	CallbackURL          string                         `json:"-"`
 	Overwrite            bool                           `json:"-"`
@@ -134,6 +135,15 @@ type Job struct {
 	PostProcessingStatus string                         `json:"post_processing_status,omitempty"`
 	PostProcessingError  string                         `json:"post_processing_error,omitempty"`
 	cancel               context.CancelFunc
+}
+
+// FileFailure records a media-specific processing error without aborting the
+// remaining files in a batch.
+type FileFailure struct {
+	Path     string    `json:"path"`
+	Filename string    `json:"filename"`
+	Error    string    `json:"error"`
+	FailedAt time.Time `json:"failed_at"`
 }
 
 // FileReleaseMetadata is one file's resolved release metadata inside a
@@ -978,18 +988,42 @@ func (m *Manager) process(ctx context.Context, id string) {
 		}
 		result, err := m.runner.ProcessWithOptions(ctx, file, job.Overwrite, job.KeepJapanese, engine.ProcessOptions{ASRMode: resolution.ASRMode, ASRProfile: resolution.Profile, DebugMode: job.DebugMode, Title: titleKey, ReleaseTitle: releaseTitle, ReleaseStory: releaseStory, ReleaseContext: releaseContextForFile(job, file), WriteASS: &job.WriteASS}, progress, translationMemory)
 		if err != nil {
-			m.finish(id, "failed", err.Error())
-			return
+			if ctx.Err() != nil {
+				m.finish(id, "cancelled", ctx.Err().Error())
+				return
+			}
+			m.recordFileFailure(id, file, err)
+			continue
 		}
 		m.mu.Lock()
 		m.jobs[id].Results = append(m.jobs[id].Results, result)
 		m.mu.Unlock()
 	}
+	results := jobResultSnapshot(m, id)
 	status := "complete"
-	if allResultsSkipped(jobResultSnapshot(m, id)) {
+	if len(results) == 0 && jobFailureCount(m, id) > 0 {
+		status = "failed"
+	} else if allResultsSkipped(results) {
 		status = "skipped"
 	}
 	m.finish(id, status, "")
+}
+
+func (m *Manager) recordFileFailure(id, path string, processErr error) {
+	m.mu.Lock()
+	job := m.jobs[id]
+	job.FileFailures = append(job.FileFailures, FileFailure{Path: path, Filename: filepath.Base(path), Error: processErr.Error(), FailedAt: time.Now().UTC()})
+	job.Message = fmt.Sprintf("Skipped failed file %s; continuing with the remaining queue", filepath.Base(path))
+	snapshot := clone(job)
+	m.mu.Unlock()
+	m.log.Error("subtitle file failed; continuing batch", "job_id", id, "input", path, "error", processErr)
+	m.publish(snapshot)
+}
+
+func jobFailureCount(m *Manager, id string) int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.jobs[id].FileFailures)
 }
 
 func jobResultSnapshot(m *Manager, id string) []engine.Result {
@@ -1021,8 +1055,8 @@ func (m *Manager) finish(id, status, errorMessage string) {
 	job.Error = errorMessage
 	if errorMessage != "" {
 		job.Message = errorMessage
-	} else if status == "complete" || status == "skipped" {
-		job.Message = completionMessage(job.Results)
+	} else if status == "complete" || status == "skipped" || (status == "failed" && len(job.FileFailures) > 0) {
+		job.Message = completionMessage(job.Results, len(job.FileFailures))
 	}
 	now := time.Now().UTC()
 	job.FinishedAt = &now
@@ -1040,7 +1074,7 @@ func (m *Manager) finish(id, status, errorMessage string) {
 	}
 }
 
-func completionMessage(results []engine.Result) string {
+func completionMessage(results []engine.Result, failed int) string {
 	skipped := 0
 	for _, result := range results {
 		if result.Skipped {
@@ -1048,12 +1082,23 @@ func completionMessage(results []engine.Result) string {
 		}
 	}
 	if skipped == 0 {
+		if failed > 0 {
+			return fmt.Sprintf("Generated %d file(s); skipped %d failed file(s)", len(results), failed)
+		}
 		return "All subtitles generated"
 	}
 	if skipped == len(results) {
-		return fmt.Sprintf("Skipped %d existing file(s); enable Replace existing subtitles to rerun recognition or change accuracy", skipped)
+		message := fmt.Sprintf("Skipped %d existing file(s); enable Replace existing subtitles to rerun recognition or change accuracy", skipped)
+		if failed > 0 {
+			message += fmt.Sprintf("; skipped %d failed file(s)", failed)
+		}
+		return message
 	}
-	return fmt.Sprintf("Generated %d file(s); skipped %d existing file(s)", len(results)-skipped, skipped)
+	message := fmt.Sprintf("Generated %d file(s); skipped %d existing file(s)", len(results)-skipped, skipped)
+	if failed > 0 {
+		message += fmt.Sprintf("; skipped %d failed file(s)", failed)
+	}
+	return message
 }
 
 func (m *Manager) runPostProcessing(id string) {

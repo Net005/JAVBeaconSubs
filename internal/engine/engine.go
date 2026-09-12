@@ -108,6 +108,7 @@ type Result struct {
 	DiagnosticSummary                        map[string]any             `json:"diagnostic_summary,omitempty"`
 	SubtitleProvenance                       []ProvenanceArtifact       `json:"subtitle_provenance,omitempty"`
 	Warnings                                 []string                   `json:"warnings,omitempty"`
+	AudioRecoveryUsed                        bool                       `json:"audio_recovery_used,omitempty"`
 }
 
 type ProvenanceArtifact struct {
@@ -379,8 +380,15 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 	defer os.RemoveAll(tmpDir)
 	wav := filepath.Join(tmpDir, "audio.wav")
 	progress("audio", 5, "Extracting and normalizing speech audio")
-	if err := run(ctx, "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", input, "-vn", "-ac", "1", "-ar", "16000", "-af", "highpass=f=70,lowpass=f=7600,loudnorm=I=-19:TP=-2:LRA=11", "-c:a", "pcm_s16le", wav); err != nil {
+	recovered, err := extractAudio(ctx, input, wav, run)
+	if err != nil {
 		return result, fmt.Errorf("extract audio: %w", err)
+	}
+	result.AudioRecoveryUsed = recovered
+	if recovered {
+		result.Warnings = append(result.Warnings, "The source audio contained damaged packets; FFmpeg recovered the usable audio before recognition.")
+		r.log.Warn("recovered damaged source audio", "input", input)
+		progress("audio", 8, "Recovered damaged audio; continuing with recognition")
 	}
 
 	progress("transcription", 15, "Transcribing Japanese speech")
