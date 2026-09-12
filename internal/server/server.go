@@ -606,7 +606,7 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) listJobs(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	pageSize, _ := strconv.Atoi(r.URL.Query().Get("page_size"))
-	result, err := s.jobs.ListPage(page, pageSize, r.URL.Query().Get("filter"))
+	result, err := s.jobs.ListPage(page, pageSize, r.URL.Query().Get("filter"), r.URL.Query().Get("status"))
 	if err != nil {
 		s.log.Error("list jobs", "error", err)
 		writeJSON(w, 500, map[string]string{"error": "could not list jobs"})

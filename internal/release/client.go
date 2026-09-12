@@ -107,6 +107,14 @@ func NewClient(baseURL, apiKey string, timeout time.Duration) *Client {
 	return &Client{baseURL: baseURL, apiKey: apiKey, httpClient: &http.Client{Timeout: timeout}}
 }
 
+// ReleaseURL returns the human-facing JAVBeacon page for an exact release.
+func (c *Client) ReleaseURL(id int64) string {
+	if c == nil || id <= 0 {
+		return ""
+	}
+	return c.baseURL + "/release/" + strconv.FormatInt(id, 10)
+}
+
 func (c *Client) get(ctx context.Context, path string, query url.Values) (*http.Response, error) {
 	target := c.baseURL + path
 	if len(query) > 0 {

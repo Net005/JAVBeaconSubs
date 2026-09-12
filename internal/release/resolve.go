@@ -45,10 +45,12 @@ type Resolution struct {
 	// metadata should still be usable"). Empty when nothing went wrong.
 	LookupError string
 
-	Provider       string // JAVBeacon's Release.Source ("GIGA" | "JavLibrary" | "")
-	MatchedVideoID string
-	ReleaseDate    string // JAVBeacon's canonical YYYY-MM-DD release date
-	StashFilePath  string
+	Provider         string // JAVBeacon's Release.Source ("GIGA" | "JavLibrary" | "")
+	MatchedReleaseID int64
+	ReleaseURL       string
+	MatchedVideoID   string
+	ReleaseDate      string // JAVBeacon's canonical YYYY-MM-DD release date
+	StashFilePath    string
 
 	// StashSceneID/StashURL are populated only when the matched release is
 	// locally matched in the operator's StashApp instance, letting the UI
@@ -154,6 +156,8 @@ func Resolve(ctx context.Context, client *Client, req Request) (Resolution, erro
 
 	if matched != nil {
 		res.LookupMatched = true
+		res.MatchedReleaseID = matched.ID
+		res.ReleaseURL = client.ReleaseURL(matched.ID)
 		res.Provider = matched.Source
 		res.MatchedVideoID = matched.VideoID
 		res.ReleaseDate = strings.TrimSpace(matched.ReleaseDate)

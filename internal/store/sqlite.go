@@ -172,17 +172,29 @@ func (s *SQLite) DeleteSchedule(id string) error {
 	return nil
 }
 
-func (s *SQLite) ListPage(page, pageSize int, filter string) ([]*jobs.Job, int, error) {
+func (s *SQLite) ListPage(page, pageSize int, filter, statusGroup string) ([]*jobs.Job, int, error) {
 	if page < 1 {
 		page = 1
 	}
 	if pageSize != 25 && pageSize != 50 && pageSize != 100 {
 		pageSize = 50
 	}
-	where, args := "", []any{}
+	conditions, args := []string{}, []any{}
 	if strings.TrimSpace(filter) != "" {
-		where = ` WHERE lower(replace(id || ' ' || external_id || ' ' || coalesce(json_extract(payload,'$.current_file'),'') || ' ' || coalesce(json_extract(payload,'$.current_path'),'') || ' ' || coalesce((SELECT group_concat(value,' ') FROM json_each(payload,'$.files')),''),'\','/')) LIKE ? ESCAPE '\'`
+		conditions = append(conditions, `lower(replace(id || ' ' || external_id || ' ' || coalesce(json_extract(payload,'$.current_file'),'') || ' ' || coalesce(json_extract(payload,'$.current_path'),'') || ' ' || coalesce((SELECT group_concat(value,' ') FROM json_each(payload,'$.files')),''),'\','/')) LIKE ? ESCAPE '\'`)
 		args = append(args, wildcardLike(filter))
+	}
+	switch statusGroup {
+	case "active":
+		conditions = append(conditions, `status IN ('queued','running')`)
+	case "completed":
+		conditions = append(conditions, `status IN ('complete','skipped')`)
+	case "failed":
+		conditions = append(conditions, `status IN ('failed','cancelled')`)
+	}
+	where := ""
+	if len(conditions) > 0 {
+		where = " WHERE " + strings.Join(conditions, " AND ")
 	}
 	var total int
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM jobs`+where, args...).Scan(&total); err != nil {

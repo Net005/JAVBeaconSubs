@@ -114,17 +114,25 @@ func TestJobPaginationAndWildcardFiltering(t *testing.T) {
 		}
 	}
 	for _, filter := range []string{"*spsf*", `*\p2p\jh\*`, "START", "*.AVI"} {
-		items, total, err := database.ListPage(1, 25, filter)
+		items, total, err := database.ListPage(1, 25, filter, "")
 		if err != nil || total != 1 || len(items) != 1 {
 			t.Fatalf("filter %q: total=%d jobs=%d err=%v", filter, total, len(items), err)
 		}
 	}
-	items, total, err := database.ListPage(2, 25, "")
+	items, total, err := database.ListPage(2, 25, "", "")
 	if err != nil || total != 3 || len(items) != 0 {
 		t.Fatalf("page 2: total=%d jobs=%d err=%v", total, len(items), err)
 	}
-	items, total, err = database.ListPage(1, 25, `%' OR 1=1 --`)
+	items, total, err = database.ListPage(1, 25, `%' OR 1=1 --`, "")
 	if err != nil || total != 0 || len(items) != 0 {
 		t.Fatalf("injection-like filter: total=%d jobs=%d err=%v", total, len(items), err)
+	}
+	items, total, err = database.ListPage(1, 25, "", "completed")
+	if err != nil || total != 3 || len(items) != 3 {
+		t.Fatalf("completed status page: total=%d jobs=%d err=%v", total, len(items), err)
+	}
+	items, total, err = database.ListPage(1, 25, "", "active")
+	if err != nil || total != 0 || len(items) != 0 {
+		t.Fatalf("active status page: total=%d jobs=%d err=%v", total, len(items), err)
 	}
 }

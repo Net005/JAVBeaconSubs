@@ -120,6 +120,9 @@ func TestResolveByJAVBeaconReleaseIDSucceeds(t *testing.T) {
 	if res.Title != "Example Title" || res.TitleSource != "javbeacon" || res.Story != "Example story." || res.StorySource != "javbeacon" || res.Provider != "GIGA" || res.ReleaseDate != "2026-09-01" {
 		t.Fatalf("resolution = %#v", res)
 	}
+	if res.MatchedReleaseID != 12345 || res.ReleaseURL != server.URL+"/release/12345" {
+		t.Fatalf("release identity/link = %#v", res)
+	}
 }
 
 func TestResolveByReleaseExternalIDSucceedsCaseInsensitive(t *testing.T) {

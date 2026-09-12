@@ -131,6 +131,39 @@ func TestNewReleaseFilterRequiresValidStartDate(t *testing.T) {
 	}
 }
 
+func TestReserveFilesExcludesPathsAlreadyQueuedOrRunning(t *testing.T) {
+	m := &Manager{jobs: map[string]*Job{
+		"first":  {ID: "first", Status: "running", Files: []string{"/media/one.mp4"}},
+		"second": {ID: "second", Status: "queued"},
+	}}
+	results := []ScanResult{
+		{Path: "/media/one.mp4", Included: true, Reason: "discovered"},
+		{Path: "/media/two.mp4", Included: true, Reason: "discovered"},
+	}
+	accepted := m.reserveFiles("second", []string{"/media/one.mp4", "/media/two.mp4"}, results)
+	if len(accepted) != 1 || accepted[0] != "/media/two.mp4" {
+		t.Fatalf("accepted files = %#v", accepted)
+	}
+	if results[0].Included || results[0].DuplicateJobID != "first" {
+		t.Fatalf("duplicate scan result = %#v", results[0])
+	}
+	if got := m.jobs["second"].Files; len(got) != 1 || got[0] != "/media/two.mp4" {
+		t.Fatalf("reservation was not stored atomically: %#v", got)
+	}
+}
+
+func TestReserveFilesIgnoresFinishedJobs(t *testing.T) {
+	m := &Manager{jobs: map[string]*Job{
+		"done": {ID: "done", Status: "complete", Files: []string{"/media/one.mp4"}},
+		"next": {ID: "next", Status: "queued"},
+	}}
+	results := []ScanResult{{Path: "/media/one.mp4", Included: true}}
+	accepted := m.reserveFiles("next", []string{"/media/one.mp4"}, results)
+	if len(accepted) != 1 || !results[0].Included {
+		t.Fatalf("finished job incorrectly blocked file: %#v %#v", accepted, results)
+	}
+}
+
 func TestCreateResolvesWriteASSDefaultAndOverride(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "one.mp4")

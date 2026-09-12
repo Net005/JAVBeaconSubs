@@ -4,6 +4,20 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-09-12
+
+### Added
+
+- Activity now has paginated Active, Completed, and Failed views, and every matched file can open its exact JAVBeacon release page directly from the discovery report.
+
+### Changed
+
+- Tightened the Jobs workspace into a single-page responsive layout with compact, correctly aligned Advanced controls and job details that wrap instead of forcing horizontal scrolling.
+
+### Fixed
+
+- Overlapping submissions now atomically exclude files already reserved by queued or running jobs. Each exclusion identifies the existing job in the discovery decisions, while finished jobs remain eligible for later reruns.
+
 ## [0.20.0] - 2026-09-12
 
 ### Added

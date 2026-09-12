@@ -96,6 +96,7 @@ type Job struct {
 	ReleaseStashSceneID  string                         `json:"release_stash_scene_id,omitempty"`
 	ReleaseStashURL      string                         `json:"release_stash_url,omitempty"`
 	ReleaseStashFilePath string                         `json:"release_stash_file_path,omitempty"`
+	ReleaseURL           string                         `json:"release_url,omitempty"`
 	AutoDetectRelease    bool                           `json:"auto_detect_release,omitempty"`
 	OnlyNewReleases      bool                           `json:"only_new_releases,omitempty"`
 	ReleaseStartDate     string                         `json:"release_start_date,omitempty"`
@@ -151,6 +152,7 @@ type FileReleaseMetadata struct {
 	ReleaseStashSceneID  string `json:"release_stash_scene_id,omitempty"`
 	ReleaseStashURL      string `json:"release_stash_url,omitempty"`
 	ReleaseStashFilePath string `json:"release_stash_file_path,omitempty"`
+	ReleaseURL           string `json:"release_url,omitempty"`
 }
 
 // ScanResult explains whether a discovered media file was admitted to the
@@ -167,6 +169,8 @@ type ScanResult struct {
 	Title          string `json:"title,omitempty"`
 	Provider       string `json:"provider,omitempty"`
 	LookupMethod   string `json:"lookup_method,omitempty"`
+	ReleaseURL     string `json:"release_url,omitempty"`
+	DuplicateJobID string `json:"duplicate_job_id,omitempty"`
 }
 
 type Manager struct {
@@ -271,6 +275,10 @@ func buildFileReleaseMetadata(externalID string, javbeaconID *int64, resolution 
 	if resolution.MatchedVideoID != "" {
 		externalID = resolution.MatchedVideoID
 	}
+	if javbeaconID == nil && resolution.MatchedReleaseID > 0 {
+		id := resolution.MatchedReleaseID
+		javbeaconID = &id
+	}
 	return FileReleaseMetadata{
 		ReleaseExternalID: externalID, JAVBeaconReleaseID: javbeaconID,
 		ReleaseTitle: resolution.Title, ReleaseStory: resolution.Story,
@@ -278,6 +286,7 @@ func buildFileReleaseMetadata(externalID string, javbeaconID *int64, resolution 
 		ReleaseLookupMethod: resolution.LookupMethod, ReleaseLookupMatched: resolution.LookupMatched, ReleaseLookupError: resolution.LookupError,
 		ReleaseProvider: resolution.Provider, ReleaseDate: resolution.ReleaseDate, ReleaseStashSceneID: resolution.StashSceneID, ReleaseStashURL: resolution.StashURL,
 		ReleaseStashFilePath: resolution.StashFilePath,
+		ReleaseURL:           resolution.ReleaseURL,
 	}
 }
 
@@ -520,6 +529,9 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 		}
 		files = eligible
 	}
+	if existingID != "" {
+		files = m.reserveFiles(existingID, files, scanResults)
+	}
 	m.preparationProgress(existingID, "preparing", 48, scanSummary(scanResults), "", len(files), len(scanResults))
 	fileSettings := make(map[string]profiles.Resolution, len(files))
 	profileSettings := m.Profiles()
@@ -557,7 +569,7 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 		ReleaseTitle: resolution.Title, ReleaseStory: resolution.Story,
 		ReleaseTitleSource: resolution.TitleSource, ReleaseStorySource: resolution.StorySource,
 		ReleaseLookupMethod: resolution.LookupMethod, ReleaseLookupMatched: resolution.LookupMatched, ReleaseLookupError: resolution.LookupError,
-		ReleaseProvider: resolution.Provider, ReleaseDate: resolution.ReleaseDate, ReleaseStashSceneID: resolution.StashSceneID, ReleaseStashURL: resolution.StashURL, ReleaseStashFilePath: resolution.StashFilePath,
+		ReleaseProvider: resolution.Provider, ReleaseDate: resolution.ReleaseDate, ReleaseStashSceneID: resolution.StashSceneID, ReleaseStashURL: resolution.StashURL, ReleaseStashFilePath: resolution.StashFilePath, ReleaseURL: resolution.ReleaseURL,
 		FileReleaseMetadata: fileReleaseMetadata,
 	}
 	m.mu.Lock()
@@ -588,6 +600,7 @@ func buildScanResults(files []string, jobRelease release.Resolution, perFile map
 			item.Title = metadata.ReleaseTitle
 			item.Provider = metadata.ReleaseProvider
 			item.LookupMethod = metadata.ReleaseLookupMethod
+			item.ReleaseURL = metadata.ReleaseURL
 		} else {
 			item.ReleaseMatched = jobRelease.LookupMatched
 			item.ReleaseDate = jobRelease.ReleaseDate
@@ -595,6 +608,7 @@ func buildScanResults(files []string, jobRelease release.Resolution, perFile map
 			item.Title = jobRelease.Title
 			item.Provider = jobRelease.Provider
 			item.LookupMethod = jobRelease.LookupMethod
+			item.ReleaseURL = jobRelease.ReleaseURL
 		}
 		if !onlyNew {
 			if item.ReleaseMatched {
@@ -617,6 +631,43 @@ func buildScanResults(files []string, jobRelease release.Resolution, perFile map
 		results = append(results, item)
 	}
 	return results
+}
+
+// reserveFiles atomically assigns eligible paths to a queued job. This keeps
+// overlapping scans from enqueueing the same file while another job is queued
+// or running, including when two preparations finish at nearly the same time.
+func (m *Manager) reserveFiles(jobID string, files []string, results []ScanResult) []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	occupied := make(map[string]string)
+	for id, job := range m.jobs {
+		if id == jobID || (job.Status != "queued" && job.Status != "running") {
+			continue
+		}
+		for _, path := range job.Files {
+			occupied[path] = id
+		}
+	}
+	accepted := make([]string, 0, len(files))
+	for _, path := range files {
+		if otherID := occupied[path]; otherID != "" {
+			for i := range results {
+				if results[i].Path == path {
+					results[i].Included = false
+					results[i].DuplicateJobID = otherID
+					results[i].Reason = "Excluded: already queued or processing in job " + otherID
+					break
+				}
+			}
+			continue
+		}
+		accepted = append(accepted, path)
+	}
+	if job := m.jobs[jobID]; job != nil && job.Status == "queued" {
+		job.Files = append([]string(nil), accepted...)
+		job.ScanResults = append([]ScanResult(nil), results...)
+	}
+	return accepted
 }
 
 func scanSummary(results []ScanResult) string {
@@ -687,7 +738,7 @@ func (m *Manager) finishFiltered(id string) {
 	m.mu.Lock()
 	job := m.jobs[id]
 	job.Status, job.Phase, job.Progress = "skipped", "complete", 100
-	job.Message = "No discovered files matched the new-release date filter"
+	job.Message = "No discovered files were eligible; review discovery decisions"
 	now := time.Now().UTC()
 	job.FinishedAt = &now
 	snapshot := clone(job)
@@ -751,26 +802,45 @@ type Page struct {
 }
 
 type pagePersistence interface {
-	ListPage(page, pageSize int, filter string) ([]*Job, int, error)
+	ListPage(page, pageSize int, filter, statusGroup string) ([]*Job, int, error)
 }
 
-func (m *Manager) ListPage(page, pageSize int, filter string) (Page, error) {
+func (m *Manager) ListPage(page, pageSize int, filter, statusGroup string) (Page, error) {
 	if page < 1 {
 		page = 1
 	}
 	if pageSize != 25 && pageSize != 50 && pageSize != 100 {
 		pageSize = 50
 	}
+	if statusGroup != "active" && statusGroup != "completed" && statusGroup != "failed" {
+		statusGroup = ""
+	}
 	if store, ok := m.persistence.(pagePersistence); ok {
-		items, total, err := store.ListPage(page, pageSize, filter)
+		items, total, err := store.ListPage(page, pageSize, filter, statusGroup)
 		if err != nil {
 			return Page{}, err
 		}
 		pages := (total + pageSize - 1) / pageSize
 		return Page{Jobs: items, Page: page, PageSize: pageSize, Total: total, Pages: pages}, nil
 	}
-	items := m.List()
+	items := filterJobsByStatus(m.List(), statusGroup)
 	return Page{Jobs: items, Page: 1, PageSize: len(items), Total: len(items), Pages: 1}, nil
+}
+
+func filterJobsByStatus(items []*Job, group string) []*Job {
+	if group == "" {
+		return items
+	}
+	result := make([]*Job, 0, len(items))
+	for _, job := range items {
+		match := group == "active" && (job.Status == "queued" || job.Status == "running") ||
+			group == "completed" && (job.Status == "complete" || job.Status == "skipped") ||
+			group == "failed" && (job.Status == "failed" || job.Status == "cancelled")
+		if match {
+			result = append(result, job)
+		}
+	}
+	return result
 }
 
 func (m *Manager) Cancel(id string) bool {
