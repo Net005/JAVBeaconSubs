@@ -4,6 +4,13 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-09-12
+
+### Changed
+
+- The left job-creation pane is more vertically compact, with reduced media-input height and spacing so its normal workflow fits typical desktop viewports without scrolling.
+- Translation plan is now an accessible collapsible section, folded by default for a compact workspace and remembering its expanded/collapsed state in browser storage across reloads.
+
 ## [0.22.0] - 2026-09-12
 
 ### Added
