@@ -4,6 +4,17 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-09-12
+
+### Added
+
+- Discovery & release decisions now has a global, browser-persisted **Eligible only** toggle for hiding excluded files across every job.
+- Matched discovery rows now present JAVBeacon title, expandable story, video ID, date, provider, matching method, and release link; unmatched rows explicitly identify the missing match and unavailable title/story.
+
+### Changed
+
+- Active jobs now replace the accumulating completed-output cards with a scrollable Remaining queue showing only files still waiting, together with their JAVBeacon title, expandable story, and release link. Download cards return when the job completes.
+
 ## [0.23.0] - 2026-09-12
 
 ### Changed

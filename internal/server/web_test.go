@@ -338,6 +338,8 @@ func TestWebUIProvidesNewReleaseFilteringAndImmediateProgressDesign(t *testing.T
 		"Create subtitle job", "Advanced options", "Subtitle activity",
 		"scheduleOnlyNew", "scheduleReleaseStart", "grid-template-columns:minmax(390px,520px) minmax(0,1fr)",
 		"installTranslationPlanFold", "javbeaconsubs.translationPlanFold", "aria-expanded",
+		"javbeaconsubs.discoveryIncludedOnly", "Eligible only", "No JAVBeacon release found",
+		"Remaining queue", "completedJobLinks", "No files waiting after the current file",
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("new release/job workspace UI is missing %q", required)

@@ -180,6 +180,21 @@ func TestReserveFilesIgnoresFinishedJobs(t *testing.T) {
 	}
 }
 
+func TestPreparationScanResultPublishesReleaseMetadataImmediately(t *testing.T) {
+	m := &Manager{
+		log:         slog.New(slog.NewTextHandler(io.Discard, nil)),
+		jobs:        map[string]*Job{"queued": {ID: "queued", Status: "queued"}},
+		subscribers: map[chan []byte]struct{}{},
+		persistence: testPersistence{},
+	}
+	metadata := FileReleaseMetadata{ReleaseTitle: "Example title", ReleaseStory: "Example story", ReleaseLookupMatched: true}
+	m.preparationScanResult("queued", ScanResult{Path: "/media/one.mp4", Filename: "one.mp4", ReleaseMatched: true}, &metadata)
+	job := m.jobs["queued"]
+	if got := job.FileReleaseMetadata["/media/one.mp4"]; got.ReleaseTitle != "Example title" || got.ReleaseStory != "Example story" {
+		t.Fatalf("live release metadata = %#v", got)
+	}
+}
+
 func TestCreateResolvesWriteASSDefaultAndOverride(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "one.mp4")

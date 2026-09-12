@@ -490,7 +490,8 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 	}
 	if autoDetectSingle {
 		partial := buildScanResults(files, resolution, nil, req.OnlyNewReleases, strings.TrimSpace(req.ReleaseStartDate))
-		m.preparationScanResult(existingID, partial[0])
+		metadata := buildFileReleaseMetadata(releaseExternalID, req.JAVBeaconReleaseID, resolution)
+		m.preparationScanResult(existingID, partial[0], &metadata)
 	}
 	if resolution.MatchedVideoID != "" {
 		releaseExternalID = resolution.MatchedVideoID
@@ -519,7 +520,8 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 			}
 			fileReleaseMetadata[key] = buildFileReleaseMetadata(fileExternalID, override.JAVBeaconReleaseID, fileResolution)
 			partial := buildScanResults([]string{key}, release.Resolution{}, fileReleaseMetadata, req.OnlyNewReleases, strings.TrimSpace(req.ReleaseStartDate))
-			m.preparationScanResult(existingID, partial[0])
+			metadata := fileReleaseMetadata[key]
+			m.preparationScanResult(existingID, partial[0], &metadata)
 			overridden[key] = true
 		}
 	}
@@ -535,7 +537,8 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 			}
 			fileReleaseMetadata[file] = buildFileReleaseMetadata("", nil, fileResolution)
 			partial := buildScanResults([]string{file}, release.Resolution{}, fileReleaseMetadata, req.OnlyNewReleases, strings.TrimSpace(req.ReleaseStartDate))
-			m.preparationScanResult(existingID, partial[0])
+			metadata := fileReleaseMetadata[file]
+			m.preparationScanResult(existingID, partial[0], &metadata)
 		}
 	}
 	scanResults := buildScanResults(files, resolution, fileReleaseMetadata, req.OnlyNewReleases, strings.TrimSpace(req.ReleaseStartDate))
@@ -720,7 +723,7 @@ func (m *Manager) preparationProgress(id, phase string, progress int, message, p
 	m.publish(snapshot)
 }
 
-func (m *Manager) preparationScanResult(id string, result ScanResult) {
+func (m *Manager) preparationScanResult(id string, result ScanResult, metadata *FileReleaseMetadata) {
 	if id == "" {
 		return
 	}
@@ -731,6 +734,12 @@ func (m *Manager) preparationScanResult(id string, result ScanResult) {
 		return
 	}
 	job.ScanResults = append(job.ScanResults, result)
+	if metadata != nil {
+		if job.FileReleaseMetadata == nil {
+			job.FileReleaseMetadata = make(map[string]FileReleaseMetadata)
+		}
+		job.FileReleaseMetadata[result.Path] = *metadata
+	}
 	job.Message = result.Reason
 	snapshot := clone(job)
 	m.mu.Unlock()
