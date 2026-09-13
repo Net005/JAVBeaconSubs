@@ -4,6 +4,14 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-09-13
+
+### Changed
+
+- Activity orders the running job first, queued jobs in processing order, and finished jobs newest-first.
+- Job cards now show clear local start and completion/failure timestamps plus elapsed or total processing time.
+- Every job card now aggregates provider-reported input, output, and total translation tokens, request batches, and estimated cost; active jobs clearly show accumulated usage from files completed so far.
+
 ## [0.25.0] - 2026-09-12
 
 ### Added

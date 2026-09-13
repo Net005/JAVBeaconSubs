@@ -136,3 +136,32 @@ func TestJobPaginationAndWildcardFiltering(t *testing.T) {
 		t.Fatalf("active status page: total=%d jobs=%d err=%v", total, len(items), err)
 	}
 }
+
+func TestJobPaginationUsesProcessingOrder(t *testing.T) {
+	database, err := Open(filepath.Join(t.TempDir(), "jobs.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	base := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
+	for _, item := range []*jobs.Job{
+		{ID: "complete", Status: "complete", CreatedAt: base.Add(4 * time.Minute)},
+		{ID: "queued-new", Status: "queued", CreatedAt: base.Add(3 * time.Minute)},
+		{ID: "running", Status: "running", CreatedAt: base.Add(time.Minute)},
+		{ID: "queued-old", Status: "queued", CreatedAt: base.Add(2 * time.Minute)},
+	} {
+		if err := database.Save(item); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, _, err := database.ListPage(1, 25, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"running", "queued-old", "queued-new", "complete"}
+	for index, id := range want {
+		if page[index].ID != id {
+			t.Fatalf("job %d = %q, want %q", index, page[index].ID, id)
+		}
+	}
+}

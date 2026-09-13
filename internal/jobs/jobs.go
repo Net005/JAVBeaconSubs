@@ -824,11 +824,32 @@ func (m *Manager) List() []*Job {
 	for _, j := range m.jobs {
 		out = append(out, clone(j))
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	sort.SliceStable(out, func(i, j int) bool { return jobComesBefore(out[i], out[j]) })
 	if len(out) > 100 {
 		out = out[:100]
 	}
 	return out
+}
+
+func jobComesBefore(left, right *Job) bool {
+	priority := func(status string) int {
+		switch status {
+		case "running":
+			return 0
+		case "queued":
+			return 1
+		default:
+			return 2
+		}
+	}
+	leftPriority, rightPriority := priority(left.Status), priority(right.Status)
+	if leftPriority != rightPriority {
+		return leftPriority < rightPriority
+	}
+	if left.Status == "queued" && right.Status == "queued" {
+		return left.CreatedAt.Before(right.CreatedAt)
+	}
+	return left.CreatedAt.After(right.CreatedAt)
 }
 
 type Page struct {

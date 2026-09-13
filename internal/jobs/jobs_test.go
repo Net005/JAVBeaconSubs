@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -41,6 +43,22 @@ func TestCompletionMessageReportsSkippedExistingFiles(t *testing.T) {
 func TestCompletionMessageReportsFailedFilesWithoutDiscardingSuccesses(t *testing.T) {
 	if got := completionMessage([]engine.Result{{}}, 2); got != "Generated 1 file(s); skipped 2 failed file(s)" {
 		t.Fatalf("partial completion message = %q", got)
+	}
+}
+
+func TestJobOrderingPinsRunningThenQueuedInProcessingOrder(t *testing.T) {
+	base := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
+	items := []*Job{
+		{ID: "completed-new", Status: "complete", CreatedAt: base.Add(4 * time.Minute)},
+		{ID: "queued-new", Status: "queued", CreatedAt: base.Add(3 * time.Minute)},
+		{ID: "running", Status: "running", CreatedAt: base.Add(time.Minute)},
+		{ID: "queued-old", Status: "queued", CreatedAt: base.Add(2 * time.Minute)},
+	}
+	sort.SliceStable(items, func(i, j int) bool { return jobComesBefore(items[i], items[j]) })
+	got := []string{items[0].ID, items[1].ID, items[2].ID, items[3].ID}
+	want := []string{"running", "queued-old", "queued-new", "completed-new"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("job order = %v, want %v", got, want)
 	}
 }
 

@@ -359,3 +359,22 @@ func TestWebUIRemembersLocalMediaPickerAndOffersServerPathFallback(t *testing.T)
 		}
 	}
 }
+
+func TestWebUIShowsPerJobTimingAndTranslationUsage(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{
+		"jobTiming", "Total time", "formatJobDuration",
+		"jobTranslationUsage", "OpenAI-compatible translation usage",
+		"translation_input_tokens", "translation_output_tokens",
+		"translation_total_tokens", "translation_cost_estimate_usd",
+		"Set rates in Settings", "Accumulated from completed files",
+	} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("job timing/translation usage UI is missing %q", required)
+		}
+	}
+}

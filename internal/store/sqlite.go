@@ -201,7 +201,7 @@ func (s *SQLite) ListPage(page, pageSize int, filter, statusGroup string) ([]*jo
 		return nil, 0, fmt.Errorf("count jobs: %w", err)
 	}
 	queryArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
-	rows, err := s.db.Query(`SELECT payload,callback_url,overwrite_existing FROM jobs`+where+` ORDER BY created_at DESC LIMIT ? OFFSET ?`, queryArgs...)
+	rows, err := s.db.Query(`SELECT payload,callback_url,overwrite_existing FROM jobs`+where+` ORDER BY CASE status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END ASC, CASE WHEN status = 'queued' THEN created_at END ASC, created_at DESC LIMIT ? OFFSET ?`, queryArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list jobs: %w", err)
 	}
