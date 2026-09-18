@@ -4,6 +4,12 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-09-18
+
+### Fixed
+
+- Auto-detecting a release for a multi-file batch job no longer aborts the entire job when one file's path matches more than one release in JAVBeacon; that file now falls back to filename-based matching, and if it's still ambiguous, the job is created anyway with the ambiguity recorded on that file instead of blocking every other file in the batch.
+
 ## [0.26.0] - 2026-09-13
 
 ### Changed

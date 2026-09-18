@@ -146,6 +146,18 @@ func Resolve(ctx context.Context, client *Client, req Request) (Resolution, erro
 				res.LookupError = err.Error()
 				return res, nil
 			}
+			if errors.Is(err, ErrAmbiguous) {
+				// Auto-detection is opt-in best-effort matching, unlike an
+				// explicit javbeacon_release_id/release_external_id (which
+				// the caller supplied expecting an exact match): an
+				// ambiguous result degrades to "no match found" with the
+				// ambiguity recorded as a diagnostic, the same way an
+				// unreachable JAVBeacon instance does, rather than failing
+				// this file's (or the whole batch job's) creation. Nothing
+				// is guessed from the ambiguous set (TODO Part 4).
+				res.LookupError = err.Error()
+				return res, nil
+			}
 			return res, err
 		}
 		if found != nil {

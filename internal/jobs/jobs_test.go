@@ -629,6 +629,55 @@ func TestCreateAutoDetectsReleaseMetadataPerFileInFolderJob(t *testing.T) {
 	}
 }
 
+// TestCreateBatchJobContinuesWhenOneFileHasAmbiguousAutoDetect exercises the
+// GHKR-75.wmv real-world report: a multi-file auto-detect batch used to
+// abort job creation entirely ("auto-detect release for %s: %w") the moment
+// any single file's stash_file_path matched more than one JAVBeacon
+// release. That per-file failure is now non-fatal (release.Resolve degrades
+// an ambiguous auto-detect to a recorded LookupError), so the batch job
+// must still be created, with the other files' metadata resolved normally
+// and the ambiguous file flagged rather than blocking everyone else.
+func TestCreateBatchJobContinuesWhenOneFileHasAmbiguousAutoDetect(t *testing.T) {
+	root := t.TempDir()
+	clean := filepath.Join(root, "ssis-001.mp4")
+	ambiguous := filepath.Join(root, "GHKR-75.wmv")
+	for _, path := range []string{clean, ambiguous} {
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if stashPath := r.URL.Query().Get("stash_file_path"); strings.EqualFold(stashPath, ambiguous) {
+			_, _ = io.WriteString(w, `[{"id":1,"video_id":"GHKR-75","title":"First"},{"id":2,"video_id":"GHKR-75","title":"Second"}]`)
+			return
+		}
+		switch strings.ToLower(r.URL.Query().Get("video_id")) {
+		case "ssis-001":
+			_, _ = io.WriteString(w, `[{"id":3,"video_id":"SSIS-001","title":"Clean match"}]`)
+		default:
+			_, _ = io.WriteString(w, `[]`)
+		}
+	}))
+	defer server.Close()
+
+	m := &Manager{cfg: config.Config{}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 1), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+	m.UpdateJAVBeacon(config.JAVBeaconConfig{BaseURL: server.URL, TimeoutSec: 5})
+	job, err := m.Create(Request{Inputs: []string{root}, Recursive: true, AutoDetectRelease: true})
+	if err != nil {
+		t.Fatalf("ambiguous auto-detect on one file must not abort batch job creation, got %v", err)
+	}
+	if len(job.FileReleaseMetadata) != 2 {
+		t.Fatalf("expected metadata for both files, got %#v", job.FileReleaseMetadata)
+	}
+	if got := job.FileReleaseMetadata[clean]; !got.ReleaseLookupMatched || got.ReleaseExternalID != "SSIS-001" {
+		t.Fatalf("clean file metadata = %#v", got)
+	}
+	if got := job.FileReleaseMetadata[ambiguous]; got.ReleaseLookupMatched || got.ReleaseLookupError == "" || !strings.Contains(got.ReleaseLookupError, "ambiguous") {
+		t.Fatalf("ambiguous file metadata = %#v", got)
+	}
+}
+
 // TestUpdateJAVBeaconSwapsReleaseClientUsedByResolve exercises
 // Manager.JAVBeacon()/UpdateJAVBeacon(): after swapping in a new
 // base_url/api_key, resolveFileRelease (which Create() calls for both the

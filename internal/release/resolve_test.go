@@ -193,6 +193,66 @@ func TestResolveAmbiguousExternalMatch(t *testing.T) {
 	}
 }
 
+func TestDetectFileFallsBackToFilenameWhenStashPathAmbiguous(t *testing.T) {
+	server := fakeJAVBeacon(t,
+		map[int64]Release{
+			1: {ID: 1, VideoID: "AAA-1", StashFilePath: "/collections/giga/dup-75.wmv"},
+			2: {ID: 2, VideoID: "BBB-1", StashFilePath: "/collections/giga/dup-75.wmv"},
+		},
+		map[string][]Release{"DUP-75": {{ID: 3, VideoID: "DUP-75", Title: "Filename match"}}},
+		nil,
+	)
+	match, err := DetectFile(context.Background(), testClient(t, server), "/collections/giga/dup-75.wmv")
+	if err != nil {
+		t.Fatalf("expected the filename fallback to resolve without error, got %v", err)
+	}
+	if match == nil || match.Method != "filename_video_id" || match.Release.ID != 3 {
+		t.Fatalf("match = %#v", match)
+	}
+}
+
+func TestDetectFileReturnsStashPathAmbiguityWhenFilenameFallbackInconclusive(t *testing.T) {
+	server := fakeJAVBeacon(t,
+		map[int64]Release{
+			1: {ID: 1, VideoID: "AAA-1", StashFilePath: "/collections/giga/GHKR-75.wmv"},
+			2: {ID: 2, VideoID: "BBB-1", StashFilePath: "/collections/giga/GHKR-75.wmv"},
+		},
+		nil,
+		nil,
+	)
+	match, err := DetectFile(context.Background(), testClient(t, server), "/collections/giga/GHKR-75.wmv")
+	if match != nil {
+		t.Fatalf("expected no match, got %#v", match)
+	}
+	if err == nil || !errors.Is(err, ErrAmbiguous) {
+		t.Fatalf("expected ErrAmbiguous from the original stash_file_path lookup, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "stash_file_path") {
+		t.Fatalf("expected error to reference stash_file_path, got %v", err)
+	}
+}
+
+func TestResolveAutoDetectAmbiguousStashPathDegradesToLookupError(t *testing.T) {
+	server := fakeJAVBeacon(t,
+		map[int64]Release{
+			1: {ID: 1, VideoID: "AAA-1", StashFilePath: "/collections/giga/GHKR-75.wmv"},
+			2: {ID: 2, VideoID: "BBB-1", StashFilePath: "/collections/giga/GHKR-75.wmv"},
+		},
+		nil,
+		nil,
+	)
+	res, err := Resolve(context.Background(), testClient(t, server), Request{AutoDetect: true, FilePath: "/collections/giga/GHKR-75.wmv"})
+	if err != nil {
+		t.Fatalf("an ambiguous auto-detect match should not fail job creation, got %v", err)
+	}
+	if res.LookupMatched {
+		t.Fatalf("expected no match to be recorded, got %#v", res)
+	}
+	if res.LookupError == "" || !strings.Contains(res.LookupError, "ambiguous") {
+		t.Fatalf("expected LookupError to explain the ambiguity, got %q", res.LookupError)
+	}
+}
+
 func TestResolveDoesNotAutoDetectUnlessRequested(t *testing.T) {
 	res, err := Resolve(context.Background(), nil, Request{ManualTitle: "Manual Title"})
 	if err != nil {
