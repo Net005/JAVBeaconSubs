@@ -211,28 +211,46 @@ func TestDetectFileFallsBackToFilenameWhenStashPathAmbiguous(t *testing.T) {
 	}
 }
 
-func TestDetectFileReturnsStashPathAmbiguityWhenFilenameFallbackInconclusive(t *testing.T) {
+func TestDetectFileAutoPicksMostCompleteCandidateWhenStillAmbiguous(t *testing.T) {
 	server := fakeJAVBeacon(t,
 		map[int64]Release{
 			1: {ID: 1, VideoID: "AAA-1", StashFilePath: "/collections/giga/GHKR-75.wmv"},
-			2: {ID: 2, VideoID: "BBB-1", StashFilePath: "/collections/giga/GHKR-75.wmv"},
+			2: {ID: 2, VideoID: "BBB-1", StashFilePath: "/collections/giga/GHKR-75.wmv", Title: "Complete entry", Story: "Has a story too"},
 		},
 		nil,
 		nil,
 	)
 	match, err := DetectFile(context.Background(), testClient(t, server), "/collections/giga/GHKR-75.wmv")
-	if match != nil {
-		t.Fatalf("expected no match, got %#v", match)
+	if err != nil {
+		t.Fatalf("an ambiguous stash_file_path match with no filename fallback should still resolve via auto-pick, got %v", err)
 	}
-	if err == nil || !errors.Is(err, ErrAmbiguous) {
-		t.Fatalf("expected ErrAmbiguous from the original stash_file_path lookup, got %v", err)
+	if match == nil || !match.Ambiguous || match.AmbiguousMatches != 2 {
+		t.Fatalf("expected an ambiguous auto-pick flagged with 2 candidates, got %#v", match)
 	}
-	if !strings.Contains(err.Error(), "stash_file_path") {
-		t.Fatalf("expected error to reference stash_file_path, got %v", err)
+	if match.Release.ID != 2 || match.Method != "stash_file_path" {
+		t.Fatalf("expected the more complete release (id 2) to be picked, got %#v", match)
 	}
 }
 
-func TestResolveAutoDetectAmbiguousStashPathDegradesToLookupError(t *testing.T) {
+func TestDetectFileAmbiguousPickBreaksTiesByLowestID(t *testing.T) {
+	server := fakeJAVBeacon(t,
+		map[int64]Release{
+			5: {ID: 5, VideoID: "BBB-1", StashFilePath: "/collections/giga/GHKR-75.wmv"},
+			3: {ID: 3, VideoID: "AAA-1", StashFilePath: "/collections/giga/GHKR-75.wmv"},
+		},
+		nil,
+		nil,
+	)
+	match, err := DetectFile(context.Background(), testClient(t, server), "/collections/giga/GHKR-75.wmv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if match == nil || !match.Ambiguous || match.Release.ID != 3 {
+		t.Fatalf("expected the lowest-ID candidate (id 3) to be picked when completeness ties, got %#v", match)
+	}
+}
+
+func TestResolveAutoDetectAmbiguousStashPathAutoPicksAndFlags(t *testing.T) {
 	server := fakeJAVBeacon(t,
 		map[int64]Release{
 			1: {ID: 1, VideoID: "AAA-1", StashFilePath: "/collections/giga/GHKR-75.wmv"},
@@ -245,11 +263,17 @@ func TestResolveAutoDetectAmbiguousStashPathDegradesToLookupError(t *testing.T) 
 	if err != nil {
 		t.Fatalf("an ambiguous auto-detect match should not fail job creation, got %v", err)
 	}
-	if res.LookupMatched {
-		t.Fatalf("expected no match to be recorded, got %#v", res)
+	if !res.LookupMatched {
+		t.Fatalf("expected the auto-picked release to be recorded as matched, got %#v", res)
+	}
+	if !res.LookupAmbiguous || res.AmbiguousMatches != 2 {
+		t.Fatalf("expected LookupAmbiguous with 2 candidates recorded, got %#v", res)
 	}
 	if res.LookupError == "" || !strings.Contains(res.LookupError, "ambiguous") {
-		t.Fatalf("expected LookupError to explain the ambiguity, got %q", res.LookupError)
+		t.Fatalf("expected LookupError to explain the ambiguity even though a pick was made, got %q", res.LookupError)
+	}
+	if res.MatchedReleaseID != 1 {
+		t.Fatalf("expected the lowest-ID candidate to be picked when neither has more metadata, got release id %d", res.MatchedReleaseID)
 	}
 }
 

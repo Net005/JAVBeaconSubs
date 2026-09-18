@@ -633,10 +633,12 @@ func TestCreateAutoDetectsReleaseMetadataPerFileInFolderJob(t *testing.T) {
 // GHKR-75.wmv real-world report: a multi-file auto-detect batch used to
 // abort job creation entirely ("auto-detect release for %s: %w") the moment
 // any single file's stash_file_path matched more than one JAVBeacon
-// release. That per-file failure is now non-fatal (release.Resolve degrades
-// an ambiguous auto-detect to a recorded LookupError), so the batch job
-// must still be created, with the other files' metadata resolved normally
-// and the ambiguous file flagged rather than blocking everyone else.
+// release. That per-file failure is now non-fatal: release.Resolve
+// deterministically auto-picks the most complete candidate and flags it as
+// ambiguous rather than leaving the file unmatched, so the batch job must
+// still be created, with the other files' metadata resolved normally and
+// the ambiguous file carrying a real (auto-picked) release plus a
+// reviewable flag rather than blocking everyone else.
 func TestCreateBatchJobContinuesWhenOneFileHasAmbiguousAutoDetect(t *testing.T) {
 	root := t.TempDir()
 	clean := filepath.Join(root, "ssis-001.mp4")
@@ -649,7 +651,7 @@ func TestCreateBatchJobContinuesWhenOneFileHasAmbiguousAutoDetect(t *testing.T) 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if stashPath := r.URL.Query().Get("stash_file_path"); strings.EqualFold(stashPath, ambiguous) {
-			_, _ = io.WriteString(w, `[{"id":1,"video_id":"GHKR-75","title":"First"},{"id":2,"video_id":"GHKR-75","title":"Second"}]`)
+			_, _ = io.WriteString(w, `[{"id":1,"video_id":"GHKR-75","title":"First"},{"id":2,"video_id":"GHKR-75","title":"Second","story":"Has a story"}]`)
 			return
 		}
 		switch strings.ToLower(r.URL.Query().Get("video_id")) {
@@ -670,10 +672,10 @@ func TestCreateBatchJobContinuesWhenOneFileHasAmbiguousAutoDetect(t *testing.T) 
 	if len(job.FileReleaseMetadata) != 2 {
 		t.Fatalf("expected metadata for both files, got %#v", job.FileReleaseMetadata)
 	}
-	if got := job.FileReleaseMetadata[clean]; !got.ReleaseLookupMatched || got.ReleaseExternalID != "SSIS-001" {
+	if got := job.FileReleaseMetadata[clean]; !got.ReleaseLookupMatched || got.ReleaseExternalID != "SSIS-001" || got.ReleaseLookupAmbiguous {
 		t.Fatalf("clean file metadata = %#v", got)
 	}
-	if got := job.FileReleaseMetadata[ambiguous]; got.ReleaseLookupMatched || got.ReleaseLookupError == "" || !strings.Contains(got.ReleaseLookupError, "ambiguous") {
+	if got := job.FileReleaseMetadata[ambiguous]; !got.ReleaseLookupMatched || !got.ReleaseLookupAmbiguous || got.ReleaseLookupError == "" || !strings.Contains(got.ReleaseLookupError, "ambiguous") || got.ReleaseTitle != "Second" {
 		t.Fatalf("ambiguous file metadata = %#v", got)
 	}
 }

@@ -40,10 +40,20 @@ type Resolution struct {
 	LookupMethod  string // explicit ID or one of the exact auto-detection rules
 	LookupMatched bool
 	// LookupError carries a non-fatal diagnostic (JAVBeacon unreachable, not
-	// configured) for an explicit-ID lookup that could not be completed -
-	// distinct from job creation actually failing (TODO Part 39: "manual
-	// metadata should still be usable"). Empty when nothing went wrong.
+	// configured, or - see LookupAmbiguous - an ambiguous auto-detect) for
+	// a lookup that could not be completed with certainty - distinct from
+	// job creation actually failing (TODO Part 39: "manual metadata should
+	// still be usable"). Empty when nothing went wrong.
 	LookupError string
+	// LookupAmbiguous is true when an auto-detect rule matched more than
+	// one release and MatchedReleaseID/Title/Story below were
+	// deterministically auto-picked from AmbiguousMatches candidates
+	// rather than being the sole match (TODO Part 4: "do not guess" - the
+	// pick is always recorded here, never presented as certain). Callers
+	// should surface this distinctly from a clean match so it can be
+	// reviewed. LookupError carries the human-readable explanation.
+	LookupAmbiguous  bool
+	AmbiguousMatches int
 
 	Provider         string // JAVBeacon's Release.Source ("GIGA" | "JavLibrary" | "")
 	MatchedReleaseID int64
@@ -146,23 +156,26 @@ func Resolve(ctx context.Context, client *Client, req Request) (Resolution, erro
 				res.LookupError = err.Error()
 				return res, nil
 			}
-			if errors.Is(err, ErrAmbiguous) {
-				// Auto-detection is opt-in best-effort matching, unlike an
-				// explicit javbeacon_release_id/release_external_id (which
-				// the caller supplied expecting an exact match): an
-				// ambiguous result degrades to "no match found" with the
-				// ambiguity recorded as a diagnostic, the same way an
-				// unreachable JAVBeacon instance does, rather than failing
-				// this file's (or the whole batch job's) creation. Nothing
-				// is guessed from the ambiguous set (TODO Part 4).
-				res.LookupError = err.Error()
-				return res, nil
-			}
 			return res, err
 		}
 		if found != nil {
 			res.LookupMethod = found.Method
 			matched = &found.Release
+			if found.Ambiguous {
+				// Auto-detection is opt-in best-effort matching, unlike an
+				// explicit javbeacon_release_id/release_external_id (which
+				// the caller supplied expecting an exact match): rather
+				// than failing this file's (or the whole batch job's)
+				// creation, DetectFile already deterministically picked
+				// the most complete candidate. Record that here so
+				// callers can surface it as a reviewable, not-certain
+				// match instead of presenting it identically to a clean
+				// one (TODO Part 4: nothing is guessed silently).
+				res.LookupAmbiguous = true
+				res.AmbiguousMatches = found.AmbiguousMatches
+				res.LookupError = fmt.Sprintf("release lookup ambiguous: %d releases matched via %s; auto-selected release id %d (%s) - review and correct with a manual override if this is wrong",
+					found.AmbiguousMatches, found.Method, found.Release.ID, strings.TrimSpace(found.Release.VideoID))
+			}
 		}
 	}
 

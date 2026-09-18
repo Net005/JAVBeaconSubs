@@ -79,62 +79,63 @@ type ReleaseOverrideRequest struct {
 }
 
 type Job struct {
-	ID                   string                         `json:"id"`
-	ScheduleID           string                         `json:"schedule_id,omitempty"`
-	ScheduleName         string                         `json:"schedule_name,omitempty"`
-	ExternalID           string                         `json:"external_id,omitempty"`
-	ReleaseExternalID    string                         `json:"release_external_id,omitempty"`
-	JAVBeaconReleaseID   *int64                         `json:"javbeacon_release_id,omitempty"`
-	ReleaseTitle         string                         `json:"release_title,omitempty"`
-	ReleaseStory         string                         `json:"release_story,omitempty"`
-	ReleaseTitleSource   string                         `json:"release_title_source,omitempty"`
-	ReleaseStorySource   string                         `json:"release_story_source,omitempty"`
-	ReleaseLookupMethod  string                         `json:"release_lookup_method,omitempty"`
-	ReleaseLookupMatched bool                           `json:"release_lookup_matched,omitempty"`
-	ReleaseLookupError   string                         `json:"release_lookup_error,omitempty"`
-	ReleaseProvider      string                         `json:"release_provider,omitempty"`
-	ReleaseDate          string                         `json:"release_date,omitempty"`
-	ReleaseStashSceneID  string                         `json:"release_stash_scene_id,omitempty"`
-	ReleaseStashURL      string                         `json:"release_stash_url,omitempty"`
-	ReleaseStashFilePath string                         `json:"release_stash_file_path,omitempty"`
-	ReleaseURL           string                         `json:"release_url,omitempty"`
-	AutoDetectRelease    bool                           `json:"auto_detect_release,omitempty"`
-	OnlyNewReleases      bool                           `json:"only_new_releases,omitempty"`
-	ReleaseStartDate     string                         `json:"release_start_date,omitempty"`
-	ReleaseWithinDays    int                            `json:"release_within_days,omitempty"`
-	ScanResults          []ScanResult                   `json:"scan_results,omitempty"`
-	Status               string                         `json:"status"`
-	Phase                string                         `json:"phase,omitempty"`
-	Progress             int                            `json:"progress"`
-	Message              string                         `json:"message,omitempty"`
-	CurrentPath          string                         `json:"current_path,omitempty"`
-	CurrentFile          string                         `json:"current_file,omitempty"`
-	CurrentFileNumber    int                            `json:"current_file_number,omitempty"`
-	ETASeconds           int64                          `json:"eta_seconds,omitempty"`
-	EstimatedFinishAt    *time.Time                     `json:"estimated_finish_at,omitempty"`
-	Inputs               []string                       `json:"inputs"`
-	Files                []string                       `json:"files"`
-	Results              []engine.Result                `json:"results,omitempty"`
-	FileFailures         []FileFailure                  `json:"file_failures,omitempty"`
-	Error                string                         `json:"error,omitempty"`
-	CallbackURL          string                         `json:"-"`
-	Overwrite            bool                           `json:"-"`
-	KeepJapanese         bool                           `json:"keep_japanese"`
-	WriteASS             bool                           `json:"write_ass"`
-	ASRMode              string                         `json:"asr_mode"`
-	ASRProfile           string                         `json:"asr_profile"`
-	Profile              string                         `json:"profile"`
-	ProfileSource        string                         `json:"profile_source,omitempty"`
-	ASRModeSource        string                         `json:"asr_mode_source,omitempty"`
-	FileSettings         map[string]profiles.Resolution `json:"file_settings,omitempty"`
-	FileReleaseMetadata  map[string]FileReleaseMetadata `json:"file_release_metadata,omitempty"`
-	DebugMode            bool                           `json:"debug_mode,omitempty"`
-	CreatedAt            time.Time                      `json:"created_at"`
-	StartedAt            *time.Time                     `json:"started_at,omitempty"`
-	FinishedAt           *time.Time                     `json:"finished_at,omitempty"`
-	PostProcessingStatus string                         `json:"post_processing_status,omitempty"`
-	PostProcessingError  string                         `json:"post_processing_error,omitempty"`
-	cancel               context.CancelFunc
+	ID                     string                         `json:"id"`
+	ScheduleID             string                         `json:"schedule_id,omitempty"`
+	ScheduleName           string                         `json:"schedule_name,omitempty"`
+	ExternalID             string                         `json:"external_id,omitempty"`
+	ReleaseExternalID      string                         `json:"release_external_id,omitempty"`
+	JAVBeaconReleaseID     *int64                         `json:"javbeacon_release_id,omitempty"`
+	ReleaseTitle           string                         `json:"release_title,omitempty"`
+	ReleaseStory           string                         `json:"release_story,omitempty"`
+	ReleaseTitleSource     string                         `json:"release_title_source,omitempty"`
+	ReleaseStorySource     string                         `json:"release_story_source,omitempty"`
+	ReleaseLookupMethod    string                         `json:"release_lookup_method,omitempty"`
+	ReleaseLookupMatched   bool                           `json:"release_lookup_matched,omitempty"`
+	ReleaseLookupError     string                         `json:"release_lookup_error,omitempty"`
+	ReleaseLookupAmbiguous bool                           `json:"release_lookup_ambiguous,omitempty"`
+	ReleaseProvider        string                         `json:"release_provider,omitempty"`
+	ReleaseDate            string                         `json:"release_date,omitempty"`
+	ReleaseStashSceneID    string                         `json:"release_stash_scene_id,omitempty"`
+	ReleaseStashURL        string                         `json:"release_stash_url,omitempty"`
+	ReleaseStashFilePath   string                         `json:"release_stash_file_path,omitempty"`
+	ReleaseURL             string                         `json:"release_url,omitempty"`
+	AutoDetectRelease      bool                           `json:"auto_detect_release,omitempty"`
+	OnlyNewReleases        bool                           `json:"only_new_releases,omitempty"`
+	ReleaseStartDate       string                         `json:"release_start_date,omitempty"`
+	ReleaseWithinDays      int                            `json:"release_within_days,omitempty"`
+	ScanResults            []ScanResult                   `json:"scan_results,omitempty"`
+	Status                 string                         `json:"status"`
+	Phase                  string                         `json:"phase,omitempty"`
+	Progress               int                            `json:"progress"`
+	Message                string                         `json:"message,omitempty"`
+	CurrentPath            string                         `json:"current_path,omitempty"`
+	CurrentFile            string                         `json:"current_file,omitempty"`
+	CurrentFileNumber      int                            `json:"current_file_number,omitempty"`
+	ETASeconds             int64                          `json:"eta_seconds,omitempty"`
+	EstimatedFinishAt      *time.Time                     `json:"estimated_finish_at,omitempty"`
+	Inputs                 []string                       `json:"inputs"`
+	Files                  []string                       `json:"files"`
+	Results                []engine.Result                `json:"results,omitempty"`
+	FileFailures           []FileFailure                  `json:"file_failures,omitempty"`
+	Error                  string                         `json:"error,omitempty"`
+	CallbackURL            string                         `json:"-"`
+	Overwrite              bool                           `json:"-"`
+	KeepJapanese           bool                           `json:"keep_japanese"`
+	WriteASS               bool                           `json:"write_ass"`
+	ASRMode                string                         `json:"asr_mode"`
+	ASRProfile             string                         `json:"asr_profile"`
+	Profile                string                         `json:"profile"`
+	ProfileSource          string                         `json:"profile_source,omitempty"`
+	ASRModeSource          string                         `json:"asr_mode_source,omitempty"`
+	FileSettings           map[string]profiles.Resolution `json:"file_settings,omitempty"`
+	FileReleaseMetadata    map[string]FileReleaseMetadata `json:"file_release_metadata,omitempty"`
+	DebugMode              bool                           `json:"debug_mode,omitempty"`
+	CreatedAt              time.Time                      `json:"created_at"`
+	StartedAt              *time.Time                     `json:"started_at,omitempty"`
+	FinishedAt             *time.Time                     `json:"finished_at,omitempty"`
+	PostProcessingStatus   string                         `json:"post_processing_status,omitempty"`
+	PostProcessingError    string                         `json:"post_processing_error,omitempty"`
+	cancel                 context.CancelFunc
 }
 
 // FileFailure records a media-specific processing error without aborting the
@@ -150,21 +151,22 @@ type FileFailure struct {
 // batch job. It is populated for explicit overrides and per-file automatic
 // matches; absence means "use the job-level release fields."
 type FileReleaseMetadata struct {
-	ReleaseExternalID    string `json:"release_external_id,omitempty"`
-	JAVBeaconReleaseID   *int64 `json:"javbeacon_release_id,omitempty"`
-	ReleaseTitle         string `json:"release_title,omitempty"`
-	ReleaseStory         string `json:"release_story,omitempty"`
-	ReleaseTitleSource   string `json:"release_title_source,omitempty"`
-	ReleaseStorySource   string `json:"release_story_source,omitempty"`
-	ReleaseLookupMethod  string `json:"release_lookup_method,omitempty"`
-	ReleaseLookupMatched bool   `json:"release_lookup_matched,omitempty"`
-	ReleaseLookupError   string `json:"release_lookup_error,omitempty"`
-	ReleaseProvider      string `json:"release_provider,omitempty"`
-	ReleaseDate          string `json:"release_date,omitempty"`
-	ReleaseStashSceneID  string `json:"release_stash_scene_id,omitempty"`
-	ReleaseStashURL      string `json:"release_stash_url,omitempty"`
-	ReleaseStashFilePath string `json:"release_stash_file_path,omitempty"`
-	ReleaseURL           string `json:"release_url,omitempty"`
+	ReleaseExternalID      string `json:"release_external_id,omitempty"`
+	JAVBeaconReleaseID     *int64 `json:"javbeacon_release_id,omitempty"`
+	ReleaseTitle           string `json:"release_title,omitempty"`
+	ReleaseStory           string `json:"release_story,omitempty"`
+	ReleaseTitleSource     string `json:"release_title_source,omitempty"`
+	ReleaseStorySource     string `json:"release_story_source,omitempty"`
+	ReleaseLookupMethod    string `json:"release_lookup_method,omitempty"`
+	ReleaseLookupMatched   bool   `json:"release_lookup_matched,omitempty"`
+	ReleaseLookupError     string `json:"release_lookup_error,omitempty"`
+	ReleaseLookupAmbiguous bool   `json:"release_lookup_ambiguous,omitempty"`
+	ReleaseProvider        string `json:"release_provider,omitempty"`
+	ReleaseDate            string `json:"release_date,omitempty"`
+	ReleaseStashSceneID    string `json:"release_stash_scene_id,omitempty"`
+	ReleaseStashURL        string `json:"release_stash_url,omitempty"`
+	ReleaseStashFilePath   string `json:"release_stash_file_path,omitempty"`
+	ReleaseURL             string `json:"release_url,omitempty"`
 }
 
 // ScanResult explains whether a discovered media file was admitted to the
@@ -296,7 +298,8 @@ func buildFileReleaseMetadata(externalID string, javbeaconID *int64, resolution 
 		ReleaseTitle: resolution.Title, ReleaseStory: resolution.Story,
 		ReleaseTitleSource: resolution.TitleSource, ReleaseStorySource: resolution.StorySource,
 		ReleaseLookupMethod: resolution.LookupMethod, ReleaseLookupMatched: resolution.LookupMatched, ReleaseLookupError: resolution.LookupError,
-		ReleaseProvider: resolution.Provider, ReleaseDate: resolution.ReleaseDate, ReleaseStashSceneID: resolution.StashSceneID, ReleaseStashURL: resolution.StashURL,
+		ReleaseLookupAmbiguous: resolution.LookupAmbiguous,
+		ReleaseProvider:        resolution.Provider, ReleaseDate: resolution.ReleaseDate, ReleaseStashSceneID: resolution.StashSceneID, ReleaseStashURL: resolution.StashURL,
 		ReleaseStashFilePath: resolution.StashFilePath,
 		ReleaseURL:           resolution.ReleaseURL,
 	}
@@ -601,7 +604,8 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 		ReleaseTitle: resolution.Title, ReleaseStory: resolution.Story,
 		ReleaseTitleSource: resolution.TitleSource, ReleaseStorySource: resolution.StorySource,
 		ReleaseLookupMethod: resolution.LookupMethod, ReleaseLookupMatched: resolution.LookupMatched, ReleaseLookupError: resolution.LookupError,
-		ReleaseProvider: resolution.Provider, ReleaseDate: resolution.ReleaseDate, ReleaseStashSceneID: resolution.StashSceneID, ReleaseStashURL: resolution.StashURL, ReleaseStashFilePath: resolution.StashFilePath, ReleaseURL: resolution.ReleaseURL,
+		ReleaseLookupAmbiguous: resolution.LookupAmbiguous,
+		ReleaseProvider:        resolution.Provider, ReleaseDate: resolution.ReleaseDate, ReleaseStashSceneID: resolution.StashSceneID, ReleaseStashURL: resolution.StashURL, ReleaseStashFilePath: resolution.StashFilePath, ReleaseURL: resolution.ReleaseURL,
 		FileReleaseMetadata: fileReleaseMetadata,
 	}
 	m.mu.Lock()
