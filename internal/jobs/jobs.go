@@ -259,6 +259,21 @@ func (m *Manager) Run(ctx context.Context) {
 	<-ctx.Done()
 }
 
+// hasExistingOutput reports whether file already has generated English
+// subtitles on disk that this job will not replace - the exact condition
+// engine.Runner.process uses to take its skip-existing branch instead of
+// doing recognition/translation work. When true, an auto-detect release
+// lookup for this file is pure overhead: the file will not be processed,
+// so there is nothing for the matched metadata to be used for.
+func (m *Manager) hasExistingOutput(file string, overwrite bool) bool {
+	if overwrite || m.cfg.Output.Overwrite {
+		return false
+	}
+	base := strings.TrimSuffix(file, filepath.Ext(file))
+	_, err := os.Stat(base + m.cfg.Output.EnglishSuffix)
+	return err == nil
+}
+
 // resolveFileRelease validates release metadata size limits and resolves
 // it against JAVBeacon/manual overrides (TODO Part 33/36). Shared by the
 // job-level default (Create()) and every per-file override, so the
@@ -475,6 +490,21 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 		return nil, fmt.Errorf("no supported media files found")
 	}
 	m.preparationProgress(existingID, "matching_releases", 15, fmt.Sprintf("Found %d media file(s); matching JAVBeacon releases", len(files)), "", 0, len(files))
+	// skippedExisting marks files that already have generated subtitles and
+	// will not be reprocessed (engine.Runner.process's skip-existing
+	// branch), so an auto-detect release lookup for them is skipped too -
+	// nothing will use the matched metadata. Left nil under OnlyNewReleases:
+	// there, the release date decides which files are even included, so
+	// every file must still be looked up regardless of existing output.
+	var skippedExisting map[string]bool
+	if !req.OnlyNewReleases {
+		skippedExisting = make(map[string]bool, len(files))
+		for _, f := range files {
+			if m.hasExistingOutput(f, req.Overwrite) {
+				skippedExisting[f] = true
+			}
+		}
+	}
 	req.ASRMode = config.NormalizeASRMode(req.ASRMode)
 	if req.ASRMode != "" && req.ASRMode != "fast" && req.ASRMode != "balanced" && req.ASRMode != "high_accuracy" {
 		return nil, fmt.Errorf("asr_mode must be fast, balanced, or high_accuracy")
@@ -492,6 +522,9 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 	}
 	hasExplicitRelease := req.JAVBeaconReleaseID != nil || releaseExternalID != ""
 	autoDetectSingle := req.AutoDetectRelease && !hasExplicitRelease && len(files) == 1
+	if autoDetectSingle && skippedExisting[files[0]] {
+		autoDetectSingle = false
+	}
 	resolutionPath := ""
 	if autoDetectSingle {
 		resolutionPath = files[0]
@@ -502,7 +535,7 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 		return nil, err
 	}
 	if autoDetectSingle {
-		partial := buildScanResults(files, resolution, nil, req.OnlyNewReleases, strings.TrimSpace(req.ReleaseStartDate))
+		partial := buildScanResults(files, resolution, nil, req.OnlyNewReleases, strings.TrimSpace(req.ReleaseStartDate), skippedExisting)
 		metadata := buildFileReleaseMetadata(releaseExternalID, req.JAVBeaconReleaseID, resolution)
 		m.preparationScanResult(existingID, partial[0], &metadata)
 	}
@@ -532,7 +565,7 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 				return nil, fmt.Errorf("file_release_overrides[%s]: %w", rawKey, resolveErr)
 			}
 			fileReleaseMetadata[key] = buildFileReleaseMetadata(fileExternalID, override.JAVBeaconReleaseID, fileResolution)
-			partial := buildScanResults([]string{key}, release.Resolution{}, fileReleaseMetadata, req.OnlyNewReleases, strings.TrimSpace(req.ReleaseStartDate))
+			partial := buildScanResults([]string{key}, release.Resolution{}, fileReleaseMetadata, req.OnlyNewReleases, strings.TrimSpace(req.ReleaseStartDate), skippedExisting)
 			metadata := fileReleaseMetadata[key]
 			m.preparationScanResult(existingID, partial[0], &metadata)
 			overridden[key] = true
@@ -540,7 +573,7 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 	}
 	if req.AutoDetectRelease && !hasExplicitRelease && len(files) > 1 {
 		for index, file := range files {
-			if overridden[file] {
+			if overridden[file] || skippedExisting[file] {
 				continue
 			}
 			m.preparationProgress(existingID, "matching_releases", 15+(index*30/len(files)), "Matching release information", file, index+1, len(files))
@@ -549,12 +582,12 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 				return nil, fmt.Errorf("auto-detect release for %s: %w", file, resolveErr)
 			}
 			fileReleaseMetadata[file] = buildFileReleaseMetadata("", nil, fileResolution)
-			partial := buildScanResults([]string{file}, release.Resolution{}, fileReleaseMetadata, req.OnlyNewReleases, strings.TrimSpace(req.ReleaseStartDate))
+			partial := buildScanResults([]string{file}, release.Resolution{}, fileReleaseMetadata, req.OnlyNewReleases, strings.TrimSpace(req.ReleaseStartDate), skippedExisting)
 			metadata := fileReleaseMetadata[file]
 			m.preparationScanResult(existingID, partial[0], &metadata)
 		}
 	}
-	scanResults := buildScanResults(files, resolution, fileReleaseMetadata, req.OnlyNewReleases, strings.TrimSpace(req.ReleaseStartDate))
+	scanResults := buildScanResults(files, resolution, fileReleaseMetadata, req.OnlyNewReleases, strings.TrimSpace(req.ReleaseStartDate), skippedExisting)
 	if req.OnlyNewReleases {
 		eligible := make([]string, 0, len(files))
 		for _, result := range scanResults {
@@ -625,7 +658,7 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 	return clone(job), nil
 }
 
-func buildScanResults(files []string, jobRelease release.Resolution, perFile map[string]FileReleaseMetadata, onlyNew bool, startDate string) []ScanResult {
+func buildScanResults(files []string, jobRelease release.Resolution, perFile map[string]FileReleaseMetadata, onlyNew bool, startDate string, skippedExisting map[string]bool) []ScanResult {
 	results := make([]ScanResult, 0, len(files))
 	for _, file := range files {
 		item := ScanResult{Path: file, Filename: filepath.Base(file), Included: true}
@@ -647,9 +680,12 @@ func buildScanResults(files []string, jobRelease release.Resolution, perFile map
 			item.ReleaseURL = jobRelease.ReleaseURL
 		}
 		if !onlyNew {
-			if item.ReleaseMatched {
+			switch {
+			case item.ReleaseMatched:
 				item.Reason = "JAVBeacon release matched"
-			} else {
+			case skippedExisting[file]:
+				item.Reason = "Subtitles already exist; release lookup skipped"
+			default:
 				item.Reason = "No JAVBeacon release matched; date filter is disabled"
 			}
 		} else if !item.ReleaseMatched {

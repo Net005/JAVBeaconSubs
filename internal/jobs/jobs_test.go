@@ -115,7 +115,7 @@ func TestNewReleaseFilterExplainsEveryDecision(t *testing.T) {
 		files[1]: {ReleaseLookupMatched: true, ReleaseDate: "2026-08-31", ReleaseExternalID: "OLD-1"},
 		files[3]: {ReleaseLookupMatched: true, ReleaseExternalID: "NODATE"},
 	}
-	results := buildScanResults(files, release.Resolution{}, metadata, true, "2026-09-01")
+	results := buildScanResults(files, release.Resolution{}, metadata, true, "2026-09-01", nil)
 	if len(results) != 4 || !results[0].Included || results[1].Included || results[2].Included || results[3].Included {
 		t.Fatalf("unexpected release decisions: %#v", results)
 	}
@@ -677,6 +677,131 @@ func TestCreateBatchJobContinuesWhenOneFileHasAmbiguousAutoDetect(t *testing.T) 
 	}
 	if got := job.FileReleaseMetadata[ambiguous]; !got.ReleaseLookupMatched || !got.ReleaseLookupAmbiguous || got.ReleaseLookupError == "" || !strings.Contains(got.ReleaseLookupError, "ambiguous") || got.ReleaseTitle != "Second" {
 		t.Fatalf("ambiguous file metadata = %#v", got)
+	}
+}
+
+// TestCreateSkipsReleaseLookupForFilesWithExistingSubtitles verifies that a
+// folder scan does not spend a JAVBeacon lookup on a file that already has
+// generated English subtitles and will not be reprocessed: engine.Runner.
+// process would take its skip-existing branch for it regardless of what
+// release matching finds, so the lookup would only be wasted overhead.
+func TestCreateSkipsReleaseLookupForFilesWithExistingSubtitles(t *testing.T) {
+	root := t.TempDir()
+	existing := filepath.Join(root, "ssis-001.mp4")
+	fresh := filepath.Join(root, "adn-816.mp4")
+	for _, path := range []string{existing, fresh} {
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	existingSubtitle := strings.TrimSuffix(existing, filepath.Ext(existing)) + ".en.srt"
+	if err := os.WriteFile(existingSubtitle, []byte("1\n00:00:00,000 --> 00:00:01,000\nHi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var queried []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		queried = append(queried, r.URL.RawQuery)
+		switch strings.ToLower(r.URL.Query().Get("video_id")) {
+		case "adn-816":
+			_, _ = io.WriteString(w, `[{"id":1,"video_id":"ADN-816","title":"Fresh match"}]`)
+		default:
+			_, _ = io.WriteString(w, `[]`)
+		}
+	}))
+	defer server.Close()
+
+	m := &Manager{cfg: config.Config{Output: config.OutputConfig{EnglishSuffix: ".en.srt"}}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 1), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+	m.UpdateJAVBeacon(config.JAVBeaconConfig{BaseURL: server.URL, TimeoutSec: 5})
+	job, err := m.Create(Request{Inputs: []string{root}, Recursive: true, AutoDetectRelease: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range queried {
+		if strings.Contains(strings.ToLower(q), "ssis-001") {
+			t.Fatalf("release lookup should have been skipped for the file with existing subtitles, but a query referenced it: queries = %v", queried)
+		}
+	}
+	if got := job.FileReleaseMetadata[fresh]; !got.ReleaseLookupMatched || got.ReleaseExternalID != "ADN-816" {
+		t.Fatalf("fresh file should still be matched normally, got %#v", got)
+	}
+	if _, ok := job.FileReleaseMetadata[existing]; ok {
+		t.Fatalf("expected no metadata entry for the skipped existing file, got %#v", job.FileReleaseMetadata[existing])
+	}
+	var reason string
+	for _, sr := range job.ScanResults {
+		if sr.Path == existing {
+			reason = sr.Reason
+		}
+	}
+	if reason != "Subtitles already exist; release lookup skipped" {
+		t.Fatalf("expected the existing file's scan reason to explain the skip, got %q", reason)
+	}
+}
+
+// TestCreateStillLooksUpExistingFilesWhenOverwriteRequested verifies the
+// skip in TestCreateSkipsReleaseLookupForFilesWithExistingSubtitles does not
+// apply when the job will actually replace existing output.
+func TestCreateStillLooksUpExistingFilesWhenOverwriteRequested(t *testing.T) {
+	root := t.TempDir()
+	existing := filepath.Join(root, "ssis-001.mp4")
+	if err := os.WriteFile(existing, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	existingSubtitle := strings.TrimSuffix(existing, filepath.Ext(existing)) + ".en.srt"
+	if err := os.WriteFile(existingSubtitle, []byte("1\n00:00:00,000 --> 00:00:01,000\nHi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var queried []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		queried = append(queried, r.URL.RawQuery)
+		_, _ = io.WriteString(w, `[]`)
+	}))
+	defer server.Close()
+
+	m := &Manager{cfg: config.Config{Output: config.OutputConfig{EnglishSuffix: ".en.srt"}}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 1), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+	m.UpdateJAVBeacon(config.JAVBeaconConfig{BaseURL: server.URL, TimeoutSec: 5})
+	if _, err := m.Create(Request{Inputs: []string{root}, Recursive: true, AutoDetectRelease: true, Overwrite: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(queried) == 0 {
+		t.Fatal("expected a release lookup even though the file already has subtitles, since Overwrite is set")
+	}
+}
+
+// TestCreateStillLooksUpExistingFilesUnderOnlyNewReleases verifies the skip
+// does not apply when only_new_releases is enabled: there, the release
+// date decides whether a file is included at all, so every file must still
+// be looked up regardless of existing output.
+func TestCreateStillLooksUpExistingFilesUnderOnlyNewReleases(t *testing.T) {
+	root := t.TempDir()
+	existing := filepath.Join(root, "ssis-001.mp4")
+	if err := os.WriteFile(existing, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	existingSubtitle := strings.TrimSuffix(existing, filepath.Ext(existing)) + ".en.srt"
+	if err := os.WriteFile(existingSubtitle, []byte("1\n00:00:00,000 --> 00:00:01,000\nHi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var queried []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		queried = append(queried, r.URL.RawQuery)
+		_, _ = io.WriteString(w, `[]`)
+	}))
+	defer server.Close()
+
+	m := &Manager{cfg: config.Config{Output: config.OutputConfig{EnglishSuffix: ".en.srt"}}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 1), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+	m.UpdateJAVBeacon(config.JAVBeaconConfig{BaseURL: server.URL, TimeoutSec: 5})
+	if _, err := m.Create(Request{Inputs: []string{root}, Recursive: true, AutoDetectRelease: true, OnlyNewReleases: true, ReleaseStartDate: "2000-01-01"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(queried) == 0 {
+		t.Fatal("expected a release lookup even though the file already has subtitles, since only_new_releases gates inclusion on the release date")
 	}
 }
 

@@ -4,6 +4,12 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-09-19
+
+### Changed
+
+- Scanning a folder no longer spends a JAVBeacon release lookup on a file that already has generated subtitles and will not be reprocessed; only files that will actually be recognized/translated (or a job with Replace existing subtitles enabled) are matched against JAVBeacon. Release-dated scans (only_new_releases) are unaffected, since there the release date decides which files are even included.
+
 ## [0.27.0] - 2026-09-18
 
 ### Fixed
