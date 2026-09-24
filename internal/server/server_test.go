@@ -56,6 +56,89 @@ func TestOptionalFormBool(t *testing.T) {
 	}
 }
 
+// TestBackendsEndpointReportsConfiguredIdentities exercises the
+// GET /api/v1/backends endpoint end to end: the JAVBeacon Stash plugin
+// calls this to compare against a scene's existing subtitle provenance
+// (transcription_backend/translation_backend in <video>.en.srt.json) and
+// treats any mismatch as "an upgrade is available," so the JSON keys and
+// values must be exact.
+func TestBackendsEndpointReportsConfiguredIdentities(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{
+		APIToken:    "test-api-token",
+		Whisper:     config.WhisperConfig{QwenModel: "Qwen/Qwen3-ASR-1.7B", QwenRevision: "abc123"},
+		Translation: config.TranslationConfig{Mode: "contextual", Model: "gpt-5.6-luna", BatchSize: 24, TimeoutSec: 120},
+		Output:      config.OutputConfig{WriteASS: true},
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	database, err := store.Open(filepath.Join(root, "jobs.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	runner := engine.New(cfg, logger)
+	post := jobs.NewPostProcessor(config.PostProcessingConfig{Mode: "none", TimeoutSec: 60}, logger)
+	manager, err := jobs.New(cfg, runner, database, post, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authManager, err := auth.New(database, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := New(cfg, manager, runner, authManager, post, database, logger).Handler()
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/backends", nil)
+	request.Header.Set("Authorization", "Bearer test-api-token")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", response.Code, response.Body.String())
+	}
+	var got backendsResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.TranscriptionBackend != "Qwen/Qwen3-ASR-1.7B@abc123" {
+		t.Fatalf("transcription_backend = %q", got.TranscriptionBackend)
+	}
+	if got.TranslationBackend != "gpt-5.6-luna" {
+		t.Fatalf("translation_backend = %q", got.TranslationBackend)
+	}
+}
+
+// TestBackendsEndpointRequiresAuth verifies GET /api/v1/backends is
+// covered by the same auth as the rest of /api/v1 (session cookie or
+// Bearer API token) - it is not accidentally left open.
+func TestBackendsEndpointRequiresAuth(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Config{APIToken: "test-api-token", Output: config.OutputConfig{WriteASS: true}}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	database, err := store.Open(filepath.Join(root, "jobs.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	runner := engine.New(cfg, logger)
+	post := jobs.NewPostProcessor(config.PostProcessingConfig{Mode: "none", TimeoutSec: 60}, logger)
+	manager, err := jobs.New(cfg, runner, database, post, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authManager, err := auth.New(database, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := New(cfg, manager, runner, authManager, post, database, logger).Handler()
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/backends", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without credentials, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestScheduleCRUDAndRunNowAPI(t *testing.T) {
 	root := t.TempDir()
 	media := filepath.Join(root, "movie.mp4")

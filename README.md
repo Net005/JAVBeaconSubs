@@ -227,6 +227,7 @@ The response is `202 Accepted`, immediately includes a queued job, and sets `Loc
 - `GET /api/v1/events` — server-sent `job` events for live UI updates.
 - `DELETE /api/v1/jobs/{id}` — cancel queued/running work.
 - `GET /api/v1/health` — dependency and model readiness.
+- `GET /api/v1/backends` — the `transcription_backend`/`translation_backend` identities a job started right now would write into a completed subtitle's `.en.srt.json` provenance sidecar, for example `{"transcription_backend":"Qwen/Qwen3-ASR-1.7B","translation_backend":"gpt-5.6-luna"}`. The JAVBeacon Stash plugin compares these, byte for byte, against what is already recorded in a scene's sidecar to detect stale subtitles before offering to regenerate them.
 - `GET /api/v1/settings` and `PUT /api/v1/settings` — read/update persistent translation and post-processing settings (credentials are write-only).
 
 ### Scheduled jobs

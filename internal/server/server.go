@@ -73,6 +73,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/session/setup", s.setupAccount)
 	mux.HandleFunc("DELETE /api/v1/session", s.logout)
 	mux.HandleFunc("GET /api/v1/health", s.health)
+	mux.HandleFunc("GET /api/v1/backends", s.backends)
 	mux.HandleFunc("GET /api/v1/settings", s.getSettings)
 	mux.HandleFunc("PUT /api/v1/settings", s.updateSettings)
 	mux.HandleFunc("POST /api/v1/javbeacon/test", s.testJAVBeacon)
@@ -602,6 +603,23 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	status["storage"] = "sqlite"
 	status["max_upload_gb"] = s.cfg.MaxUploadGB
 	writeJSON(w, 200, status)
+}
+
+// backendsResponse is what a new job started right now would write into a
+// completed subtitle's provenance sidecar
+// (transcription_backend/translation_backend in <video>.en.srt.json).
+// External tooling (the JAVBeacon Stash plugin) compares this, byte for
+// byte, against what is already recorded in that sidecar to decide
+// whether existing subtitles are stale relative to the currently
+// configured backends.
+type backendsResponse struct {
+	TranscriptionBackend string `json:"transcription_backend"`
+	TranslationBackend   string `json:"translation_backend"`
+}
+
+func (s *Server) backends(w http.ResponseWriter, _ *http.Request) {
+	transcription, translation := s.runner.Backends()
+	writeJSON(w, 200, backendsResponse{TranscriptionBackend: transcription, TranslationBackend: translation})
 }
 func (s *Server) listJobs(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))

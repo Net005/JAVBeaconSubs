@@ -4,6 +4,12 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-09-24
+
+### Added
+
+- New `GET /api/v1/backends` endpoint, authenticated the same way as the rest of the JAVBeacon REST contract, reporting the exact `transcription_backend`/`translation_backend` identities a job started right now would write into a completed subtitle's `.en.srt.json` provenance sidecar. Lets external tooling (the JAVBeacon Stash plugin) detect that existing subtitles were generated with an older backend before offering to regenerate them.
+
 ## [0.28.0] - 2026-09-19
 
 ### Changed

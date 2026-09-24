@@ -813,6 +813,25 @@ func (r *Runner) translationBackend() string {
 	}
 }
 
+// Backends reports the transcription and translation backend identities
+// that a new job started right now would write into a completed
+// subtitle's provenance sidecar (transcription_backend/translation_backend
+// in <video>.en.srt.json) - the same identity process() sets at the very
+// start of every job (result.Models["asr_primary"]), before any runtime
+// override the ASR pipeline itself may report from its own metadata once
+// a job actually runs. It intentionally does not call transcriptionBackend
+// (which reads a completed Result's possibly-overridden Models map) -
+// there is no Result here, and this is meant to answer "what would a
+// fresh job use," not "what did a specific past job end up using."
+// Exposed for external tooling (the JAVBeacon Stash plugin) to check
+// whether a scene's existing subtitles are stale relative to what
+// JAVBeaconSubs is currently configured to produce.
+func (r *Runner) Backends() (transcription, translation string) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return modelIdentity(r.cfg.Whisper.QwenModel, r.cfg.Whisper.QwenRevision), r.translationBackend()
+}
+
 func (r *Runner) transcribe(ctx context.Context, wav, prefix string, translate, useGPU bool, report func(int)) ([]subtitle.Segment, error) {
 	if r.cfg.Whisper.Backend == "qwen" && !translate {
 		segments, err := r.transcribeQwen(ctx, wav, prefix, useGPU, report)

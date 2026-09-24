@@ -31,6 +31,38 @@ func TestApplyCatalogsCatalogIDOverrideWinsOverReleaseTitle(t *testing.T) {
 	}
 }
 
+// TestBackendsReportsConfiguredTranscriptionAndTranslationIdentities
+// verifies Runner.Backends() against the exact values external tooling
+// (the JAVBeacon Stash plugin's GET /api/v1/backends consumer) compares
+// byte for byte against a completed subtitle's provenance sidecar.
+func TestBackendsReportsConfiguredTranscriptionAndTranslationIdentities(t *testing.T) {
+	r := &Runner{cfg: config.Config{
+		Whisper:     config.WhisperConfig{QwenModel: "Qwen/Qwen3-ASR-1.7B", QwenRevision: "abc123"},
+		Translation: config.TranslationConfig{Mode: "contextual", Model: "gpt-5.6-luna"},
+	}}
+	transcription, translation := r.Backends()
+	if transcription != "Qwen/Qwen3-ASR-1.7B@abc123" {
+		t.Fatalf("transcription backend = %q", transcription)
+	}
+	if translation != "gpt-5.6-luna" {
+		t.Fatalf("translation backend = %q", translation)
+	}
+}
+
+func TestBackendsOmitsRevisionSuffixWhenUnsetAndUsesLocalModelForDirectMode(t *testing.T) {
+	r := &Runner{cfg: config.Config{
+		Whisper:     config.WhisperConfig{QwenModel: "Qwen/Qwen3-ASR-1.7B", Model: "/models/ggml-large-v3.bin"},
+		Translation: config.TranslationConfig{Mode: "direct"},
+	}}
+	transcription, translation := r.Backends()
+	if transcription != "Qwen/Qwen3-ASR-1.7B" {
+		t.Fatalf("transcription backend = %q, want no @revision suffix", transcription)
+	}
+	if translation != "whisper.cpp:ggml-large-v3.bin" {
+		t.Fatalf("translation backend = %q", translation)
+	}
+}
+
 func TestReleaseContextDiagnosticsTitleAndStory(t *testing.T) {
 	id := int64(38188)
 	got := releaseContextDiagnostics(ReleaseContextDiagnostics{
