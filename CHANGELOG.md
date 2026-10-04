@@ -4,6 +4,10 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Propagate late or remounted host NFS media shares into the running container when media is bound from a stable shared parent mount; an optional startup alias preserves existing media paths.
+
 ## [0.29.0] - 2026-09-24
 
 ### Added

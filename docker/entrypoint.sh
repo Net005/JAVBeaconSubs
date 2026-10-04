@@ -1,6 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+configure_media_alias() {
+  local mapping="${JAVBEACONSUBS_MEDIA_ALIAS:-}"
+  [[ -z "$mapping" ]] && return 0
+  if [[ "$mapping" != *=* ]]; then
+    echo "JAVBEACONSUBS_MEDIA_ALIAS must be /alias=/mounted/target." >&2
+    exit 1
+  fi
+  local alias_path="${mapping%%=*}"
+  local target_path="${mapping#*=}"
+  if [[ ! "$alias_path" =~ ^/[A-Za-z0-9_-]+$ ]] || [[ "$target_path" != /* ]]; then
+    echo "JAVBEACONSUBS_MEDIA_ALIAS requires a root-level /alias and absolute target." >&2
+    exit 1
+  fi
+  if [[ -e "$alias_path" || -L "$alias_path" ]]; then
+    echo "Media alias path already exists: $alias_path" >&2
+    exit 1
+  fi
+  ln -s "$target_path" "$alias_path"
+}
+configure_media_alias
+
 download_model() {
   local destination="$1"
   local url="$2"

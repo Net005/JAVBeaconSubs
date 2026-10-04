@@ -66,9 +66,34 @@ services:
       PUID: "1000"
       PGID: "1000"
     volumes:
-      - "/mnt/data/movies:/mnt/data/movies"
+      - type: bind
+        source: /mnt/data
+        target: /mnt/data
+        bind:
+          propagation: rslave
       - "/srv/archive:/srv/archive"
 ```
+
+For NFS media that can mount late or reconnect after sleep, bind a **stable local parent** above the NFS mountpoint. For example, when the host mounts NFS at `/mnt/data/movies`, bind `/mnt/data` and submit `/mnt/data/movies` to the API. Set `MEDIA_PATH=/mnt/data` to expose the same tree at `/media/movies`, or use the path-preserving bind shown above. Compose uses `rslave` for its `/media` bind, so host mounts and remounts underneath that parent appear inside an already running container without restarting it. Additional NFS binds must also use `rslave`. Binding the NFS mountpoint itself can leave Docker attached to the old mount after a remount.
+
+For an existing installation that submits `/collections/jav/MOVIE.mp4` while the host NFS mount is `/srv/example/media`, replace the direct `/srv/example/media/collections:/collections` bind with a stable parent bind and an alias:
+
+```yaml
+services:
+  javbeaconsubs:
+    environment:
+      JAVBEACONSUBS_MEDIA_ALIAS: /collections=/srv/example/media/collections
+    volumes:
+      - type: bind
+        source: /srv/example
+        target: /srv/example
+        bind:
+          propagation: rslave
+```
+
+Do not keep the old direct `/collections` bind: it would cover the alias and retain the stale NFS mount. The alias does not need the NFS share to be present when the container starts; jobs can use `/collections/...` after the host share becomes available. Changes to bind mounts require one container recreation.
+
+The host parent mount must have `shared` propagation. Check it with `findmnt -T /mnt/data -o TARGET,PROPAGATION`; if it says `private`, arrange `mount --make-rshared /mnt/data` on the host before starting Docker Compose, and make that host mount setup persistent across boot. The NFS mount must still reconnect on the host; Docker cannot repair an unavailable NFS server. After changing a bind source or propagation, recreate the container once with `docker compose up -d --force-recreate`, then later NFS mounts should become visible without further restarts. Avoid creating subtitles in the empty underlying mountpoint while NFS is offline.
 
 To attach this service to an existing JAVBeacon Compose network, set `JAVBEACON_NETWORK` to that network's actual Docker name and add the optional overlay:
 

@@ -53,6 +53,7 @@ services:
       JAVBEACONSUBS_GPU_FALLBACK_CPU: "${JAVBEACONSUBS_GPU_FALLBACK_CPU:-true}"
       PUID: "${PUID:-1000}"
       PGID: "${PGID:-}"
+      JAVBEACONSUBS_MEDIA_ALIAS: "${JAVBEACONSUBS_MEDIA_ALIAS:-}"
       GID: "${GID:-}"
       GUID: "${GUID:-}"
       UMASK: "${UMASK:-0002}"
@@ -63,7 +64,11 @@ services:
       - "${JAVBEACONSUBS_DATA_PATH:-./data}:/data"
       - "${JAVBEACONSUBS_MODELS_PATH:-./models}:/models"
       - "${JAVBEACONSUBS_SCRIPTS_PATH:-./scripts}:/scripts:ro"
-      - "${MEDIA_PATH:-./media}:/media"
+      - type: bind
+        source: "${MEDIA_PATH:-./media}"
+        target: /media
+        bind:
+          propagation: rslave
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --header \"Authorization: Bearer $${JAVBEACONSUBS_API_TOKEN}\" http://127.0.0.1:$${SUBTITLE_PORT}/api/v1/health"]
       interval: 30s
