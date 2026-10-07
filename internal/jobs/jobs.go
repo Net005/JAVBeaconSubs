@@ -32,19 +32,21 @@ const (
 )
 
 type Request struct {
-	Inputs       []string `json:"inputs"`
-	Recursive    bool     `json:"recursive"`
-	Overwrite    bool     `json:"overwrite"`
-	KeepJapanese *bool    `json:"keep_japanese,omitempty"`
-	WriteASS     *bool    `json:"write_ass,omitempty"`
-	ASRMode      string   `json:"asr_mode,omitempty"`
-	ASRProfile   string   `json:"asr_profile,omitempty"`
-	Profile      string   `json:"profile,omitempty"`
-	DebugMode    bool     `json:"debug_mode,omitempty"`
-	ExternalID   string   `json:"external_id,omitempty"`
-	CallbackURL  string   `json:"callback_url,omitempty"`
-	ScheduleID   string   `json:"-"`
-	ScheduleName string   `json:"-"`
+	Inputs                        []string `json:"inputs"`
+	Recursive                     bool     `json:"recursive"`
+	Overwrite                     bool     `json:"overwrite"`
+	OverwriteIfModelNewer         bool     `json:"overwrite_if_model_newer,omitempty"`
+	OverwriteUnverifiedProvenance bool     `json:"overwrite_unverified_provenance,omitempty"`
+	KeepJapanese                  *bool    `json:"keep_japanese,omitempty"`
+	WriteASS                      *bool    `json:"write_ass,omitempty"`
+	ASRMode                       string   `json:"asr_mode,omitempty"`
+	ASRProfile                    string   `json:"asr_profile,omitempty"`
+	Profile                       string   `json:"profile,omitempty"`
+	DebugMode                     bool     `json:"debug_mode,omitempty"`
+	ExternalID                    string   `json:"external_id,omitempty"`
+	CallbackURL                   string   `json:"callback_url,omitempty"`
+	ScheduleID                    string   `json:"-"`
+	ScheduleName                  string   `json:"-"`
 
 	// Release metadata (all optional; see internal/release for lookup
 	// precedence). ReleaseExternalID falls back to ExternalID when empty and
@@ -80,64 +82,66 @@ type ReleaseOverrideRequest struct {
 }
 
 type Job struct {
-	ID                     string                         `json:"id"`
-	ScheduleID             string                         `json:"schedule_id,omitempty"`
-	ScheduleName           string                         `json:"schedule_name,omitempty"`
-	ExternalID             string                         `json:"external_id,omitempty"`
-	ReleaseExternalID      string                         `json:"release_external_id,omitempty"`
-	JAVBeaconReleaseID     *int64                         `json:"javbeacon_release_id,omitempty"`
-	ReleaseTitle           string                         `json:"release_title,omitempty"`
-	ReleaseStory           string                         `json:"release_story,omitempty"`
-	ReleaseTitleSource     string                         `json:"release_title_source,omitempty"`
-	ReleaseStorySource     string                         `json:"release_story_source,omitempty"`
-	ReleaseLookupMethod    string                         `json:"release_lookup_method,omitempty"`
-	ReleaseLookupMatched   bool                           `json:"release_lookup_matched,omitempty"`
-	ReleaseLookupError     string                         `json:"release_lookup_error,omitempty"`
-	ReleaseLookupAmbiguous bool                           `json:"release_lookup_ambiguous,omitempty"`
-	ReleaseProvider        string                         `json:"release_provider,omitempty"`
-	ReleaseDate            string                         `json:"release_date,omitempty"`
-	ReleaseStashSceneID    string                         `json:"release_stash_scene_id,omitempty"`
-	ReleaseStashURL        string                         `json:"release_stash_url,omitempty"`
-	ReleaseStashFilePath   string                         `json:"release_stash_file_path,omitempty"`
-	ReleaseURL             string                         `json:"release_url,omitempty"`
-	AutoDetectRelease      bool                           `json:"auto_detect_release,omitempty"`
-	OnlyNewReleases        bool                           `json:"only_new_releases,omitempty"`
-	OnlyWatchlist          bool                           `json:"only_watchlist,omitempty"`
-	ReleaseStartDate       string                         `json:"release_start_date,omitempty"`
-	ReleaseWithinDays      int                            `json:"release_within_days,omitempty"`
-	ScanResults            []ScanResult                   `json:"scan_results,omitempty"`
-	Status                 string                         `json:"status"`
-	Phase                  string                         `json:"phase,omitempty"`
-	Progress               int                            `json:"progress"`
-	Message                string                         `json:"message,omitempty"`
-	CurrentPath            string                         `json:"current_path,omitempty"`
-	CurrentFile            string                         `json:"current_file,omitempty"`
-	CurrentFileNumber      int                            `json:"current_file_number,omitempty"`
-	ETASeconds             int64                          `json:"eta_seconds,omitempty"`
-	EstimatedFinishAt      *time.Time                     `json:"estimated_finish_at,omitempty"`
-	Inputs                 []string                       `json:"inputs"`
-	Files                  []string                       `json:"files"`
-	Results                []engine.Result                `json:"results,omitempty"`
-	FileFailures           []FileFailure                  `json:"file_failures,omitempty"`
-	Error                  string                         `json:"error,omitempty"`
-	CallbackURL            string                         `json:"-"`
-	Overwrite              bool                           `json:"-"`
-	KeepJapanese           bool                           `json:"keep_japanese"`
-	WriteASS               bool                           `json:"write_ass"`
-	ASRMode                string                         `json:"asr_mode"`
-	ASRProfile             string                         `json:"asr_profile"`
-	Profile                string                         `json:"profile"`
-	ProfileSource          string                         `json:"profile_source,omitempty"`
-	ASRModeSource          string                         `json:"asr_mode_source,omitempty"`
-	FileSettings           map[string]profiles.Resolution `json:"file_settings,omitempty"`
-	FileReleaseMetadata    map[string]FileReleaseMetadata `json:"file_release_metadata,omitempty"`
-	DebugMode              bool                           `json:"debug_mode,omitempty"`
-	CreatedAt              time.Time                      `json:"created_at"`
-	StartedAt              *time.Time                     `json:"started_at,omitempty"`
-	FinishedAt             *time.Time                     `json:"finished_at,omitempty"`
-	PostProcessingStatus   string                         `json:"post_processing_status,omitempty"`
-	PostProcessingError    string                         `json:"post_processing_error,omitempty"`
-	cancel                 context.CancelFunc
+	ID                            string                         `json:"id"`
+	ScheduleID                    string                         `json:"schedule_id,omitempty"`
+	ScheduleName                  string                         `json:"schedule_name,omitempty"`
+	ExternalID                    string                         `json:"external_id,omitempty"`
+	ReleaseExternalID             string                         `json:"release_external_id,omitempty"`
+	JAVBeaconReleaseID            *int64                         `json:"javbeacon_release_id,omitempty"`
+	ReleaseTitle                  string                         `json:"release_title,omitempty"`
+	ReleaseStory                  string                         `json:"release_story,omitempty"`
+	ReleaseTitleSource            string                         `json:"release_title_source,omitempty"`
+	ReleaseStorySource            string                         `json:"release_story_source,omitempty"`
+	ReleaseLookupMethod           string                         `json:"release_lookup_method,omitempty"`
+	ReleaseLookupMatched          bool                           `json:"release_lookup_matched,omitempty"`
+	ReleaseLookupError            string                         `json:"release_lookup_error,omitempty"`
+	ReleaseLookupAmbiguous        bool                           `json:"release_lookup_ambiguous,omitempty"`
+	ReleaseProvider               string                         `json:"release_provider,omitempty"`
+	ReleaseDate                   string                         `json:"release_date,omitempty"`
+	ReleaseStashSceneID           string                         `json:"release_stash_scene_id,omitempty"`
+	ReleaseStashURL               string                         `json:"release_stash_url,omitempty"`
+	ReleaseStashFilePath          string                         `json:"release_stash_file_path,omitempty"`
+	ReleaseURL                    string                         `json:"release_url,omitempty"`
+	AutoDetectRelease             bool                           `json:"auto_detect_release,omitempty"`
+	OnlyNewReleases               bool                           `json:"only_new_releases,omitempty"`
+	OnlyWatchlist                 bool                           `json:"only_watchlist,omitempty"`
+	ReleaseStartDate              string                         `json:"release_start_date,omitempty"`
+	ReleaseWithinDays             int                            `json:"release_within_days,omitempty"`
+	ScanResults                   []ScanResult                   `json:"scan_results,omitempty"`
+	Status                        string                         `json:"status"`
+	Phase                         string                         `json:"phase,omitempty"`
+	Progress                      int                            `json:"progress"`
+	Message                       string                         `json:"message,omitempty"`
+	CurrentPath                   string                         `json:"current_path,omitempty"`
+	CurrentFile                   string                         `json:"current_file,omitempty"`
+	CurrentFileNumber             int                            `json:"current_file_number,omitempty"`
+	ETASeconds                    int64                          `json:"eta_seconds,omitempty"`
+	EstimatedFinishAt             *time.Time                     `json:"estimated_finish_at,omitempty"`
+	Inputs                        []string                       `json:"inputs"`
+	Files                         []string                       `json:"files"`
+	Results                       []engine.Result                `json:"results,omitempty"`
+	FileFailures                  []FileFailure                  `json:"file_failures,omitempty"`
+	Error                         string                         `json:"error,omitempty"`
+	CallbackURL                   string                         `json:"-"`
+	Overwrite                     bool                           `json:"-"`
+	OverwriteIfModelNewer         bool                           `json:"overwrite_if_model_newer,omitempty"`
+	OverwriteUnverifiedProvenance bool                           `json:"overwrite_unverified_provenance,omitempty"`
+	KeepJapanese                  bool                           `json:"keep_japanese"`
+	WriteASS                      bool                           `json:"write_ass"`
+	ASRMode                       string                         `json:"asr_mode"`
+	ASRProfile                    string                         `json:"asr_profile"`
+	Profile                       string                         `json:"profile"`
+	ProfileSource                 string                         `json:"profile_source,omitempty"`
+	ASRModeSource                 string                         `json:"asr_mode_source,omitempty"`
+	FileSettings                  map[string]profiles.Resolution `json:"file_settings,omitempty"`
+	FileReleaseMetadata           map[string]FileReleaseMetadata `json:"file_release_metadata,omitempty"`
+	DebugMode                     bool                           `json:"debug_mode,omitempty"`
+	CreatedAt                     time.Time                      `json:"created_at"`
+	StartedAt                     *time.Time                     `json:"started_at,omitempty"`
+	FinishedAt                    *time.Time                     `json:"finished_at,omitempty"`
+	PostProcessingStatus          string                         `json:"post_processing_status,omitempty"`
+	PostProcessingError           string                         `json:"post_processing_error,omitempty"`
+	cancel                        context.CancelFunc
 }
 
 // FileFailure records a media-specific processing error without aborting the
@@ -410,7 +414,7 @@ func (m *Manager) Queue(req Request) (*Job, error) {
 		ReleaseTitleSource: titleSource, ReleaseStorySource: storySource,
 		Status: "queued", Phase: "queued", Progress: 1,
 		Message:     "Queued for file discovery and JAVBeacon matching",
-		CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, KeepJapanese: keepJapanese, WriteASS: writeASS,
+		CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, OverwriteIfModelNewer: req.OverwriteIfModelNewer, OverwriteUnverifiedProvenance: req.OverwriteUnverifiedProvenance, KeepJapanese: keepJapanese, WriteASS: writeASS,
 		ASRMode: config.NormalizeASRMode(req.ASRMode), ASRProfile: config.NormalizeProfile(requestedProfile), Profile: config.NormalizeProfile(requestedProfile),
 		DebugMode: req.DebugMode, AutoDetectRelease: req.AutoDetectRelease,
 		OnlyNewReleases: req.OnlyNewReleases, OnlyWatchlist: req.OnlyWatchlist, ReleaseStartDate: strings.TrimSpace(req.ReleaseStartDate), ReleaseWithinDays: req.ReleaseWithinDays,
@@ -432,6 +436,9 @@ func (m *Manager) Queue(req Request) (*Job, error) {
 func validateRequest(req Request) error {
 	if len(req.Inputs) == 0 {
 		return fmt.Errorf("inputs must contain at least one file or folder")
+	}
+	if req.OverwriteUnverifiedProvenance && !req.OverwriteIfModelNewer && !req.Overwrite {
+		return fmt.Errorf("overwrite_unverified_provenance requires overwrite_if_model_newer (or overwrite)")
 	}
 	if req.ReleaseWithinDays < 0 || req.ReleaseWithinDays > 36500 {
 		return fmt.Errorf("release_within_days must be 0 (disabled) or between 1 and 36500")
@@ -501,7 +508,7 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 	// watchlist filtering: release metadata decides eligibility, so every
 	// file must still be looked up regardless of existing output.
 	var skippedExisting map[string]bool
-	if !req.OnlyNewReleases && !req.OnlyWatchlist {
+	if !req.OnlyNewReleases && !req.OnlyWatchlist && !req.OverwriteIfModelNewer {
 		skippedExisting = make(map[string]bool, len(files))
 		for _, f := range files {
 			if m.hasExistingOutput(f, req.Overwrite) {
@@ -635,7 +642,7 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 	job := &Job{
 		ID: jobID, ExternalID: req.ExternalID, Status: "queued", Phase: "ready", Progress: 50, Message: "Ready for subtitle worker",
 		ScheduleID: req.ScheduleID, ScheduleName: req.ScheduleName,
-		Inputs: req.Inputs, Files: files, CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, KeepJapanese: keepJapanese, WriteASS: writeASS,
+		Inputs: req.Inputs, Files: files, CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, OverwriteIfModelNewer: req.OverwriteIfModelNewer, OverwriteUnverifiedProvenance: req.OverwriteUnverifiedProvenance, KeepJapanese: keepJapanese, WriteASS: writeASS,
 		ASRMode: firstResolution.ASRMode, ASRProfile: firstResolution.Profile, Profile: firstResolution.Profile,
 		ProfileSource: firstResolution.ProfileSource, ASRModeSource: firstResolution.ASRModeSource, FileSettings: fileSettings,
 		DebugMode: req.DebugMode, AutoDetectRelease: req.AutoDetectRelease, OnlyNewReleases: req.OnlyNewReleases, OnlyWatchlist: req.OnlyWatchlist,
@@ -1069,7 +1076,7 @@ func (m *Manager) process(ctx context.Context, id string) {
 		if override, ok := job.FileReleaseMetadata[file]; ok {
 			titleKey, releaseTitle, releaseStory = override.ReleaseExternalID, override.ReleaseTitle, override.ReleaseStory
 		}
-		result, err := m.runner.ProcessWithOptions(ctx, file, job.Overwrite, job.KeepJapanese, engine.ProcessOptions{ASRMode: resolution.ASRMode, ASRProfile: resolution.Profile, DebugMode: job.DebugMode, Title: titleKey, ReleaseTitle: releaseTitle, ReleaseStory: releaseStory, ReleaseContext: releaseContextForFile(job, file), WriteASS: &job.WriteASS}, progress, translationMemory)
+		result, err := m.runner.ProcessWithOptions(ctx, file, job.Overwrite, job.KeepJapanese, engine.ProcessOptions{ASRMode: resolution.ASRMode, ASRProfile: resolution.Profile, DebugMode: job.DebugMode, Title: titleKey, ReleaseTitle: releaseTitle, ReleaseStory: releaseStory, ReleaseContext: releaseContextForFile(job, file), WriteASS: &job.WriteASS, OverwriteIfModelNewer: job.OverwriteIfModelNewer, OverwriteUnverifiedProvenance: job.OverwriteUnverifiedProvenance}, progress, translationMemory)
 		if err != nil {
 			if ctx.Err() != nil {
 				m.finish(id, "cancelled", ctx.Err().Error())
@@ -1268,6 +1275,8 @@ func clone(j *Job) *Job {
 	_ = json.Unmarshal(data, &out)
 	out.CallbackURL = j.CallbackURL
 	out.Overwrite = j.Overwrite
+	out.OverwriteIfModelNewer = j.OverwriteIfModelNewer
+	out.OverwriteUnverifiedProvenance = j.OverwriteUnverifiedProvenance
 	return &out
 }
 func newID() string { b := make([]byte, 8); _, _ = rand.Read(b); return "sub_" + hex.EncodeToString(b) }

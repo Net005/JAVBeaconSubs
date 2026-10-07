@@ -29,9 +29,11 @@ import (
 type ProgressFunc func(phase string, percent int, message string)
 
 type ProcessOptions struct {
-	ASRMode    string
-	ASRProfile string
-	DebugMode  bool
+	ASRMode                       string
+	ASRProfile                    string
+	DebugMode                     bool
+	OverwriteIfModelNewer         bool
+	OverwriteUnverifiedProvenance bool
 	// Title is the catalog/release-identity key used for both recognition
 	// vocabulary and translation glossary title_or_series_overrides lookups.
 	Title string
@@ -119,16 +121,18 @@ type ProvenanceArtifact struct {
 }
 
 type Runner struct {
-	mu                    sync.RWMutex
-	cfg                   config.Config
-	log                   *slog.Logger
-	client                *http.Client
-	recognitionVocabulary *catalog.RecognitionVocabulary
-	translationGlossary   *catalog.TranslationGlossary
-	activeTitle           string
-	activeReleaseTitle    string
-	activeReleaseStory    string
-	activeReleaseContext  ReleaseContextDiagnostics
+	mu                            sync.RWMutex
+	cfg                           config.Config
+	log                           *slog.Logger
+	client                        *http.Client
+	recognitionVocabulary         *catalog.RecognitionVocabulary
+	translationGlossary           *catalog.TranslationGlossary
+	activeTitle                   string
+	activeReleaseTitle            string
+	activeReleaseStory            string
+	activeReleaseContext          ReleaseContextDiagnostics
+	overwriteIfModelNewer         bool
+	overwriteUnverifiedProvenance bool
 }
 
 func New(cfg config.Config, log *slog.Logger) *Runner {
@@ -274,6 +278,8 @@ func (r *Runner) ProcessWithOptions(ctx context.Context, input string, overwrite
 	worker.activeReleaseTitle = options.ReleaseTitle
 	worker.activeReleaseStory = options.ReleaseStory
 	worker.activeReleaseContext = options.ReleaseContext
+	worker.overwriteIfModelNewer = options.OverwriteIfModelNewer
+	worker.overwriteUnverifiedProvenance = options.OverwriteUnverifiedProvenance
 	return worker.process(ctx, input, overwrite, keepJapanese, progress, memory)
 }
 
@@ -360,16 +366,23 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 	projectPath := base + r.cfg.Output.ProjectJSON
 	if !overwrite && !r.cfg.Output.Overwrite {
 		if _, err := os.Stat(englishPath); err == nil {
-			result.EnglishSRT = existingArtifact(englishPath)
-			result.EnglishASS = existingArtifact(englishASSPath)
-			result.JapaneseSRT = existingArtifact(japanesePath)
-			result.JapaneseASS = existingArtifact(japaneseASSPath)
-			result.ProjectJSON = existingArtifact(projectPath)
-			result.loadExistingProvenance(projectPath, englishPath, japanesePath)
-			result.Skipped = true
-			result.SkipReason = "English subtitles already exist; enable Replace existing subtitles to rerun recognition or change accuracy"
-			r.alignArtifactTimes(input, &result)
-			return result, nil
+			if replace, reason := r.existingModelReplacement(englishPath, projectPath); r.overwriteIfModelNewer && replace {
+				r.log.Info("replacing existing subtitles", "file", englishPath, "reason", reason, "model", r.translationBackend())
+			} else {
+				result.EnglishSRT = existingArtifact(englishPath)
+				result.EnglishASS = existingArtifact(englishASSPath)
+				result.JapaneseSRT = existingArtifact(japanesePath)
+				result.JapaneseASS = existingArtifact(japaneseASSPath)
+				result.ProjectJSON = existingArtifact(projectPath)
+				result.loadExistingProvenance(projectPath, englishPath, japanesePath)
+				result.Skipped = true
+				result.SkipReason = "English subtitles already exist; enable Replace existing subtitles to rerun recognition or change accuracy"
+				if r.overwriteIfModelNewer {
+					result.SkipReason = "English subtitles already exist; no verified older translation model found (use Replace existing subtitles to force a rerun)"
+				}
+				r.alignArtifactTimes(input, &result)
+				return result, nil
+			}
 		}
 	}
 

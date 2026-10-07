@@ -391,3 +391,20 @@ func TestWebUIShowsPerJobTimingAndTranslationUsage(t *testing.T) {
 		}
 	}
 }
+
+func TestWebUIOffersModelFreshnessForManualAndScheduledJobs(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{
+		"overwriteIfModelNewer", "overwriteUnverifiedProvenance",
+		"scheduleOverwriteIfModelNewer", "scheduleOverwriteUnverifiedProvenance",
+		"overwrite_if_model_newer", "overwrite_unverified_provenance",
+	} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("model-aware overwrite UI is missing %q", required)
+		}
+	}
+}

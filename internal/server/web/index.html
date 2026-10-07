@@ -238,5 +238,41 @@ setupExample=function(){
   el('curlExample').textContent+='\n\n# Watchlist-only: add "only_watchlist": true to a job or schedule job.\n# It uses JAVBeacon release matching; unmatched/non-watchlisted files are excluded.\n# Combine with release_within_days to require both conditions.';
 };
 document.querySelector('#setupPanel .card:nth-child(2) .muted')?.insertAdjacentText('beforeend',' Add "only_watchlist": true to a schedule job to translate only matched JAVBeacon Watchlist releases.');
+function addModelFreshnessControls(anchorID, prefix){
+  const anchor=el(anchorID).closest('label'),newer=document.createElement('label'),unverified=document.createElement('label');
+  newer.className=unverified.className='row';
+  newer.innerHTML=`<input id="${prefix}IfModelNewer" type="checkbox"> Replace only when the configured GPT model is newer`;
+  unverified.innerHTML=`<input id="${prefix}UnverifiedProvenance" type="checkbox"> Also replace subtitles with missing or edited provenance`;
+  anchor.after(newer,unverified);
+  const update=()=>{const enabled=el(prefix+'IfModelNewer').checked;el(prefix+'UnverifiedProvenance').disabled=!enabled;if(!enabled)el(prefix+'UnverifiedProvenance').checked=false};
+  el(prefix+'IfModelNewer').addEventListener('change',update);
+  update();
+}
+addModelFreshnessControls('overwrite','overwrite');
+addModelFreshnessControls('scheduleOverwrite','scheduleOverwrite');
+const freshnessHelp=document.createElement('p');
+freshnessHelp.className='help';
+freshnessHelp.textContent='Uses verified subtitle provenance to compare GPT versions (for example, GPT-5.6 → GPT-6). Missing or edited provenance is protected unless the second option is selected. Full replacement above always takes precedence.';
+el('overwriteUnverifiedProvenance').closest('label').after(freshnessHelp);
+JOB_FORM_DEFAULT_FIELDS.push('overwriteIfModelNewer','overwriteUnverifiedProvenance');
+try{const saved=JSON.parse(localStorage.getItem(JOB_FORM_DEFAULTS_KEY)||'{}');el('overwriteIfModelNewer').checked=!!saved.overwriteIfModelNewer;el('overwriteUnverifiedProvenance').checked=!!saved.overwriteUnverifiedProvenance&&!!saved.overwriteIfModelNewer;el('overwriteUnverifiedProvenance').disabled=!el('overwriteIfModelNewer').checked}catch{}
+for(const id of ['overwriteIfModelNewer','overwriteUnverifiedProvenance'])el(id).addEventListener('change',saveJobFormDefaults);
+const apiBeforeModelFreshness=api;
+api=async function(url,opt={}){
+  if(opt.method==='POST'&&(url==='/api/v1/jobs'||url==='/api/v1/jobs/upload')){
+    const newer=el('overwriteIfModelNewer').checked,unverified=newer&&el('overwriteUnverifiedProvenance').checked;
+    if(opt.body instanceof FormData){opt.body.set('overwrite_if_model_newer',String(newer));opt.body.set('overwrite_unverified_provenance',String(unverified))}
+    else if(typeof opt.body==='string'){const body=JSON.parse(opt.body);body.overwrite_if_model_newer=newer;body.overwrite_unverified_provenance=unverified;opt={...opt,body:JSON.stringify(body)}}
+  }
+  return apiBeforeModelFreshness(url,opt);
+};
+const scheduleOptionsBeforeModelFreshness=scheduleJobOptions;
+scheduleJobOptions=function(){const options=scheduleOptionsBeforeModelFreshness();options.overwrite_if_model_newer=el('scheduleOverwriteIfModelNewer').checked;options.overwrite_unverified_provenance=options.overwrite_if_model_newer&&el('scheduleOverwriteUnverifiedProvenance').checked;return options};
+const resetScheduleBeforeModelFreshness=resetScheduleForm;
+resetScheduleForm=function(){resetScheduleBeforeModelFreshness();el('scheduleOverwriteIfModelNewer').checked=false;el('scheduleOverwriteUnverifiedProvenance').checked=false;el('scheduleOverwriteUnverifiedProvenance').disabled=true};
+const editScheduleBeforeModelFreshness=editSchedule;
+editSchedule=function(id){editScheduleBeforeModelFreshness(id);const job=loadedSchedules.find(item=>item.id===id)?.job||{};el('scheduleOverwriteIfModelNewer').checked=!!job.overwrite_if_model_newer;el('scheduleOverwriteUnverifiedProvenance').checked=!!job.overwrite_unverified_provenance&&!!job.overwrite_if_model_newer;el('scheduleOverwriteUnverifiedProvenance').disabled=!job.overwrite_if_model_newer};
+const setupExampleBeforeModelFreshness=setupExample;
+setupExample=function(){setupExampleBeforeModelFreshness();el('curlExample').textContent+='\n\n# Model-aware replacement (manual JSON jobs, uploads, and schedule job objects):\n# "overwrite_if_model_newer": true\n# Optional: "overwrite_unverified_provenance": true also replaces missing/edited provenance.\n# "overwrite": true still forces replacement regardless of model.'};
 installRememberingMediaPicker();
 </script></body></html>

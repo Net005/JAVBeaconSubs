@@ -936,3 +936,19 @@ func TestUpdateJAVBeaconCanDisableLookupsByClearingBaseURL(t *testing.T) {
 		t.Fatal("expected a lookup error explaining no JAVBeacon instance is configured")
 	}
 }
+
+func TestModelFreshnessRequestRequiresParentOption(t *testing.T) {
+	req := Request{Inputs: []string{"/media/movie.mp4"}, OverwriteUnverifiedProvenance: true}
+	if err := validateRequest(req); err == nil {
+		t.Fatal("unverified-provenance replacement without a parent overwrite option should fail")
+	}
+	req.OverwriteIfModelNewer = true
+	if err := validateRequest(req); err != nil {
+		t.Fatalf("model-aware overwrite rejected: %v", err)
+	}
+	req.OverwriteIfModelNewer = false
+	req.Overwrite = true
+	if err := validateRequest(req); err != nil {
+		t.Fatalf("full overwrite rejected: %v", err)
+	}
+}
