@@ -97,3 +97,13 @@ func TestPrepareScheduleAcceptsRelativeReleaseWindow(t *testing.T) {
 		t.Fatalf("relative schedule filter = %#v", item.Job)
 	}
 }
+
+func TestPrepareScheduleEnablesWatchlistMatching(t *testing.T) {
+	item := Schedule{Name: "Watchlist", Enabled: true, Cadence: ScheduleDaily, Interval: 1, TimeOfDay: "03:00", Timezone: "UTC", Job: Request{Inputs: []string{"/media"}, OnlyWatchlist: true}}
+	if err := prepareSchedule(&item, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if !item.Job.AutoDetectRelease || !item.Job.OnlyWatchlist {
+		t.Fatalf("watchlist schedule = %#v", item.Job)
+	}
+}

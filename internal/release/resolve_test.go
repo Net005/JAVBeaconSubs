@@ -12,6 +12,17 @@ import (
 	"time"
 )
 
+func TestResolveCarriesJAVBeaconWatchlistFlag(t *testing.T) {
+	item := Release{ID: 11, VideoID: "WATCH-11", Watchlist: true, Title: "Watchlisted"}
+	server := fakeJAVBeacon(t, map[int64]Release{11: item}, nil, nil)
+	defer server.Close()
+	id := int64(11)
+	result, err := Resolve(context.Background(), testClient(t, server), Request{JAVBeaconReleaseID: &id})
+	if err != nil || !result.LookupMatched || !result.Watchlist {
+		t.Fatalf("watchlist release resolution = %#v, %v", result, err)
+	}
+}
+
 // fakeJAVBeacon stands in for a real JAVBeacon instance, serving canned
 // /api/releases... responses so these tests never touch the network.
 func fakeJAVBeacon(t *testing.T, byID map[int64]Release, byVideoID map[string][]Release, settings map[string]string) *httptest.Server {

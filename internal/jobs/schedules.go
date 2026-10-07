@@ -184,7 +184,7 @@ func prepareSchedule(item *Schedule, now time.Time) error {
 	if item.Job.ReleaseWithinDays > 0 {
 		item.Job.OnlyNewReleases = true
 	}
-	if item.Job.OnlyNewReleases {
+	if item.Job.OnlyNewReleases || item.Job.OnlyWatchlist {
 		item.Job.AutoDetectRelease = true
 	}
 	if err := validateRequest(item.Job); err != nil {

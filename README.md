@@ -294,6 +294,8 @@ Jobs created by automation include `schedule_id` and `schedule_name` in their jo
 
 The browser single-file endpoint is multipart `POST /api/v1/jobs/upload` with a `file` field and optional `external_id`, `callback_url`, `overwrite`, `keep_japanese`, `write_ass`, `asr_mode`, `profile`, `debug_mode`, `auto_detect_release`, `release_within_days`, `release_external_id`, `javbeacon_release_id`, `release_title`, and `release_story` fields. The legacy `asr_profile` field and the older `only_new_releases` plus `release_start_date` combination remain accepted. For JSON and multipart jobs, omitting `keep_japanese` uses `output.keep_japanese` from service configuration, and omitting `write_ass` uses `output.write_ass` (`true` by default).
 
+Set `"only_watchlist": true` in a JSON job or nested schedule `job`, or send `only_watchlist=true` in a multipart upload, to translate only files whose matched JAVBeacon release has `watchlist: true`. The option automatically enables release matching. Unmatched, non-watchlisted, and ambiguously matched files are excluded before transcription and reported in `scan_results`; a JAVBeacon outage likewise cannot admit a file by accident. It can be combined with `release_within_days` to require both Watchlist membership and a recent release date. Existing-subtitle and overwrite behavior is unchanged. The web form and schedule editor expose the same option.
+
 The two output fields are independent and have the same behavior in JSON, multipart, and the web form:
 
 - `"keep_japanese": true` always retains the Japanese `.ja.srt` track.

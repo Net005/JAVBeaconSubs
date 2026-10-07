@@ -115,12 +115,91 @@ func TestNewReleaseFilterExplainsEveryDecision(t *testing.T) {
 		files[1]: {ReleaseLookupMatched: true, ReleaseDate: "2026-08-31", ReleaseExternalID: "OLD-1"},
 		files[3]: {ReleaseLookupMatched: true, ReleaseExternalID: "NODATE"},
 	}
-	results := buildScanResults(files, release.Resolution{}, metadata, true, "2026-09-01", nil)
+	results := buildScanResults(files, release.Resolution{}, metadata, true, "2026-09-01", nil, false)
 	if len(results) != 4 || !results[0].Included || results[1].Included || results[2].Included || results[3].Included {
 		t.Fatalf("unexpected release decisions: %#v", results)
 	}
 	if results[0].ReleaseDate != "2026-09-01" || !strings.Contains(results[1].Reason, "predates") || !strings.Contains(results[2].Reason, "no JAVBeacon") || !strings.Contains(results[3].Reason, "missing") {
 		t.Fatalf("release decisions are not auditable: %#v", results)
+	}
+}
+
+func TestWatchlistFilterIncludesOnlyMatchedWatchlistedReleases(t *testing.T) {
+	files := []string{"/media/WATCH-1.mp4", "/media/OTHER-1.mp4", "/media/UNKNOWN.mp4"}
+	metadata := map[string]FileReleaseMetadata{
+		files[0]: {ReleaseLookupMatched: true, ReleaseWatchlist: true, ReleaseExternalID: "WATCH-1"},
+		files[1]: {ReleaseLookupMatched: true, ReleaseExternalID: "OTHER-1"},
+	}
+	results := buildScanResults(files, release.Resolution{}, metadata, false, "", nil, true)
+	if !results[0].Included || !results[0].Watchlist || results[1].Included || results[2].Included {
+		t.Fatalf("watchlist decisions = %#v", results)
+	}
+	if !strings.Contains(results[1].Reason, "not on") || !strings.Contains(results[2].Reason, "no JAVBeacon") {
+		t.Fatalf("watchlist exclusions are not auditable: %#v", results)
+	}
+	combined := buildScanResults(files[:1], release.Resolution{}, map[string]FileReleaseMetadata{
+		files[0]: {ReleaseLookupMatched: true, ReleaseWatchlist: true, ReleaseDate: "2026-08-01"},
+	}, true, "2026-09-01", nil, true)
+	if combined[0].Included || !strings.Contains(combined[0].Reason, "predates") {
+		t.Fatalf("watchlist and date filters did not combine: %#v", combined)
+	}
+	ambiguous := buildScanResults(files[:1], release.Resolution{}, map[string]FileReleaseMetadata{
+		files[0]: {ReleaseLookupMatched: true, ReleaseWatchlist: true, ReleaseLookupAmbiguous: true},
+	}, false, "", nil, true)
+	if ambiguous[0].Included || !strings.Contains(ambiguous[0].Reason, "ambiguous") {
+		t.Fatalf("ambiguous watchlist match was accepted: %#v", ambiguous)
+	}
+}
+
+func TestCreateWatchlistJobQueuesOnlyWatchlistedFiles(t *testing.T) {
+	root := t.TempDir()
+	watchlisted := filepath.Join(root, "WATCH-1.mp4")
+	notWatchlisted := filepath.Join(root, "OTHER-2.mp4")
+	for _, path := range []string{watchlisted, notWatchlisted} {
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch strings.ToLower(r.URL.Query().Get("video_id")) {
+		case "watch-1":
+			_, _ = io.WriteString(w, `[{"id":1,"video_id":"WATCH-1","watchlist":true}]`)
+		case "other-2":
+			_, _ = io.WriteString(w, `[{"id":2,"video_id":"OTHER-2","watchlist":false}]`)
+		default:
+			_, _ = io.WriteString(w, `[]`)
+		}
+	}))
+	defer server.Close()
+	m := &Manager{cfg: config.Config{}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 1), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+	m.UpdateJAVBeacon(config.JAVBeaconConfig{BaseURL: server.URL, TimeoutSec: 5})
+	job, err := m.Create(Request{Inputs: []string{root}, OnlyWatchlist: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(job.Files) != 1 || job.Files[0] != watchlisted || !job.OnlyWatchlist || !job.AutoDetectRelease {
+		t.Fatalf("watchlist job queued wrong files: %#v", job)
+	}
+	decisions := make(map[string]bool, len(job.ScanResults))
+	for _, result := range job.ScanResults {
+		decisions[result.Path] = result.Included
+	}
+	if len(job.ScanResults) != 2 || !decisions[watchlisted] || decisions[notWatchlisted] {
+		t.Fatalf("watchlist scan decisions = %#v", job.ScanResults)
+	}
+}
+
+func TestCreateWatchlistBatchRejectsOneExplicitReleaseForMultipleFiles(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"one.mp4", "two.mp4"} {
+		if err := os.WriteFile(filepath.Join(root, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := &Manager{cfg: config.Config{}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), jobs: map[string]*Job{}, queue: make(chan string, 1), subscribers: map[chan []byte]struct{}{}, persistence: testPersistence{}}
+	if _, err := m.Create(Request{Inputs: []string{root}, OnlyWatchlist: true, ReleaseExternalID: "ONE"}); err == nil || !strings.Contains(err.Error(), "per-file") {
+		t.Fatalf("expected a per-file matching error, got %v", err)
 	}
 }
 

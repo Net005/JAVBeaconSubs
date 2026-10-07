@@ -60,6 +60,7 @@ type Resolution struct {
 	ReleaseURL       string
 	MatchedVideoID   string
 	ReleaseDate      string // JAVBeacon's canonical YYYY-MM-DD release date
+	Watchlist        bool
 	StashFilePath    string
 
 	// StashSceneID/StashURL are populated only when the matched release is
@@ -186,6 +187,7 @@ func Resolve(ctx context.Context, client *Client, req Request) (Resolution, erro
 		res.Provider = matched.Source
 		res.MatchedVideoID = matched.VideoID
 		res.ReleaseDate = strings.TrimSpace(matched.ReleaseDate)
+		res.Watchlist = matched.Watchlist
 		res.StashFilePath = matched.StashFilePath
 		if res.Title == "" && strings.TrimSpace(matched.Title) != "" {
 			res.Title = matched.Title

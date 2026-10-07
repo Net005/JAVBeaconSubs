@@ -818,6 +818,7 @@ func (s *Server) uploadJob(w http.ResponseWriter, r *http.Request) {
 		ReleaseStory:       r.FormValue("release_story"),
 		AutoDetectRelease:  autoDetectRelease != nil && *autoDetectRelease,
 		OnlyNewReleases:    onlyNewReleases != nil && *onlyNewReleases,
+		OnlyWatchlist:      r.FormValue("only_watchlist") == "true",
 		ReleaseStartDate:   strings.TrimSpace(r.FormValue("release_start_date")),
 		ReleaseWithinDays:  releaseWithinDays,
 	})

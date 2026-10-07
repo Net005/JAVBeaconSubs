@@ -29,6 +29,7 @@ type Release struct {
 	VideoID       string `json:"video_id"`
 	ReleaseDate   string `json:"release_date,omitempty"`
 	StashFilePath string `json:"stash_file_path,omitempty"`
+	Watchlist     bool   `json:"watchlist"`
 	Title         string `json:"title"`
 	Story         string `json:"story"`
 	Source        string `json:"source"`

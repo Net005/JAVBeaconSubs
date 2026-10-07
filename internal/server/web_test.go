@@ -21,6 +21,19 @@ func TestWebUIUsesExplicitExternalIDLookup(t *testing.T) {
 	}
 }
 
+func TestWebUIExposesWatchlistFilterForJobsAndSchedules(t *testing.T) {
+	html, err := assets.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(html)
+	for _, required := range []string{"onlyWatchlist", "scheduleOnlyWatchlist", "only_watchlist:true", "options.only_watchlist=", "JAVBeacon Watchlist"} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("watchlist UI is missing %q", required)
+		}
+	}
+}
+
 func TestEmbeddedLogoAssetIsServed(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/assets/javbeaconsubs-site-logo.png", nil)
 	response := httptest.NewRecorder()

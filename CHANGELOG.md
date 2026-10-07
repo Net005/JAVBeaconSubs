@@ -4,6 +4,10 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Optional JAVBeacon Watchlist-only translation filter for manual, uploaded, API, and scheduled jobs; unmatched or non-watchlisted files are excluded with auditable scan reasons.
+
 ### Fixed
 
 - Propagate late or remounted host NFS media shares into the running container when media is bound from a stable shared parent mount; an optional startup alias preserves existing media paths.

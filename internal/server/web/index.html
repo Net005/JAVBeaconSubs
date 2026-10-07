@@ -174,5 +174,69 @@ const renderJobTimingBase=renderJobV2;renderJobV2=function(j){return renderJobTi
 function formatTokenCount(value){return new Intl.NumberFormat().format(value||0)}
 function jobTranslationUsage(j){const results=j.results||[],input=results.reduce((sum,row)=>sum+(row.translation_input_tokens||0),0),output=results.reduce((sum,row)=>sum+(row.translation_output_tokens||0),0),total=results.reduce((sum,row)=>sum+(row.translation_total_tokens||row.translation_input_tokens+row.translation_output_tokens||0),0),cost=results.reduce((sum,row)=>sum+(row.translation_cost_estimate_usd||0),0),batches=results.reduce((sum,row)=>sum+(row.translation_batches||0),0),active=['queued','running'].includes(j.status),label=active?'Accumulated from completed files':'Final job usage',costText=cost>0?`$${cost.toFixed(cost<0.01?6:4)}`:(total>0?'Set rates in Settings':'—');return `<section class="job-usage"><div class="job-usage-head"><strong>OpenAI-compatible translation usage</strong><span>${esc(label)}${batches?` · ${formatTokenCount(batches)} request batch${batches===1?'':'es'}`:''}</span></div><div class="job-usage-grid"><div class="job-usage-field"><span>Input tokens</span><strong>${formatTokenCount(input)}</strong></div><div class="job-usage-field"><span>Output tokens</span><strong>${formatTokenCount(output)}</strong></div><div class="job-usage-field"><span>Total tokens</span><strong>${formatTokenCount(total)}</strong></div><div class="job-usage-field"><span>Estimated cost</span><strong>${esc(costText)}</strong></div></div>${total===0?'<div class="help">No token usage has been reported yet. Local/direct translation and some compatible providers may not return token counts.</div>':''}</section>`}
 const renderJobUsageBase=renderJobV2;renderJobV2=function(j){return renderJobUsageBase(j).replace('<div class="job-summary-grid">',jobTranslationUsage(j)+'<div class="job-summary-grid">')}
+function installWatchlistFilter(){
+  const control=document.createElement('label');
+  control.className='row';
+  control.innerHTML='<input id="onlyWatchlist" type="checkbox"> Only translate releases on the JAVBeacon Watchlist';
+  el('autoDetectRelease').closest('label').after(control);
+  const help=document.createElement('p');
+  help.className='help';
+  help.textContent='Files not matched to a watchlisted JAVBeacon release are excluded. Combine with the recent-release filter to require both.';
+  control.after(help);
+  const scheduleControl=document.createElement('label');
+  scheduleControl.className='row';
+  scheduleControl.innerHTML='<input id="scheduleOnlyWatchlist" type="checkbox"> Only JAVBeacon Watchlist releases';
+  el('scheduleAutoRelease').closest('label').after(scheduleControl);
+  try{el('onlyWatchlist').checked=localStorage.getItem('javbeaconsubs.onlyWatchlist')==='true'}catch{}
+  el('onlyWatchlist').addEventListener('change',()=>{
+    if(el('onlyWatchlist').checked)el('autoDetectRelease').checked=true;
+    try{localStorage.setItem('javbeaconsubs.onlyWatchlist',String(el('onlyWatchlist').checked))}catch{}
+  });
+  scheduleControl.querySelector('input').addEventListener('change',()=>{
+    if(el('scheduleOnlyWatchlist').checked)el('scheduleAutoRelease').checked=true;
+  });
+}
+installWatchlistFilter();
+const submitJobBeforeWatchlist=submitJob;
+submitJob=async function(){
+  if(!el('onlyWatchlist').checked)return submitJobBeforeWatchlist();
+  el('formError').textContent='';
+  try{
+    const onlyNew=el('onlyNewReleases').checked,days=Number(el('releaseStartDate').value);
+    if(onlyNew&&(!Number.isInteger(days)||days<1||days>36500))throw Error('Enter a number of days between 1 and 36500.');
+    const options={asr_mode:el('asrMode').value,profile:el('asrProfile').value,debug_mode:el('debugMode').checked,auto_detect_release:true,only_new_releases:onlyNew,only_watchlist:true,release_within_days:onlyNew?days:0};
+    if(mode==='upload'){
+      if(!el('singleFile').files.length)throw Error('Choose a file.');
+      const data=new FormData();
+      data.append('file',el('singleFile').files[0]);
+      for(const[key,value]of Object.entries({overwrite:el('overwrite').checked,keep_japanese:el('keepJapanese').checked,write_ass:el('writeAss').checked,...options,external_id:el('externalId').value,callback_url:el('callback').value,release_external_id:el('releaseExternalId').value,javbeacon_release_id:el('javbeaconReleaseId').value,release_title:el('releaseTitle').value,release_story:el('releaseStory').value}))data.append(key,value);
+      await api('/api/v1/jobs/upload',{method:'POST',body:data});
+    }else{
+      const inputs=el('inputs').value.split('\n').map(value=>value.trim()).filter(Boolean);
+      if(!inputs.length)throw Error('Enter a file or folder.');
+      await api('/api/v1/jobs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({inputs,recursive:el('recursive').checked,overwrite:el('overwrite').checked,keep_japanese:el('keepJapanese').checked,write_ass:el('writeAss').checked,external_id:el('externalId').value,callback_url:el('callback').value,release_external_id:el('releaseExternalId').value,javbeacon_release_id:el('javbeaconReleaseId').value?Number(el('javbeaconReleaseId').value):undefined,release_title:el('releaseTitle').value,release_story:el('releaseStory').value,...options})});
+    }
+    saveJobFormDefaults();loadJobs();
+  }catch(error){el('formError').textContent=error.message}
+};
+const scheduleJobOptionsBeforeWatchlist=scheduleJobOptions;
+scheduleJobOptions=function(){
+  const options=scheduleJobOptionsBeforeWatchlist();
+  options.only_watchlist=el('scheduleOnlyWatchlist').checked;
+  if(options.only_watchlist)options.auto_detect_release=true;
+  return options;
+};
+const resetScheduleBeforeWatchlist=resetScheduleForm;
+resetScheduleForm=function(){resetScheduleBeforeWatchlist();el('scheduleOnlyWatchlist').checked=false};
+const editScheduleBeforeWatchlist=editSchedule;
+editSchedule=function(id){editScheduleBeforeWatchlist(id);const schedule=loadedSchedules.find(item=>item.id===id);el('scheduleOnlyWatchlist').checked=!!schedule?.job?.only_watchlist};
+const scheduleCardBeforeWatchlist=scheduleCard;
+scheduleCard=function(schedule){const html=scheduleCardBeforeWatchlist(schedule);return schedule.job?.only_watchlist?html.replace('<div class="schedule-tags">','<div class="schedule-tags"><span class="schedule-tag">JAVBeacon Watchlist only</span>'):html};
+const setupExampleBeforeWatchlist=setupExample;
+setupExample=function(){
+  setupExampleBeforeWatchlist();
+  el('curlExample').textContent+='\n\n# Watchlist-only: add "only_watchlist": true to a job or schedule job.\n# It uses JAVBeacon release matching; unmatched/non-watchlisted files are excluded.\n# Combine with release_within_days to require both conditions.';
+};
+document.querySelector('#setupPanel .card:nth-child(2) .muted')?.insertAdjacentText('beforeend',' Add "only_watchlist": true to a schedule job to translate only matched JAVBeacon Watchlist releases.');
 installRememberingMediaPicker();
 </script></body></html>
