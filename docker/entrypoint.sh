@@ -14,8 +14,26 @@ configure_media_alias() {
     echo "JAVBEACONSUBS_MEDIA_ALIAS requires a root-level /alias and absolute target." >&2
     exit 1
   fi
-  if [[ -e "$alias_path" || -L "$alias_path" ]]; then
-    echo "Media alias path already exists: $alias_path" >&2
+  if [[ -L "$alias_path" ]]; then
+    if [[ "$(readlink "$alias_path")" == "$target_path" ]]; then
+      return 0
+    fi
+    echo "Updating media alias $alias_path to $target_path" >&2
+    ln -sfnT "$target_path" "$alias_path"
+    return 0
+  fi
+  if [[ -d "$alias_path" ]]; then
+    if mountpoint -q "$alias_path"; then
+      echo "Media alias $alias_path is covered by a direct mount; using that mount. Remove the direct bind and recreate the container for late NFS remount support." >&2
+      return 0
+    fi
+    if rmdir "$alias_path" 2>/dev/null; then
+      ln -s "$target_path" "$alias_path"
+      return 0
+    fi
+  fi
+  if [[ -e "$alias_path" ]]; then
+    echo "Media alias path is occupied by a non-empty directory or file: $alias_path. Remove or rename it in the image/container, or choose another alias." >&2
     exit 1
   fi
   ln -s "$target_path" "$alias_path"

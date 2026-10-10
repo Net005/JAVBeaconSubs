@@ -93,6 +93,8 @@ services:
 
 Do not keep the old direct `/collections` bind: it would cover the alias and retain the stale NFS mount. The alias does not need the NFS share to be present when the container starts; jobs can use `/collections/...` after the host share becomes available. Changes to bind mounts require one container recreation.
 
+If `/collections` is already a direct Docker mount, startup now warns and continues, but that mount will still be vulnerable to a stale NFS bind after remount. Remove the direct bind and recreate the container to get the stable-parent behavior. Existing symlinks are updated when the configured alias target changes; an empty placeholder directory is converted into a symlink. A non-empty, non-mounted directory is rejected rather than overwritten.
+
 The host parent mount must have `shared` propagation. Check it with `findmnt -T /mnt/data -o TARGET,PROPAGATION`; if it says `private`, arrange `mount --make-rshared /mnt/data` on the host before starting Docker Compose, and make that host mount setup persistent across boot. The NFS mount must still reconnect on the host; Docker cannot repair an unavailable NFS server. After changing a bind source or propagation, recreate the container once with `docker compose up -d --force-recreate`, then later NFS mounts should become visible without further restarts. Avoid creating subtitles in the empty underlying mountpoint while NFS is offline.
 
 To attach this service to an existing JAVBeacon Compose network, set `JAVBEACON_NETWORK` to that network's actual Docker name and add the optional overlay:
