@@ -13,7 +13,7 @@ func Summary(job *Job) *Job {
 	item := *job
 	item.FileCount = len(job.Files)
 	item.CompletedCount = len(job.Results)
-	item.DiscoveredCount = len(job.ScanResults)
+	item.DiscoveredCount = max(job.DiscoveredCount, len(job.ScanResults))
 	item.FailureCount = len(job.FileFailures)
 	item.Files = nil
 	item.Inputs = nil

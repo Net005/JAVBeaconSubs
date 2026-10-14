@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -427,5 +428,66 @@ func TestResolveStashLinkOnlyWhenLocallyMatched(t *testing.T) {
 	}
 	if remote.StashURL != "" || remote.StashSceneID != "" {
 		t.Fatalf("expected no Stash link for a non-local release: %#v", remote)
+	}
+}
+
+func TestEligibilitySkipsLargeUnrelatedLibrary(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.URL.Query().Get("watchlist") != "true" || r.URL.Query().Get("min_release_date") != "2026-01-01" {
+			t.Error("missing eligibility filters")
+		}
+		if r.URL.Path == "/api/releases/count" {
+			fmt.Fprint(w, `{"total":2}`)
+			return
+		}
+		json.NewEncoder(w).Encode([]Release{{ID: 1, VideoID: "DEMO-1", Watchlist: true, ReleaseDate: "2026-02-01"}, {ID: 2, VideoID: "DEMO2", StashFilePath: "/media/renamed.mp4", Watchlist: true, ReleaseDate: "2026-02-01"}})
+	}))
+	defer server.Close()
+	index, err := NewClient(server.URL, "", time.Second).Eligibility(context.Background(), true, "2026-01-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for n := 0; n < 1300; n++ {
+		if index.MayMatch(fmt.Sprintf("/media/other-%d.mp4", n)) {
+			t.Fatal("unrelated file qualifies")
+		}
+	}
+	for _, path := range []string{"/media/demo-1.mp4", "/media/demo-2.mp4", "/media/RENAMED.mp4"} {
+		if !index.MayMatch(path) {
+			t.Fatalf("candidate lost: %s", path)
+		}
+	}
+	if calls != 3 {
+		t.Fatalf("catalog calls=%d, want 3 regardless of library size", calls)
+	}
+}
+
+func TestEligibilityRejectsIncompleteOrUnsupportedCatalog(t *testing.T) {
+	for _, test := range []struct{ name, count, rows string }{
+		{"missing count", `[]`, `[]`},
+		{"partial", `{"total":2}`, `[{"id":1,"watchlist":true}]`},
+		{"ignored filter", `{"total":1}`, `[{"id":1,"watchlist":false}]`},
+		{"stale zero count", `{"total":0}`, `[{"id":1,"watchlist":true}]`},
+		{"duplicate", `{"total":2}`, `[{"id":1,"watchlist":true},{"id":1,"watchlist":true}]`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/api/releases/count" {
+					fmt.Fprint(w, test.count)
+				} else {
+					fmt.Fprint(w, test.rows)
+				}
+			}))
+			defer server.Close()
+			index, err := NewClient(server.URL, "", time.Second).Eligibility(context.Background(), true, "")
+			if err == nil || index != nil {
+				t.Fatal("unsafe catalog accepted")
+			}
+			if !index.MayMatch("/media/example.mp4") {
+				t.Fatal("fallback excludes files")
+			}
+		})
 	}
 }

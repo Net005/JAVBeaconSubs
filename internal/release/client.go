@@ -11,8 +11,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -240,4 +242,98 @@ func (c *Client) StashSceneURL(ctx context.Context, r Release) string {
 		return ""
 	}
 	return base + "/scenes/" + url.PathEscape(r.StashSceneID)
+}
+
+// EligibilityIndex rejects impossible candidates; normal matching still decides
+// path precedence, ambiguity and the final release for every possible candidate.
+type EligibilityIndex struct{ paths, ids map[string]bool }
+
+func eligibilityKey(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
+func (i *EligibilityIndex) MayMatch(path string) bool {
+	if i == nil {
+		return true
+	}
+	name := filepath.Base(strings.TrimSpace(path))
+	stem := strings.TrimSuffix(name, filepath.Ext(name))
+	return i.paths[eligibilityKey(path)] || i.ids[eligibilityKey(stem)] || i.ids[eligibilityKey(strings.ReplaceAll(stem, "-", ""))]
+}
+
+// Eligibility requires a complete filtered catalog. Unsupported APIs, partial
+// pages or changing counts cause a fallback to individual release lookups.
+func (c *Client) Eligibility(ctx context.Context, watchlist bool, minDate string) (*EligibilityIndex, error) {
+	if c == nil {
+		return nil, fmt.Errorf("JAVBeacon unavailable")
+	}
+	q := url.Values{}
+	if watchlist {
+		q.Set("watchlist", "true")
+	}
+	if minDate != "" {
+		q.Set("min_release_date", minDate)
+	}
+	decode := func(path string, value any) error {
+		r, err := c.get(ctx, path, q)
+		if err != nil {
+			return err
+		}
+		defer r.Body.Close()
+		if r.StatusCode != 200 {
+			return fmt.Errorf("catalog status %d", r.StatusCode)
+		}
+		return json.NewDecoder(io.LimitReader(r.Body, 12<<20)).Decode(value)
+	}
+	count := func() (int, error) {
+		var result struct {
+			Total *int `json:"total"`
+		}
+		if err := decode("/api/releases/count", &result); err != nil {
+			return 0, err
+		}
+		if result.Total == nil || *result.Total < 0 || *result.Total > 10000 {
+			return 0, fmt.Errorf("invalid catalog count")
+		}
+		return *result.Total, nil
+	}
+	total, err := count()
+	if err != nil {
+		return nil, err
+	}
+	index := &EligibilityIndex{map[string]bool{}, map[string]bool{}}
+	seen := map[int64]bool{}
+	q.Set("limit", "500")
+	for offset := 0; ; offset += 500 {
+		q.Set("offset", strconv.Itoa(offset))
+		var rows []Release
+		if err := decode("/api/releases", &rows); err != nil {
+			return nil, err
+		}
+		if len(rows) > 500 || offset+len(rows) > 10000 {
+			return nil, fmt.Errorf("catalog exceeds bounds")
+		}
+		for _, row := range rows {
+			if row.ID <= 0 || seen[row.ID] || (watchlist && !row.Watchlist) || (minDate != "" && (len(row.ReleaseDate) < 10 || row.ReleaseDate[:10] < minDate)) {
+				return nil, fmt.Errorf("catalog filters or pagination unsupported")
+			}
+			seen[row.ID] = true
+			if row.StashFilePath != "" {
+				index.paths[eligibilityKey(row.StashFilePath)] = true
+			}
+			if row.VideoID != "" {
+				index.ids[eligibilityKey(row.VideoID)] = true
+			}
+		}
+		if len(rows) < 500 {
+			break
+		}
+	}
+	q.Del("limit")
+	q.Del("offset")
+	confirmed, err := count()
+	if err != nil {
+		return nil, err
+	}
+	if len(seen) != total || confirmed != total {
+		return nil, fmt.Errorf("catalog incomplete or changed")
+	}
+	return index, nil
 }

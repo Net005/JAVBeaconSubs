@@ -14,6 +14,9 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ### Fixed
 
+- Speed up Watchlist/date-filtered preparation with a single paginated eligibility catalog, individual matching only for possible candidates, and bounded scan checkpoint writes. Preserve matching precedence and fall back safely when catalog completeness cannot be verified.
+- Align the workspace with JAVBeacon's palette and sidebar icons; move the logo to the sidebar and enlarge artwork on the dashboard and in wider batch details.
+
 - Make media-alias startup idempotent across restarts and target changes; tolerate a legacy direct mount with a warning instead of restarting endlessly.
 - Propagate late or remounted host NFS media shares into the running container when media is bound from a stable shared parent mount; an optional startup alias preserves existing media paths.
 

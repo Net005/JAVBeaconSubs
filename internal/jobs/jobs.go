@@ -203,17 +203,18 @@ type ScanResult struct {
 }
 
 type Manager struct {
-	cfg           config.Config
-	runner        *engine.Runner
-	log           *slog.Logger
-	mu            sync.RWMutex
-	jobs          map[string]*Job
-	schedules     map[string]*Schedule
-	queue         chan string
-	subscribers   map[chan []byte]struct{}
-	persistence   Persistence
-	post          *PostProcessor
-	releaseClient *release.Client
+	cfg                  config.Config
+	runner               *engine.Runner
+	log                  *slog.Logger
+	mu                   sync.RWMutex
+	jobs                 map[string]*Job
+	schedules            map[string]*Schedule
+	queue                chan string
+	subscribers          map[chan []byte]struct{}
+	persistence          Persistence
+	post                 *PostProcessor
+	releaseClient        *release.Client
+	preparationPublished map[string]time.Time
 }
 
 type Persistence interface {
@@ -594,11 +595,36 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 		}
 	}
 	if req.AutoDetectRelease && !hasExplicitRelease && len(files) > 1 {
+		var eligible *release.EligibilityIndex
+		if req.OnlyWatchlist || req.OnlyNewReleases {
+			m.mu.RLock()
+			client := m.releaseClient
+			m.mu.RUnlock()
+			minDate := ""
+			if req.OnlyNewReleases {
+				minDate = strings.TrimSpace(req.ReleaseStartDate)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			eligible, _ = client.Eligibility(ctx, req.OnlyWatchlist, minDate)
+			cancel()
+		}
 		for index, file := range files {
 			if overridden[file] || skippedExisting[file] {
 				continue
 			}
 			m.preparationProgress(existingID, "matching_releases", 15+(index*30/len(files)), "Matching release information", file, index+1, len(files))
+			m.mu.RLock()
+			cancelled := existingID != "" && m.jobs[existingID] != nil && m.jobs[existingID].Status == "cancelled"
+			m.mu.RUnlock()
+			if cancelled {
+				return nil, context.Canceled
+			}
+			if !eligible.MayMatch(file) {
+				fileReleaseMetadata[file] = FileReleaseMetadata{ReleaseLookupMethod: "eligibility_prefilter"}
+				partial := buildScanResults([]string{file}, release.Resolution{}, fileReleaseMetadata, req.OnlyNewReleases, strings.TrimSpace(req.ReleaseStartDate), skippedExisting, req.OnlyWatchlist)
+				m.preparationScanResult(existingID, partial[0], nil)
+				continue
+			}
 			fileResolution, resolveErr := m.resolveFileRelease(nil, "", req.ReleaseTitle, req.ReleaseStory, file, true)
 			if resolveErr != nil {
 				return nil, fmt.Errorf("auto-detect release for %s: %w", file, resolveErr)
@@ -706,7 +732,10 @@ func buildScanResults(files []string, jobRelease release.Resolution, perFile map
 			item.LookupMethod = jobRelease.LookupMethod
 			item.ReleaseURL = jobRelease.ReleaseURL
 		}
-		if watchlistOnly && ambiguous {
+		if item.LookupMethod == "eligibility_prefilter" {
+			item.Included = false
+			item.Reason = "Excluded: no possible release in the selected Watchlist/date candidates; individual lookup skipped"
+		} else if watchlistOnly && ambiguous {
 			item.Included = false
 			item.Reason = "Excluded: JAVBeacon release match is ambiguous for Watchlist filter"
 		} else if watchlistOnly && !item.ReleaseMatched {
@@ -793,6 +822,20 @@ func scanSummary(results []ScanResult) string {
 	return fmt.Sprintf("Scan complete: %d/%d included, %d JAVBeacon release match(es)", included, len(results), matched)
 }
 
+// Called with m.mu held. Update memory for every file, but checkpoint the growing
+// scan report at most once per second; phase changes and final state remain durable.
+func (m *Manager) preparationCheckpoint(id string, force bool) bool {
+	if m.preparationPublished == nil {
+		m.preparationPublished = make(map[string]time.Time)
+	}
+	now := time.Now()
+	if !force && now.Sub(m.preparationPublished[id]) < time.Second {
+		return false
+	}
+	m.preparationPublished[id] = now
+	return true
+}
+
 func (m *Manager) preparationProgress(id, phase string, progress int, message, path string, current, total int) {
 	if id == "" {
 		return
@@ -803,9 +846,17 @@ func (m *Manager) preparationProgress(id, phase string, progress int, message, p
 		m.mu.Unlock()
 		return
 	}
+	phaseChanged := job.Phase != phase
 	job.Phase, job.Progress, job.Message = phase, progress, message
+	if total > job.DiscoveredCount {
+		job.DiscoveredCount = total
+	}
 	job.CurrentPath, job.CurrentFile = path, filepath.Base(path)
 	job.CurrentFileNumber = current
+	if !m.preparationCheckpoint(id, phaseChanged) {
+		m.mu.Unlock()
+		return
+	}
 	snapshot := clone(job)
 	m.mu.Unlock()
 	m.publish(snapshot)
@@ -829,6 +880,10 @@ func (m *Manager) preparationScanResult(id string, result ScanResult, metadata *
 		job.FileReleaseMetadata[result.Path] = *metadata
 	}
 	job.Message = result.Reason
+	if !m.preparationCheckpoint(id, len(job.ScanResults) == 1) {
+		m.mu.Unlock()
+		return
+	}
 	snapshot := clone(job)
 	m.mu.Unlock()
 	m.publish(snapshot)
