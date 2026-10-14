@@ -14,6 +14,8 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ### Fixed
 
+- Show only included releases in batch details and remove empty artwork boxes for files without release metadata.
+
 - Speed up Watchlist/date-filtered preparation with a single paginated eligibility catalog, individual matching only for possible candidates, and bounded scan checkpoint writes. Preserve matching precedence and fall back safely when catalog completeness cannot be verified.
 - Align the workspace with JAVBeacon's palette and sidebar icons; move the logo to the sidebar and enlarge artwork on the dashboard and in wider batch details.
 
