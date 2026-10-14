@@ -32,6 +32,7 @@ type Request struct {
 
 // Resolution is what Resolve fills in on a Job.
 type Resolution struct {
+	ImageURL    string
 	Title       string
 	Story       string
 	TitleSource string // "manual" | "javbeacon" | ""
@@ -184,6 +185,7 @@ func Resolve(ctx context.Context, client *Client, req Request) (Resolution, erro
 		res.LookupMatched = true
 		res.MatchedReleaseID = matched.ID
 		res.ReleaseURL = client.ReleaseURL(matched.ID)
+		res.ImageURL = matched.ImageURL
 		res.Provider = matched.Source
 		res.MatchedVideoID = matched.VideoID
 		res.ReleaseDate = strings.TrimSpace(matched.ReleaseDate)

@@ -6,6 +6,9 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ### Added
 
+- Redesigned subtitle workspace with a viewport-sized dashboard, compact header, infinite scrolling in history and batch details, separate job creation, consolidated configuration, current-video covers and links, and a spacious schedule editor.
+- Lightweight activity summaries with indexed SQLite ordering, precomputed searchable metadata, restart-safe backfill, visibility-aware polling and on-demand full job inspection.
+
 - Opt-in model-aware replacement for manual, uploaded, and scheduled jobs using verified GPT translation provenance, with a separate opt-in for missing or edited provenance.
 - Optional JAVBeacon Watchlist-only translation filter for manual, uploaded, API, and scheduled jobs; unmatched or non-watchlisted files are excluded with auditable scan reasons.
 

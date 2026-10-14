@@ -71,7 +71,7 @@ func (s *SQLite) migrate() error {
 			return fmt.Errorf("initialize SQLite: %w", err)
 		}
 	}
-	return nil
+	return s.migrateActivity()
 }
 
 func (s *SQLite) Save(job *jobs.Job) error {
@@ -79,7 +79,16 @@ func (s *SQLite) Save(job *jobs.Job) error {
 	if err != nil {
 		return fmt.Errorf("encode job %s: %w", job.ID, err)
 	}
-	_, err = s.db.ExecContext(context.Background(), `
+	summary, err := json.Marshal(jobs.Summary(job))
+	if err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	_, err = tx.ExecContext(context.Background(), `
 		INSERT INTO jobs (id,status,external_id,payload,callback_url,overwrite_existing,created_at,updated_at)
 		VALUES (?,?,?,?,?,?,?,?)
 		ON CONFLICT(id) DO UPDATE SET
@@ -94,7 +103,12 @@ func (s *SQLite) Save(job *jobs.Job) error {
 	if err != nil {
 		return fmt.Errorf("save job %s: %w", job.ID, err)
 	}
-	return nil
+	_, err = tx.Exec(`INSERT INTO job_activity(id,status,summary_payload,search_text,created_at) VALUES(?,?,?,?,?)
+		ON CONFLICT(id) DO UPDATE SET status=excluded.status,summary_payload=excluded.summary_payload,search_text=excluded.search_text`, job.ID, job.Status, summary, jobs.SearchText(job), job.CreatedAt.Format(time.RFC3339Nano))
+	if err != nil {
+		return fmt.Errorf("save job activity %s: %w", job.ID, err)
+	}
+	return tx.Commit()
 }
 
 func (s *SQLite) Load() ([]*jobs.Job, error) {
@@ -173,6 +187,14 @@ func (s *SQLite) DeleteSchedule(id string) error {
 }
 
 func (s *SQLite) ListPage(page, pageSize int, filter, statusGroup string) ([]*jobs.Job, int, error) {
+	return s.listPage(page, pageSize, filter, statusGroup, "payload")
+}
+
+func (s *SQLite) ListSummaryPage(page, pageSize int, filter, statusGroup string) ([]*jobs.Job, int, error) {
+	return s.listPage(page, pageSize, filter, statusGroup, "summary_payload")
+}
+
+func (s *SQLite) listPage(page, pageSize int, filter, statusGroup, column string) ([]*jobs.Job, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -181,27 +203,36 @@ func (s *SQLite) ListPage(page, pageSize int, filter, statusGroup string) ([]*jo
 	}
 	conditions, args := []string{}, []any{}
 	if strings.TrimSpace(filter) != "" {
-		conditions = append(conditions, `lower(replace(id || ' ' || external_id || ' ' || coalesce(json_extract(payload,'$.current_file'),'') || ' ' || coalesce(json_extract(payload,'$.current_path'),'') || ' ' || coalesce((SELECT group_concat(value,' ') FROM json_each(payload,'$.files')),''),'\','/')) LIKE ? ESCAPE '\'`)
+		conditions = append(conditions, `a.search_text LIKE ? ESCAPE '\'`)
 		args = append(args, wildcardLike(filter))
 	}
 	switch statusGroup {
 	case "active":
-		conditions = append(conditions, `status IN ('queued','running')`)
+		conditions = append(conditions, `a.status IN ('queued','running')`)
 	case "completed":
-		conditions = append(conditions, `status IN ('complete','skipped')`)
+		conditions = append(conditions, `a.status IN ('complete','skipped')`)
 	case "failed":
-		conditions = append(conditions, `status IN ('failed','cancelled')`)
+		conditions = append(conditions, `a.status IN ('failed','cancelled')`)
 	}
 	where := ""
 	if len(conditions) > 0 {
 		where = " WHERE " + strings.Join(conditions, " AND ")
 	}
 	var total int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM jobs`+where, args...).Scan(&total); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM job_activity a`+where, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count jobs: %w", err)
 	}
 	queryArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
-	rows, err := s.db.Query(`SELECT payload,callback_url,overwrite_existing FROM jobs`+where+` ORDER BY CASE status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END ASC, CASE WHEN status = 'queued' THEN created_at END ASC, created_at DESC LIMIT ? OFFSET ?`, queryArgs...)
+	order := `CASE a.status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END ASC, CASE WHEN a.status = 'queued' THEN a.created_at END ASC, a.created_at DESC`
+	if statusGroup == "completed" || statusGroup == "failed" {
+		order = `a.created_at DESC`
+	}
+	from, fields := `job_activity a`, `a.summary_payload,'',0`
+	if column == "payload" {
+		from += ` JOIN jobs j ON j.id=a.id`
+		fields = `j.payload,j.callback_url,j.overwrite_existing`
+	}
+	rows, err := s.db.Query(`SELECT `+fields+` FROM `+from+where+` ORDER BY `+order+` LIMIT ? OFFSET ?`, queryArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list jobs: %w", err)
 	}

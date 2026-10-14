@@ -25,6 +25,7 @@ import (
 // context needs. JAVBeacon's API returns many more fields; the rest are
 // simply ignored by json.Decode.
 type Release struct {
+	ImageURL      string `json:"image_url,omitempty"`
 	ID            int64  `json:"id"`
 	VideoID       string `json:"video_id"`
 	ReleaseDate   string `json:"release_date,omitempty"`

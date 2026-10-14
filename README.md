@@ -139,6 +139,12 @@ Authentication and translation credentials have separate purposes:
 
 ## Web interface
 
+The workspace opens on **Dashboard**, with spacious activity cards showing the current video's cover, title, processing phase, progress, ETA, and links to JAVBeacon and Stash. **Job history** groups completed jobs and jobs needing attention; **New subtitle job** has its own page. **Schedules** manages recurring scans. **Configuration** brings translation and integrations, recognition and vocabulary, models, and API installation guidance together under one navigation item.
+
+The dashboard fits the viewport, with compact counts in the header, one focused job, and the next four releases. Use the job arrows to move through active batches. **Job history** scrolls inside its panel and loads further pages automatically. Open **View batch** or **Details & downloads** to inspect a job; its searchable release list loads another 12 files as you scroll, with expandable stories and paths and individual subtitle downloads. Schedules have a separate editor organized into Source, Timing, Processing, and Release filters.
+
+The dashboard refreshes lightweight summaries every five seconds while visible. Detailed job payloads are loaded only when inspected. SQLite maintains summary records and searchable job text atomically with durable job saves, and existing databases are backfilled once without changing job state. REST clients retain the full paginated job response by default; `GET /api/v1/jobs?view=summary` opts into the lightweight response.
+
 The job form opens on **Server paths** by default and separates the normal workflow from a collapsible Advanced options area:
 
 - **Upload one file** streams one video/audio file into managed storage. Supporting browsers securely retain the last selected file handle and start the next Browse action in that location; other browsers retain whatever location their native picker supports. A web page cannot direct a client file dialog to an arbitrary container path, so when no local location is available the form displays the first Server paths entry and provides **Use server path** instead. When processing finishes, English SRT/ASS, optional Japanese SRT/ASS, and diagnostic JSON downloads appear on its job card. `.ass` export is on by default and can be turned off per job (or by default for every job via `output.write_ass` in configuration) to generate only `.srt` files.

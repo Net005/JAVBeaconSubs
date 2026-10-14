@@ -82,6 +82,12 @@ type ReleaseOverrideRequest struct {
 }
 
 type Job struct {
+	NextFiles                     []ActivityFile                 `json:"next_files,omitempty"`
+	FileCount                     int                            `json:"file_count,omitempty"`
+	CompletedCount                int                            `json:"completed_count,omitempty"`
+	DiscoveredCount               int                            `json:"discovered_count,omitempty"`
+	FailureCount                  int                            `json:"failure_count,omitempty"`
+	ReleaseImageURL               string                         `json:"release_image_url,omitempty"`
 	ID                            string                         `json:"id"`
 	ScheduleID                    string                         `json:"schedule_id,omitempty"`
 	ScheduleName                  string                         `json:"schedule_name,omitempty"`
@@ -157,6 +163,7 @@ type FileFailure struct {
 // batch job. It is populated for explicit overrides and per-file automatic
 // matches; absence means "use the job-level release fields."
 type FileReleaseMetadata struct {
+	ReleaseImageURL        string `json:"release_image_url,omitempty"`
 	ReleaseExternalID      string `json:"release_external_id,omitempty"`
 	JAVBeaconReleaseID     *int64 `json:"javbeacon_release_id,omitempty"`
 	ReleaseTitle           string `json:"release_title,omitempty"`
@@ -319,6 +326,7 @@ func buildFileReleaseMetadata(externalID string, javbeaconID *int64, resolution 
 	return FileReleaseMetadata{
 		ReleaseExternalID: externalID, JAVBeaconReleaseID: javbeaconID,
 		ReleaseTitle: resolution.Title, ReleaseStory: resolution.Story,
+		ReleaseImageURL:    resolution.ImageURL,
 		ReleaseTitleSource: resolution.TitleSource, ReleaseStorySource: resolution.StorySource,
 		ReleaseLookupMethod: resolution.LookupMethod, ReleaseLookupMatched: resolution.LookupMatched, ReleaseLookupError: resolution.LookupError,
 		ReleaseLookupAmbiguous: resolution.LookupAmbiguous,
@@ -653,6 +661,7 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 		ReleaseLookupMethod: resolution.LookupMethod, ReleaseLookupMatched: resolution.LookupMatched, ReleaseLookupError: resolution.LookupError,
 		ReleaseLookupAmbiguous: resolution.LookupAmbiguous,
 		ReleaseProvider:        resolution.Provider, ReleaseDate: resolution.ReleaseDate, ReleaseStashSceneID: resolution.StashSceneID, ReleaseStashURL: resolution.StashURL, ReleaseStashFilePath: resolution.StashFilePath, ReleaseURL: resolution.ReleaseURL,
+		ReleaseImageURL:     resolution.ImageURL,
 		FileReleaseMetadata: fileReleaseMetadata,
 	}
 	m.mu.Lock()

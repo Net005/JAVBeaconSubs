@@ -89,6 +89,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/schedules/{id}", s.deleteSchedule)
 	mux.HandleFunc("POST /api/v1/schedules/{id}/run", s.runSchedule)
 	mux.HandleFunc("GET /api/v1/jobs", s.listJobs)
+	mux.HandleFunc("GET /api/v1/covers/{id}", s.releaseCover)
 	mux.HandleFunc("POST /api/v1/jobs", s.createJob)
 	mux.HandleFunc("POST /api/v1/jobs/upload", s.uploadJob)
 	mux.HandleFunc("GET /api/v1/jobs/{id}", s.getJob)
@@ -624,7 +625,11 @@ func (s *Server) backends(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) listJobs(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	pageSize, _ := strconv.Atoi(r.URL.Query().Get("page_size"))
-	result, err := s.jobs.ListPage(page, pageSize, r.URL.Query().Get("filter"), r.URL.Query().Get("status"))
+	list := s.jobs.ListPage
+	if r.URL.Query().Get("view") == "summary" {
+		list = s.jobs.ListSummaryPage
+	}
+	result, err := list(page, pageSize, r.URL.Query().Get("filter"), r.URL.Query().Get("status"))
 	if err != nil {
 		s.log.Error("list jobs", "error", err)
 		writeJSON(w, 500, map[string]string{"error": "could not list jobs"})
