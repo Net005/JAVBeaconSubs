@@ -702,7 +702,7 @@ def load_qwen(model_name: str, revision: str, device: str, batch_size: int):
     )
 
 
-def qwen_transcribe(model, clips: list[tuple[np.ndarray, int]], context: str, batch_size: int) -> list[str]:
+def qwen_transcribe(model, clips: list[tuple[np.ndarray, int]], context: str, batch_size: int, progress_range: tuple[int, int] | None = None) -> list[str]:
     out: list[str] = []
     for start in range(0, len(clips), batch_size):
         batch = clips[start : start + batch_size]
@@ -726,6 +726,9 @@ def qwen_transcribe(model, clips: list[tuple[np.ndarray, int]], context: str, ba
                     out.append("")
         finally:
             del batch
+        if progress_range is not None:
+            low, high = progress_range
+            progress(low + round((high - low) * min(start + batch_size, len(clips)) / len(clips)), "qwen_batch")
     return out
 
 

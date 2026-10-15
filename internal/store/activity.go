@@ -48,7 +48,7 @@ func (s *SQLite) migrateActivity() error {
 	}
 	// Backfill once, in bounded batches, without changing durable job state.
 	for {
-		rows, err := s.db.Query(`SELECT payload FROM jobs WHERE NOT EXISTS(SELECT 1 FROM job_activity WHERE job_activity.id=jobs.id) LIMIT 100`)
+		rows, err := s.db.Query(`SELECT payload FROM jobs WHERE NOT EXISTS(SELECT 1 FROM job_activity WHERE job_activity.id=jobs.id AND json_extract(summary_payload, '$.skipped_count') IS NOT NULL AND json_type(summary_payload, '$.recent_file_results') IS NOT NULL) LIMIT 100`)
 		if err != nil {
 			return err
 		}
@@ -81,7 +81,7 @@ func (s *SQLite) migrateActivity() error {
 		for _, job := range batch {
 			payload, err := json.Marshal(jobs.Summary(job))
 			if err == nil {
-				_, err = tx.Exec(`INSERT INTO job_activity(id,status,summary_payload,search_text,created_at) VALUES(?,?,?,?,?)`, job.ID, job.Status, payload, jobs.SearchText(job), job.CreatedAt.Format(time.RFC3339Nano))
+				_, err = tx.Exec(`INSERT INTO job_activity(id,status,summary_payload,search_text,created_at) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET summary_payload=excluded.summary_payload`, job.ID, job.Status, payload, jobs.SearchText(job), job.CreatedAt.Format(time.RFC3339Nano))
 			}
 			if err != nil {
 				tx.Rollback()

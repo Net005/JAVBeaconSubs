@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -594,6 +597,9 @@ func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progr
 			r.log.Warn("translation batch omitted rows; retrying batch once", "rows", start+1, "end", end, "missing_rows", missing)
 			var retried translationResult
 			retryUsage, retryErr := r.chat(ctx, requestBody, &retried)
+			if ctx.Err() != nil {
+				return nil, totalUsage, ctx.Err()
+			}
 			if retryErr != nil {
 				r.log.Warn("translation batch retry failed", "rows", start+1, "end", end, "error", retryErr)
 			} else {
@@ -660,6 +666,38 @@ func (r *Runner) translate(ctx context.Context, source []subtitle.Segment, progr
 }
 
 func (r *Runner) chat(ctx context.Context, input chatRequest, output any) (tokenUsage, error) {
+	usage, err := r.chatOnce(ctx, input, output)
+	if err == nil || ctx.Err() != nil || !transientTranslationError(err) {
+		return usage, err
+	}
+	// Retry only the failed request once; parent cancellation always wins.
+	r.log.Warn("temporary translation request failure; retrying once")
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return usage, ctx.Err()
+	case <-timer.C:
+	}
+	return r.chatOnce(ctx, input, output)
+}
+
+type translationHTTPError struct {
+	status int
+	detail string
+}
+
+func (e *translationHTTPError) Error() string { return e.detail }
+func transientTranslationError(err error) bool {
+	var response *translationHTTPError
+	if errors.As(err, &response) {
+		return response.status == 429 || response.status == 500 || response.status == 502 || response.status == 503 || response.status == 504
+	}
+	var network net.Error
+	return errors.Is(err, io.ErrUnexpectedEOF) || (errors.As(err, &network) && (network.Timeout() || network.Temporary()))
+}
+
+func (r *Runner) chatOnce(ctx context.Context, input chatRequest, output any) (tokenUsage, error) {
 	body, err := json.Marshal(input)
 	if err != nil {
 		return tokenUsage{}, err
@@ -686,7 +724,7 @@ func (r *Runner) chat(ctx context.Context, input chatRequest, output any) (token
 		return tokenUsage{}, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return tokenUsage{}, fmt.Errorf("translation API returned %s: %s", resp.Status, strings.TrimSpace(string(data)))
+		return tokenUsage{}, &translationHTTPError{status: resp.StatusCode, detail: fmt.Sprintf("translation API returned %s: %s", resp.Status, strings.TrimSpace(string(data)))}
 	}
 	var chat chatResponse
 	if err := json.Unmarshal(data, &chat); err != nil {

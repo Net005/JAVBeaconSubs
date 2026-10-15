@@ -57,7 +57,7 @@ def main() -> int:
     model = pipeline.load_qwen(args.model, args.revision, args.device, max(1, args.batch_size))
     after_load = pipeline.gpu_snapshot()
     primary_started = time.monotonic()
-    texts = pipeline.qwen_transcribe(model, clips, args.context, max(1, args.batch_size))
+    texts = pipeline.qwen_transcribe(model, clips, args.context, max(1, args.batch_size), progress_range=(8, 36))
     qwen_primary_seconds = time.monotonic() - primary_started
     after_asr = pipeline.gpu_snapshot()
     torch_after_asr = pipeline.torch_memory_snapshot()
@@ -76,7 +76,7 @@ def main() -> int:
             )
     retry_started = time.monotonic()
     retry_texts = pipeline.qwen_transcribe(
-        model, [clips[position] for position in retry_positions], "", max(1, args.batch_size)
+        model, [clips[position] for position in retry_positions], "", max(1, args.batch_size), progress_range=(36, 44)
     ) if retry_positions else []
     qwen_retry_seconds = time.monotonic() - retry_started if retry_positions else 0.0
     after_retries = pipeline.gpu_snapshot()

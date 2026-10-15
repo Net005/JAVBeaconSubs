@@ -1,10 +1,19 @@
 package jobs
 
-import "strings"
+import (
+	"path/filepath"
+	"strings"
+)
 
 type ActivityFile struct {
 	Path     string              `json:"path"`
 	Metadata FileReleaseMetadata `json:"metadata"`
+}
+
+type FileOutcome struct {
+	Path     string `json:"path"`
+	Filename string `json:"filename"`
+	Status   string `json:"status"`
 }
 
 // Summary is a bounded activity record. Full discovery, outputs and release
@@ -13,7 +22,33 @@ func Summary(job *Job) *Job {
 	item := *job
 	item.FileCount = len(job.Files)
 	item.CompletedCount = len(job.Results)
+	item.GeneratedCount, item.SkippedCount = 0, 0
+	for _, result := range job.Results {
+		if result.Skipped {
+			item.SkippedCount++
+		} else {
+			item.GeneratedCount++
+		}
+	}
 	item.DiscoveredCount = max(job.DiscoveredCount, len(job.ScanResults))
+	item.RecentFileResults = nil
+	outcomes := make(map[string]string, len(job.Results)+len(job.FileFailures))
+	for _, failure := range job.FileFailures {
+		outcomes[failure.Path] = "failed"
+	}
+	for _, result := range job.Results {
+		if result.Skipped {
+			outcomes[result.Input] = "skipped"
+		} else {
+			outcomes[result.Input] = "completed"
+		}
+	}
+	for i := len(job.Files) - 1; i >= 0 && len(item.RecentFileResults) < 6; i-- {
+		path := job.Files[i]
+		if status, ok := outcomes[path]; ok {
+			item.RecentFileResults = append(item.RecentFileResults, FileOutcome{Path: path, Filename: filepath.Base(path), Status: status})
+		}
+	}
 	item.FailureCount = len(job.FileFailures)
 	item.Files = nil
 	item.Inputs = nil

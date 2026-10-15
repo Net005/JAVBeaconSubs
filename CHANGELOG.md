@@ -4,6 +4,8 @@ All notable changes to JAVBeacon Subtitles are documented here.
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-10-15
+
 ### Added
 
 - Redesigned subtitle workspace with a viewport-sized dashboard, compact header, infinite scrolling in history and batch details, separate job creation, consolidated configuration, current-video covers and links, and a spacious schedule editor.
@@ -13,6 +15,10 @@ All notable changes to JAVBeacon Subtitles are documented here.
 - Optional JAVBeacon Watchlist-only translation filter for manual, uploaded, API, and scheduled jobs; unmatched or non-watchlisted files are excluded with auditable scan reasons.
 
 ### Fixed
+
+- Show consistent per-file Completed, Skipped, Failed, Processing, Pending and Not processed states, clickable outcome filters and bounded recent filename results. Keep untouched files separate from processing failures.
+- Separate batch and current-file progress, report Qwen batch progress, and estimate remaining time from completed processing rather than discovery or skipped outputs.
+- Check input availability and output write access before inference; retry transient translation failures once while preserving cancellation and permanent error handling.
 
 - Show only included releases in batch details and remove empty artwork boxes for files without release metadata.
 

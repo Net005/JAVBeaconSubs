@@ -82,9 +82,12 @@ type ReleaseOverrideRequest struct {
 }
 
 type Job struct {
+	RecentFileResults             []FileOutcome                  `json:"recent_file_results"`
 	NextFiles                     []ActivityFile                 `json:"next_files,omitempty"`
 	FileCount                     int                            `json:"file_count,omitempty"`
 	CompletedCount                int                            `json:"completed_count,omitempty"`
+	GeneratedCount                int                            `json:"generated_count"`
+	SkippedCount                  int                            `json:"skipped_count"`
 	DiscoveredCount               int                            `json:"discovered_count,omitempty"`
 	FailureCount                  int                            `json:"failure_count,omitempty"`
 	ReleaseImageURL               string                         `json:"release_image_url,omitempty"`
@@ -117,6 +120,7 @@ type Job struct {
 	Status                        string                         `json:"status"`
 	Phase                         string                         `json:"phase,omitempty"`
 	Progress                      int                            `json:"progress"`
+	CurrentFileProgress           int                            `json:"current_file_progress,omitempty"`
 	Message                       string                         `json:"message,omitempty"`
 	CurrentPath                   string                         `json:"current_path,omitempty"`
 	CurrentFile                   string                         `json:"current_file,omitempty"`
@@ -674,7 +678,7 @@ func (m *Manager) prepare(req Request, existingID string, createdAt time.Time) (
 		createdAt = time.Now().UTC()
 	}
 	job := &Job{
-		ID: jobID, ExternalID: req.ExternalID, Status: "queued", Phase: "ready", Progress: 50, Message: "Ready for subtitle worker",
+		ID: jobID, ExternalID: req.ExternalID, Status: "queued", Phase: "ready", Progress: 0, Message: "Ready for subtitle worker",
 		ScheduleID: req.ScheduleID, ScheduleName: req.ScheduleName,
 		Inputs: req.Inputs, Files: files, CallbackURL: req.CallbackURL, Overwrite: req.Overwrite, OverwriteIfModelNewer: req.OverwriteIfModelNewer, OverwriteUnverifiedProvenance: req.OverwriteUnverifiedProvenance, KeepJapanese: keepJapanese, WriteASS: writeASS,
 		ASRMode: firstResolution.ASRMode, ASRProfile: firstResolution.Profile, Profile: firstResolution.Profile,
@@ -1095,7 +1099,10 @@ func (m *Manager) process(ctx context.Context, id string) {
 	m.mu.RUnlock()
 	translationMemory := engine.NewTranslationMemory()
 	profileSettings := m.Profiles()
+	var timing processingTiming
 	for index, file := range job.Files {
+		fileStarted := time.Now()
+		didWork := false
 		resolution := job.FileSettings[file]
 		if resolution.Profile == "" {
 			resolution = profiles.Resolve(profileSettings, file, job.ASRProfile, job.ASRMode)
@@ -1105,6 +1112,7 @@ func (m *Manager) process(ctx context.Context, id string) {
 		current.CurrentPath = file
 		current.CurrentFile = filepath.Base(file)
 		current.CurrentFileNumber = index + 1
+		timing.update(current, index, 0, time.Now())
 		current.ASRProfile = resolution.Profile
 		current.Profile = resolution.Profile
 		current.ASRMode = resolution.ASRMode
@@ -1118,17 +1126,9 @@ func (m *Manager) process(ctx context.Context, id string) {
 			current := m.jobs[id]
 			if current.Status != "cancelled" {
 				current.Phase = phase
-				// File discovery and release matching occupy the first half of
-				// the progress bar; recognition/translation occupy the second.
-				current.Progress = 50 + (index*50+pct/2)/len(job.Files)
+				didWork = true
+				timing.update(current, index, pct, time.Now())
 				current.Message = message
-				if current.StartedAt != nil && current.Progress > 0 && current.Progress < 100 {
-					elapsed := time.Since(*current.StartedAt)
-					remaining := time.Duration(float64(elapsed) * float64(100-current.Progress) / float64(current.Progress))
-					finish := time.Now().UTC().Add(remaining)
-					current.ETASeconds = int64(remaining.Round(time.Second) / time.Second)
-					current.EstimatedFinishAt = &finish
-				}
 				snapshot := clone(current)
 				m.mu.Unlock()
 				m.publish(snapshot)
@@ -1141,6 +1141,10 @@ func (m *Manager) process(ctx context.Context, id string) {
 			titleKey, releaseTitle, releaseStory = override.ReleaseExternalID, override.ReleaseTitle, override.ReleaseStory
 		}
 		result, err := m.runner.ProcessWithOptions(ctx, file, job.Overwrite, job.KeepJapanese, engine.ProcessOptions{ASRMode: resolution.ASRMode, ASRProfile: resolution.Profile, DebugMode: job.DebugMode, Title: titleKey, ReleaseTitle: releaseTitle, ReleaseStory: releaseStory, ReleaseContext: releaseContextForFile(job, file), WriteASS: &job.WriteASS, OverwriteIfModelNewer: job.OverwriteIfModelNewer, OverwriteUnverifiedProvenance: job.OverwriteUnverifiedProvenance}, progress, translationMemory)
+		if didWork && !result.Skipped {
+			timing.elapsed += time.Since(fileStarted)
+			timing.samples++
+		}
 		if err != nil {
 			if ctx.Err() != nil {
 				m.finish(id, "cancelled", ctx.Err().Error())

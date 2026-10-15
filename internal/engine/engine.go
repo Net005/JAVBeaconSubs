@@ -386,6 +386,9 @@ func (r *Runner) process(ctx context.Context, input string, overwrite, keepJapan
 		}
 	}
 
+	if err := checkOutputDirectory(input); err != nil {
+		return result, err
+	}
 	tmpDir, err := os.MkdirTemp("", "javbeaconsubs-*")
 	if err != nil {
 		return result, err
