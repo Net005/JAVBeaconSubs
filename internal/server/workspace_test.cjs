@@ -43,3 +43,23 @@ test('recent filenames are escaped and have the same outcome labels',()=>{
  const html=context.recentFileResults({recent_file_results:[{path:'/media/<example>.mp4',filename:'<example>.mp4',status:'failed'}]});
  assert.ok(html.includes('Failed'));assert.ok(html.includes('&lt;example>.mp4'));assert.ok(!html.includes('<example>'));
 });
+
+test('dashboard collapses an empty queue and restores the rail for upcoming releases',()=>{
+ const jobs={dataset:{},innerHTML:''};
+ const state={dashboardIndex:0,activityPage:1,activityPages:1,activityRecords:[],el:id=>id==='jobs'?jobs:{value:'25'},activityCard:()=>'<article>Current job</article>',cover:()=>'<div>Cover</div>',esc:context.esc};
+ vm.createContext(state);
+ vm.runInContext(source.slice(source.indexOf('function renderDashboard('),source.indexOf('function switchDashboardJob(')),state);
+ for(const job of [
+  {id:'synthetic',status:'running',file_count:1,next_files:[]},
+  {id:'synthetic',status:'queued',phase:'matching_releases',next_files:[]},
+  {id:'synthetic',status:'running',file_count:2,next_files:[{path:'/media/next.mp4',metadata:{release_title:'Example upcoming release'}}]},
+ ]){
+  state.activityRecords=[job];state.renderDashboard();
+  assert.equal(jobs.innerHTML.includes('dashboard-content queue-empty'),job.next_files.length===0);
+  assert.ok(jobs.innerHTML.includes('data-inspect="synthetic"'));
+  if(job.phase)assert.ok(jobs.innerHTML.includes('Checking eligibility'));
+  if(job.next_files.length)assert.ok(jobs.innerHTML.includes('Example upcoming release'));
+ }
+ state.activityRecords=[];state.renderDashboard();
+ assert.ok(jobs.innerHTML.includes('Nothing processing right now'));
+});
